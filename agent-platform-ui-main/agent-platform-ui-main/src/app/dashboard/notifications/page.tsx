@@ -3,11 +3,8 @@
 import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Bell, X, Thermometer, Zap, CheckCircle2, AlertTriangle, Info, Bot, ArrowLeft, Trash2 } from "lucide-react"
-import Link from "next/link"
+import { Bell, X, Thermometer, CheckCircle2, AlertTriangle, Info, Bot } from "lucide-react"
 
 interface NotificationItem {
   id: string
@@ -38,61 +35,14 @@ const typeConfig = {
 
 export default function NotificationsPage() {
   const [dismissed, setDismissed] = useState<string[]>([])
-  const [filter, setFilter] = useState<string | null>(null)
 
-  const visible = allNotifications
-    .filter((n) => !dismissed.includes(n.id))
-    .filter((n) => !filter || n.type === filter)
-
-  const dismissOne = (id: string) => setDismissed((p) => [...p, id])
-  const dismissAll = () => setDismissed(allNotifications.map((n) => n.id))
+  const visible = allNotifications.filter((n) => !dismissed.includes(n.id))
 
   return (
     <div className="space-y-6">
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="flex items-center gap-4"
-      >
-        <Link href="/dashboard">
-          <Button variant="ghost" size="icon" className="h-8 w-8">
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-        </Link>
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500 to-orange-500 shadow-lg">
-            <Bell className="h-4 w-4 text-white" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold tracking-tight text-foreground">Notifications</h1>
-            <p className="text-sm text-muted-foreground">View and manage all system notifications & alerts</p>
-          </div>
-        </div>
-      </motion.div>
-
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {["critical", "warning", "info", "success"].map((t) => (
-            <button
-              key={t}
-              onClick={() => setFilter(filter === t ? null : t)}
-              className={cn(
-                "rounded-lg px-3 py-1.5 text-xs font-medium border transition-all",
-                filter === t
-                  ? "bg-accent/20 text-accent border-accent/30"
-                  : "text-muted-foreground border-border/30 hover:border-border/60"
-              )}
-            >
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary" className="text-[10px]">{visible.length} notifications</Badge>
-          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={dismissAll}>
-            <Trash2 className="h-3 w-3" /> Dismiss All
-          </Button>
-        </div>
+      <div>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">Notifications</h1>
+        <p className="text-sm text-muted-foreground">Ask AI about alerts and notifications</p>
       </div>
 
       <div className="rounded-xl glass-card">
@@ -119,7 +69,7 @@ export default function NotificationsPage() {
                     exit={{ opacity: 0, x: 100 }}
                     transition={{ delay: i * 0.04 }}
                     className={cn(
-                      "group relative flex items-start gap-4 rounded-lg border px-4 py-3.5 transition-all cursor-pointer hover:bg-muted/20",
+                      "group relative flex items-start gap-4 rounded-lg border px-4 py-3.5 transition-all",
                       cfg.border, cfg.bg
                     )}
                   >
@@ -129,7 +79,6 @@ export default function NotificationsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <span className="text-sm font-medium text-foreground">{n.title}</span>
-                        <Badge variant="outline" className={cn("text-[10px]", cfg.border, cfg.color)}>{cfg.label}</Badge>
                       </div>
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Bot className="h-3 w-3" />
@@ -139,12 +88,6 @@ export default function NotificationsPage() {
                       </div>
                       <p className="text-xs text-muted-foreground/80 mt-1">{n.message}</p>
                     </div>
-                    <button
-                      onClick={() => dismissOne(n.id)}
-                      className="shrink-0 rounded-full p-1.5 text-muted-foreground opacity-0 transition-opacity hover:text-foreground hover:bg-muted/40 group-hover:opacity-100"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
                   </motion.div>
                 )
               })}

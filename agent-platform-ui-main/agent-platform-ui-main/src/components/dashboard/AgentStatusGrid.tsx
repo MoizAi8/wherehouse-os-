@@ -101,19 +101,19 @@ export function AgentStatusGrid() {
 
   if (loading) {
     return (
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true" aria-label="Loading agents">
+      <div className="space-y-2" aria-busy="true" aria-label="Loading agents">
         <SkeletonCard count={6} />
       </div>
     )
   }
 
   return (
-    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" role="list" aria-label="Agent status grid">
+    <div className="space-y-2" role="list" aria-label="Agent status list">
       {filtered.map((agent, i) => (
         <AgentCard key={agent.id} agent={agent} index={i} />
       ))}
       {filtered.length === 0 && (
-        <p className="col-span-full text-sm text-muted-foreground text-center py-8">No agents match your search</p>
+        <p className="text-sm text-muted-foreground text-center py-8">No agents match your search</p>
       )}
     </div>
   )

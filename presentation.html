@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Warehouse OS — Multi-Agent Order Fulfillment System</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #070b15;
+  --bg2: #0d1428;
+  --surface: #111b2e;
+  --surface2: #162240;
+  --accent: #3b82f6;
+  --accent2: #8b5cf6;
+  --accent3: #06d6a0;
+  --green: #22c55e;
+  --orange: #f59e0b;
+  --red: #ef4444;
+  --text: #f1f5f9;
+  --text2: #94a3b8;
+  --text3: #475569;
+  --radius: 16px;
+  --font: 'Space Grotesk', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* === Canvas BG === */
+#bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* === Slide Container === */
+.slides-wrapper {
+  position: relative;
+  z-index: 1;
+  height: 100vh;
+  width: 100vw;
+}
+
+.slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 80px;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.7s ease, visibility 0.7s ease, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: scale(0.95);
+  overflow-y: auto;
+}
+.slide.active {
+  opacity: 1;
+  visibility: visible;
+  transform: scale(1);
+}
+.slide.prev {
+  opacity: 0;
+  visibility: hidden;
+  transform: scale(0.95) translateY(-30px);
+}
+
+.slide-inner {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* === Navigation === */
+.nav-bar {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgba(13, 20, 40, 0.85);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 100px;
+  padding: 10px 24px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  padding: 6px 10px;
+  border-radius: 8px;
+  transition: all 0.2s;
+  font-size: 18px;
+}
+.nav-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+
+.slide-indicators {
+  display: flex;
+  gap: 6px;
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--text3);
+  cursor: pointer;
+  transition: all 0.3s;
+}
+.dot.active { background: var(--accent); width: 28px; border-radius: 4px; }
+.dot:hover { background: var(--accent); }
+
+.slide-counter {
+  font-size: 12px;
+  color: var(--text3);
+  font-family: var(--mono);
+  min-width: 40px;
+  text-align: center;
+}
+
+/* === Typography === */
+h1 { font-size: clamp(32px, 5vw, 68px); font-weight: 700; line-height: 1.1; }
+h2 { font-size: clamp(24px, 3.5vw, 48px); font-weight: 700; line-height: 1.15; }
+h3 { font-size: clamp(18px, 2vw, 28px); font-weight: 600; }
+.subtitle { color: var(--text2); font-size: clamp(14px, 1.3vw, 20px); line-height: 1.5; }
+.caption { color: var(--text3); font-size: clamp(11px, 0.9vw, 14px); }
+
+/* === Animations === */
+.slide.active .anim-up {
+  opacity: 0; transform: translateY(30px);
+  animation: fadeUp 0.6s ease forwards;
+}
+.slide.active .anim-up:nth-child(1) { animation-delay: 0.1s; }
+.slide.active .anim-up:nth-child(2) { animation-delay: 0.2s; }
+.slide.active .anim-up:nth-child(3) { animation-delay: 0.3s; }
+.slide.active .anim-up:nth-child(4) { animation-delay: 0.4s; }
+.slide.active .anim-up:nth-child(5) { animation-delay: 0.5s; }
+.slide.active .anim-up:nth-child(6) { animation-delay: 0.6s; }
+.slide.active .anim-up:nth-child(7) { animation-delay: 0.7s; }
+.slide.active .anim-up:nth-child(8) { animation-delay: 0.8s; }
+.slide.active .anim-up:nth-child(9) { animation-delay: 0.9s; }
+.slide.active .anim-up:nth-child(10) { animation-delay: 1.0s; }
+
+@keyframes fadeUp {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.slide.active .anim-scale {
+  opacity: 0; transform: scale(0.8);
+  animation: scaleIn 0.5s ease forwards;
+}
+@keyframes scaleIn {
+  to { opacity: 1; transform: scale(1); }
+}
+
+/* === Accent Line === */
+.accent-line {
+  width: 60px; height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
+  border-radius: 2px;
+  margin-bottom: 20px;
+}
+
+/* === Cards === */
+.card {
+  background: linear-gradient(135deg, var(--surface), var(--surface2));
+  border: 1px solid rgba(59,130,246,0.08);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  transition: all 0.3s;
+}
+.card:hover {
+  border-color: rgba(59,130,246,0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(59,130,246,0.08);
+}
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+/* === Slide 1: Title === */
+.slide-title {
+  text-align: center;
+}
+.slide-title h1 {
+  background: linear-gradient(135deg, #fff 30%, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.title-badge {
+  display: inline-block;
+  padding: 6px 18px;
+  border-radius: 100px;
+  background: linear-gradient(135deg, rgba(59,130,246,0.15), rgba(139,92,246,0.15));
+  border: 1px solid rgba(59,130,246,0.2);
+  font-size: 12px;
+  color: var(--accent);
+  letter-spacing: 0.05em;
+  margin-bottom: 24px;
+}
+
+/* === Slide 2: Overview === */
+.overview-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 30px;
+  margin-top: 30px;
+}
+.overview-left ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+.overview-left ul li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text2);
+  font-size: 14px;
+}
+.overview-left ul li::before {
+  content: '';
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  flex-shrink: 0;
+}
+.tech-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+.tech-item {
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid rgba(59,130,246,0.06);
+}
+.tech-item .label { font-size: 11px; color: var(--accent); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+.tech-item .value { font-size: 12px; color: var(--text2); margin-top: 3px; }
+
+/* === Slide 3: Architecture === */
+.arch-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 24px;
+}
+.arch-card {
+  border-radius: var(--radius);
+  padding: 18px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.3s;
+}
+.arch-card:hover { transform: translateY(-4px); }
+.arch-card .icon { font-size: 28px; margin-bottom: 8px; }
+.arch-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.arch-card p { font-size: 11px; color: var(--text2); line-height: 1.5; }
+.arch-card.frontend { background: linear-gradient(135deg, rgba(59,130,246,0.12), rgba(59,130,246,0.04)); border-color: rgba(59,130,246,0.15); }
+.arch-card.backend { background: linear-gradient(135deg, rgba(6,214,160,0.12), rgba(6,214,160,0.04)); border-color: rgba(6,214,160,0.15); }
+.arch-card.ai { background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(139,92,246,0.04)); border-color: rgba(139,92,246,0.15); }
+.arch-card.data { background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(245,158,11,0.04)); border-color: rgba(245,158,11,0.15); }
+
+.arch-flow {
+  margin-top: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.arch-flow span {
+  font-size: 11px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--text2);
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.arch-flow .arrow { color: var(--text3); font-size: 14px; background: none; border: none; padding: 0 4px; }
+
+/* === Slide 4: Agents === */
+.agents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+}
+.agent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: all 0.3s;
+}
+.agent-row:hover {
+  border-color: rgba(59,130,246,0.15);
+  background: linear-gradient(135deg, var(--surface2), var(--surface));
+}
+.agent-row .bar {
+  width: 4px; height: 100%;
+  min-height: 44px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.agent-row .info h4 { font-size: 14px; font-weight: 600; }
+.agent-row .info p { font-size: 12px; color: var(--text2); line-height: 1.4; margin-top: 2px; }
+
+/* === Slide 5: Guardrails === */
+.guardrails-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-top: 20px;
+}
+.guardrail-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: all 0.3s;
+  text-align: center;
+}
+.guardrail-card:hover {
+  border-color: rgba(59,130,246,0.15);
+  transform: translateY(-2px);
+}
+.guardrail-card .shield {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+.guardrail-card h4 { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+.guardrail-card p { font-size: 12px; color: var(--text2); }
+
+/* === Slide 6: Frontend === */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-top: 20px;
+}
+.feature-card {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: all 0.3s;
+}
+.feature-card:hover {
+  border-color: rgba(59,130,246,0.15);
+  transform: translateY(-2px);
+}
+.feature-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--accent); }
+.feature-card p { font-size: 11px; color: var(--text2); line-height: 1.5; }
+
+/* === Slide 7: Tech Stack === */
+.stack-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 20px;
+}
+.stack-row {
+  display: flex;
+  gap: 12px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  transition: background 0.2s;
+  align-items: baseline;
+}
+.stack-row:hover { background: var(--surface); }
+.stack-row .cat { font-size: 12px; font-weight: 600; color: var(--accent); min-width: 140px; flex-shrink: 0; }
+.stack-row .val { font-size: 12px; color: var(--text2); }
+
+/* === Slide 8: Database === */
+.db-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-top: 20px;
+}
+.db-card {
+  border-radius: var(--radius);
+  padding: 18px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.06);
+  transition: all 0.3s;
+}
+.db-card:hover { transform: translateY(-4px); }
+.db-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.db-card p { font-size: 11px; color: var(--text2); line-height: 1.4; }
+.db-card.relational { background: linear-gradient(135deg, rgba(59,130,246,0.1), rgba(59,130,246,0.03)); border-color: rgba(59,130,246,0.1); }
+.db-card.vector { background: linear-gradient(135deg, rgba(139,92,246,0.1), rgba(139,92,246,0.03)); border-color: rgba(139,92,246,0.1); }
+
+.db-section-title { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+.db-section-title .badge { font-size: 10px; padding: 2px 10px; border-radius: 100px; background: var(--surface); color: var(--text2); }
+
+/* === Slide 9: Workflow === */
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 20px;
+}
+.workflow-step {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  border: 1px solid rgba(255,255,255,0.04);
+  transition: all 0.3s;
+  position: relative;
+}
+.workflow-step:hover {
+  transform: translateY(-2px);
+  border-color: rgba(59,130,246,0.15);
+}
+.workflow-step .num {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; color: #fff;
+  margin: 0 auto 8px;
+}
+.workflow-step h4 { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.workflow-step p { font-size: 11px; color: var(--text2); line-height: 1.4; }
+
+/* === Slide 10: Thank You === */
+.thankyou {
+  text-align: center;
+}
+.thankyou h1 {
+  background: linear-gradient(135deg, #fff 30%, var(--accent), var(--accent2));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: clamp(36px, 6vw, 80px);
+}
+
+/* === Responsive === */
+@media (max-width: 900px) {
+  .slide { padding: 40px 30px; }
+  .overview-grid, .stack-grid { grid-template-columns: 1fr; }
+  .arch-grid, .features-grid, .guardrails-grid, .db-grid { grid-template-columns: repeat(2, 1fr); }
+  .workflow-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 600px) {
+  .slide { padding: 24px 16px; }
+  .arch-grid, .features-grid, .guardrails-grid, .db-grid, .workflow-grid { grid-template-columns: 1fr; }
+  .nav-bar { gap: 8px; padding: 8px 14px; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="bg-canvas"></canvas>
+
+<div class="slides-wrapper" id="slides">
+
+<!-- SLIDE 1: Title -->
+<div class="slide active" data-index="0">
+  <div class="slide-inner slide-title">
+    <div class="anim-up"><span class="title-badge">✦ FINAL PROJECT PRESENTATION</span></div>
+    <div class="anim-up"><h1>WAREHOUSE OS</h1></div>
+    <div class="anim-up" style="margin-top:12px"><div class="accent-line" style="margin:0 auto"></div></div>
+    <div class="anim-up" style="margin-top:16px"><p class="subtitle">Multi-Agent Order Fulfillment System</p></div>
+    <div class="anim-up" style="margin-top:6px"><p class="caption">AI-Powered Warehouse Management with Autonomous Agents</p></div>
+    <div class="anim-up" style="margin-top:40px; display:flex; gap:16px; justify-content:center; flex-wrap:wrap">
+      <span style="padding:8px 20px; border-radius:100px; background:var(--surface); border:1px solid rgba(255,255,255,0.06); font-size:13px; color:var(--text2)">🐍 Python 3.12 + FastAPI</span>
+      <span style="padding:8px 20px; border-radius:100px; background:var(--surface); border:1px solid rgba(255,255,255,0.06); font-size:13px; color:var(--text2)">⚛ Next.js 16 + React 19</span>
+      <span style="padding:8px 20px; border-radius:100px; background:var(--surface); border:1px solid rgba(255,255,255,0.06); font-size:13px; color:var(--text2)">🤖 OpenAI Agents SDK</span>
+    </div>
+    <div class="anim-up" style="margin-top:40px"><p class="caption" style="color:var(--text3)">Press <span style="color:var(--text2)">→</span> or click dots to navigate</p></div>
+  </div>
+</div>
+
+<!-- SLIDE 2: Project Overview -->
+<div class="slide" data-index="1">
+  <div class="slide-inner">
+    <div class="anim-up"><span class="title-badge">✦ OVERVIEW</span></div>
+    <div class="anim-up"><h2>Project Overview</h2></div>
+    <div class="anim-up"><div class="accent-line"></div></div>
+    <div class="anim-up"><p class="subtitle">An intelligent warehouse management system powered by AI agents that automates the entire order fulfillment lifecycle — from order placement to delivery tracking.</p></div>
+    <div class="overview-grid">
+      <div class="anim-up">
+        <div class="card">
+          <h3 style="font-size:16px; margin-bottom:10px">Key Features</h3>
+          <ul>
+            <li>Real-time order processing &amp; tracking</li>
+            <li>Multi-agent AI orchestration</li>
+            <li>Vector database for semantic search</li>
+            <li>Automated rerouting &amp; delay prediction</li>
+            <li>SMS/Email notifications (Twilio + SendGrid)</li>
+            <li>3D warehouse visualization (Three.js)</li>
+            <li>Smooth animations (Framer Motion + GSAP)</li>
+          </ul>
+        </div>
+      </div>
+      <div class="anim-up">
+        <div class="card">
+          <h3 style="font-size:16px; margin-bottom:10px">Tech Stack</h3>
+          <div class="tech-grid">
+            <div class="tech-item"><div class="label">Backend</div><div class="value">Python 3.12 • FastAPI • Celery</div></div>
+            <div class="tech-item"><div class="label">Frontend</div><div class="value">Next.js 16 • React 19 • Tailwind</div></div>
+            <div class="tech-item"><div class="label">Database</div><div class="value">PostgreSQL 16 • SQLite • Redis</div></div>
+            <div class="tech-item"><div class="label">AI</div><div class="value">OpenAI GPT-4o • Agents SDK</div></div>
+            <div class="tech-item"><div class="label">Vector DB</div><div class="value">Qdrant • 1536-dim embeddings</div></div>
+            <div class="tech-item"><div class="label">DevOps</div><div class="value">Docker • Git • pytest • Ruff</div></div>
+            <div class="tech-item"><div class="label">Notifications</div><div class="value">Twilio (SMS) • SendGrid (Email)</div></div>
+            <div class="tech-item"><div class="label">External APIs</div><div class="value">EasyPost • SmartyStreets</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 3: System Architecture -->
+<div class="slide" data-index="2">
+  <div class="slide-inner">
+    <div class="anim-up"><span class="title-badge">✦ ARCHITECTURE</span></div>
+    <div class="anim-up"><h2>System Architecture</h2></div>
+    <div class="anim-up"><div class="accent-line"></div></div>
+    <div class="arch-grid">
+      <div class="arch-card frontend anim-up"><div class="icon">⚛</div><h4>Frontend</h4><p>Next.js 16 • React 19<br>Tailwind CSS v4<br>Port 3000</p></div>
+      <div class="arch-card backend anim-up"><div class="icon">⚡</div><h4>Backend API</h4><p>FastAPI • Uvicorn<br>REST + WebSocket<br>Port 8000</p></div>
+      <div class="arch-card ai anim-up"><div class="icon">🤖</div><h4>AI Agents</h4><p>OpenAI Agents SDK<br>5 Specialized Agents<br>GPT-4o Powered</p></div>
+      <div class="arch-card data anim-up"><div class="icon">🗄</div><h4>Vector DB</h4><p>Qdrant<br>4 Collections<br>1536-dim Vectors</p></div>
+      <div class="arch-card backend anim-up"><div class="icon">🗃</div><h4>PostgreSQL 16</h4><p>Relational DB<br>Orders, Shipments<br>Fulfillment Centers</p></div>
+      <div class="arch-card backend anim-up"><div class="icon">📦</div><h4>Redis 7</h4><p>Message Broker<br>Celery Backend<br>Cache Layer</p></div>
+      <div class="arch-card data anim-up"><div class="icon">🔄</div><h4>Celery Workers</h4><p>Async Tasks<br>Monitor Cycles<br>Background Jobs</p></div>
+      <div class="arch-card frontend anim-up"><div class="icon">🌐</div><h4>External APIs</h4><p>Twilio • SendGrid<br>OpenAI • EasyPost<br>SmartyStreets</p></div>
+    </div>
+    <div class="arch-flow anim-up">
+      <span>User</span><span class="arrow">→</span><span>Frontend</span><span class="arrow">→</span><span>API</span><span class="arrow">→</span><span>AI Agents</span><span class="arrow">→</span><span>DB / External</span>
+    </div>
+    <div class="anim-up" style="margin-top:6px"><p class="caption">Deployment: Docker Containers (PostgreSQL + Redis + API + Celery Workers + Celery Beat)</p></div>
+  </div>
+</div>
+
+<!-- SLIDE 4: AI Agents -->
+<div class="slide" data-index="3">
+  <div class="slide-inner">
+    <div class="anim-up"><span class="title-badge">✦ AGENTS</span></div>
+    <div class="anim-up"><h2>AI Agents Architecture</h2></div>
+    <div class="anim-up"><div class="accent-line"></div></div>
+    <div class="agents-list">
+      <div class="agent-row anim-up"><div class="bar" style="background:var(--accent)"></div><div class="info"><h4>Fulfillment Orchestrator</h4><p>Central coordinator that runs the full monitor cycle: checks delays, evaluates reroutes, predicts failures, and optimizes costs across all agents.</p></div></div>
+      <div class="agent-row anim-up"><div class="bar" style="background:var(--green)"></div><div class="info"><h4>Routing Agent</h4><p>Selects optimal fulfillment center &amp; carrier rate for new orders based on cost, location, and SLA requirements.</p></div></div>
+      <div class="agent-row anim-up"><div class="bar" style="background:var(--orange)"></div><div class="info"><h4>Monitor Agent</h4><p>Queries active shipments every N seconds, detects delays and overdue status, and triggers alerts.</p></div></div>
+      <div class="agent-row anim-up"><div class="bar" style="background:var(--red)"></div><div class="info"><h4>Rerouting Agent</h4><p>Evaluates alternative carriers when delays occur, checks feasibility, and executes automated reroutes.</p></div></div>
+      <div class="agent-row anim-up"><div class="bar" style="background:var(--accent)"></div><div class="info"><h4>Communication Agent</h4><p>Sends delay alerts via email (SendGrid) and SMS (Twilio) with customer-preferred channels.</p></div></div>
+      <div class="agent-row anim-up"><div class="bar" style="background:var(--green)"></div><div class="info"><h4>Prediction Agent</h4><p>Predicts failure probability for shipments based on delay history, carrier statistics, and risk factors using vector similarity.</p></div></div>
+      <div class="agent-row anim-up"><div class="bar" style="background:var(--orange)"></div><div class="info"><h4>Cost Optimizer</h4><p>Analyzes shipping costs per monitor cycle, identifies trends, and generates cost-reduction recommendations.</p></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 5: Guardrails -->
+<div class="slide" data-index="4">
+  <div class="slide-inner">
+    <div class="anim-up"><span class="title-badge">✦ SAFETY</span></div>
+    <div class="anim-up"><h2>Business Guardrails</h2></div>
+    <div class="anim-up"><div class="accent-line"></div></div>
+    <div class="anim-up"><p class="subtitle">Safety rules enforced during every monitor cycle to ensure business compliance</p></div>
+    <div class="guardrails-grid">
+      <div class="guardrail-card anim-up"><div class="shield">🛡</div><h4>SLA Compliance</h4><p>Flags shipments exceeding critical SLA hours thresholds</p></div>
+      <div class="guardrail-card anim-up"><div class="shield">💰</div><h4>Cost Cap</h4><p>Prevents reroutes exceeding maximum allowed cost increase percentage</p></div>
+      <div class="guardrail-card anim-up"><div class="shield">🔕</div><h4>Notification Frequency</h4><p>Limits notifications per order to avoid spam (max 4)</p></div>
+      <div class="guardrail-card anim-up"><div class="shield">⚠</div><h4>Failed Delivery Threshold</h4><p>Flags shipments exceeding overdue delivery threshold</p></div>
+      <div class="guardrail-card anim-up"><div class="shield">🔀</div><h4>Carrier Diversity</h4><p>Prevents switching to same/similar monopoly carriers (&gt;70% volume)</p></div>
+      <div class="guardrail-card anim-up"><div class="shield">📍</div><h4>Address Validation</h4><p>Validates address format, ZIP code, and street indicators</p></div>
+    </div>
+    <div class="anim-up" style="margin-top:16px; text-align:center"><p class="caption">⚡ All guardrails run asynchronously during each Celery Beat monitor cycle (every 15 minutes)</p></div>
+  </div>
+</div>
+
+<!-- SLIDE 6: Frontend Highlights -->
+<div class="slide" data-index="5">
+  <div class="slide-inner">
+    <div class="anim-up"><span class="title-badge">✦ UI</span></div>
+    <div class="anim-up"><h2>Frontend Highlights</h2></div>
+    <div class="anim-up"><div class="accent-line"></div></div>
+    <div class="features-grid">
+      <div class="feature-card anim-up"><h4>🏠 Landing Page</h4><p>3D Warehouse Scene (Three.js)<br>Hero animations (Framer Motion, GSAP)<br>Smooth scrolling (Lenis)<br>Parallax layers, Tilt cards</p></div>
+      <div class="feature-card anim-up"><h4>📊 Dashboard</h4><p>Real-time order tracking<br>Inventory zones panel<br>Analytics &amp; metrics<br>Agent activity logs</p></div>
+      <div class="feature-card anim-up"><h4>🤖 AI Assistant</h4><p>Chat interface (GPT-4o-mini)<br>Streaming responses<br>Smart suggestions<br>Context-aware replies</p></div>
+      <div class="feature-card anim-up"><h4>🎨 UI/UX</h4><p>Radix UI components<br>Tailwind CSS v4 styling<br>Framer Motion animations<br>GSAP advanced timelines</p></div>
+      <div class="feature-card anim-up"><h4>🔐 Auth &amp; Forms</h4><p>NextAuth.js authentication<br>Google + Facebook OAuth<br>React Hook Form + Zod v4<br>JWT session management</p></div>
+      <div class="feature-card anim-up"><h4>✨ Visual Effects</h4><p>Noise overlay • Cursor follower<br>Magnetic buttons<br>Rotating borders<br>Text reveal animations</p></div>
+      <div class="feature-card anim-up"><h4>📄 Pages</h4><p>/dashboard • /orders • /agents<br>/analytics • /settings<br>/workflows • /monitoring<br>/team</p></div>
+      <div class="feature-card anim-up"><h4>🧪 Testing</h4><p>Vitest • React Testing Library<br>Jest DOM matchers<br>User event simulation<br>jsdom environment</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 7: Tech Stack Detail -->
+<div class="slide" data-index="6">
+  <div class="slide-inner">
+    <div class="anim-up"><span class="title-badge">✦ TECH</span></div>
+    <div class="anim-up"><h2>Technology Stack</h2></div>
+    <div class="anim-up"><div class="accent-line"></div></div>
+    <div class="stack-grid">
+      <div class="stack-row anim-up"><span class="cat">Languages</span><span class="val">Python 3.12, TypeScript 5, Node.js 20+, pnpm 9+</span></div>
+      <div class="stack-row anim-up"><span class="cat">Backend</span><span class="val">FastAPI, Uvicorn, Pydantic, SQLAlchemy 2.0 (async)</span></div>
+      <div class="stack-row anim-up"><span class="cat">Frontend</span><span class="val">Next.js 16 (App Router), React 19, Tailwind CSS v4</span></div>
+      <div class="stack-row anim-up"><span class="cat">Database</span><span class="val">PostgreSQL 16, SQLite (dev), Redis 7, Qdrant Vector DB</span></div>
+      <div class="stack-row anim-up"><span class="cat">AI / LLM</span><span class="val">OpenAI GPT-4o, OpenAI Agents SDK, text-embedding-3-small</span></div>
+      <div class="stack-row anim-up"><span class="cat">Task Queue</span><span class="val">Celery, Celery Beat, Redis (broker + backend)</span></div>
+      <div class="stack-row anim-up"><span class="cat">Auth</span><span class="val">NextAuth.js, JWT (python-jose), OAuth2</span></div>
+      <div class="stack-row anim-up"><span class="cat">UI</span><span class="val">Radix UI, lucide-react, class-variance-authority, tailwind-merge</span></div>
+      <div class="stack-row anim-up"><span class="cat">Animations</span><span class="val">Framer Motion 12, GSAP 3, Three.js, Lenis</span></div>
+      <div class="stack-row anim-up"><span class="cat">Forms</span><span class="val">React Hook Form, Zod v4, @hookform/resolvers</span></div>
+      <div class="stack-row anim-up"><span class="cat">Notifications</span><span class="val">Twilio (SMS), SendGrid (Email)</span></div>
+      <div class="stack-row anim-up"><span class="cat">External APIs</span><span class="val">OpenAI, EasyPost (Shipping), SmartyStreets (Address)</span></div>
+      <div class="stack-row anim-up"><span class="cat">DevOps</span><span class="val">Docker, docker-compose, Git, ESLint, Ruff, mypy</span></div>
+      <div class="stack-row anim-up"><span class="cat">Testing</span><span class="val">pytest-asyncio, Vitest, React Testing Library</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 8: Database & Vector Store -->
+<div class="slide" data-index="7">
+  <div class="slide-inner">
+    <div class="anim-up"><span class="title-badge">✦ DATA</span></div>
+    <div class="anim-up"><h2>Database &amp; Vector Store</h2></div>
+    <div class="anim-up"><div class="accent-line"></div></div>
+    <div class="anim-up"><div class="db-section-title">Relational Database <span class="badge">PostgreSQL 16 / SQLite</span></div></div>
+    <div class="db-grid">
+      <div class="db-card relational anim-up"><h4>📋 Orders</h4><p>Order ID, Customer, Items<br>Status, Total, Timeline<br>Agent Assignments</p></div>
+      <div class="db-card relational anim-up"><h4>📦 Shipments</h4><p>Shipment ID, Carrier<br>Tracking, Status<br>Delays, Reroutes</p></div>
+      <div class="db-card relational anim-up"><h4>🏭 Fulfillment Centers</h4><p>Location, Capacity<br>Active Hours<br>Carrier Partners</p></div>
+      <div class="db-card relational anim-up"><h4>💰 Carrier Rates</h4><p>Rate Tables<br>Service Levels<br>Cost per Zone</p></div>
+    </div>
+    <div class="anim-up"><div class="db-section-title">Vector Database <span class="badge">Qdrant • 1536-dim embeddings</span></div></div>
+    <div class="db-grid">
+      <div class="db-card vector anim-up"><h4>🚚 shipment_events</h4><p>Vector embeddings of<br>shipment tracking events<br>for similarity search</p></div>
+      <div class="db-card vector anim-up"><h4>📦 product_catalog</h4><p>Product descriptions &amp;<br>features as vectors<br>for semantic search</p></div>
+      <div class="db-card vector anim-up"><h4>👤 customer_order_history</h4><p>Customer patterns &amp;<br>preferences for<br>personalized routing</p></div>
+      <div class="db-card vector anim-up"><h4>🧠 agent_decisions</h4><p>Agent reasoning traces<br>for audit &amp; continuous<br>improvement</p></div>
+    </div>
+    <div class="anim-up" style="margin-top:10px; text-align:center"><p class="caption">⚡ Mock fallback available — Qdrant not required for local development</p></div>
+  </div>
+</div>
+
+<!-- SLIDE 9: Order Fulfillment Workflow -->
+<div class="slide" data-index="8">
+  <div class="slide-inner">
+    <div class="anim-up"><span class="title-badge">✦ WORKFLOW</span></div>
+    <div class="anim-up"><h2>Order Fulfillment Workflow</h2></div>
+    <div class="anim-up"><div class="accent-line"></div></div>
+    <div class="workflow-grid">
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--accent)">1</div><h4>Order Placed</h4><p>Customer places order via frontend UI</p></div>
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--green)">2</div><h4>Routing Agent</h4><p>Selects best fulfillment center &amp; carrier rate</p></div>
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--orange)">3</div><h4>Order Processing</h4><p>Order assigned to FC, inventory reserved</p></div>
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--red)">4</div><h4>Fulfillment</h4><p>Items picked &amp; packed, shipping label generated</p></div>
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--accent)">5</div><h4>In Transit</h4><p>Real-time tracking, Monitor agent active</p></div>
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--green)">6</div><h4>Delay Detection</h4><p>Delay predicted via vector similarity search</p></div>
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--orange)">7</div><h4>Rerouting</h4><p>Alternative carrier selected &amp; executed</p></div>
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--red)">8</div><h4>Communication</h4><p>SMS/Email alerts sent via Twilio &amp; SendGrid</p></div>
+      <div class="workflow-step anim-up"><div class="num" style="background:var(--green)">9</div><h4>Delivery</h4><p>Order delivered, customer notified</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- SLIDE 10: Thank You -->
+<div class="slide" data-index="9">
+  <div class="slide-inner thankyou">
+    <div class="anim-up"><span class="title-badge">✦ FINAL</span></div>
+    <div class="anim-up"><h1>THANK YOU</h1></div>
+    <div class="anim-up" style="margin-top:12px"><div class="accent-line" style="margin:0 auto"></div></div>
+    <div class="anim-up" style="margin-top:20px"><p class="subtitle">Warehouse OS — Multi-Agent Order Fulfillment System</p></div>
+    <div class="anim-up" style="margin-top:12px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap">
+      <span style="padding:10px 24px; border-radius:100px; background:linear-gradient(135deg, rgba(59,130,246,0.12), rgba(139,92,246,0.12)); border:1px solid rgba(59,130,246,0.2); color:var(--accent); font-size:14px">📂 Final Project</span>
+    </div>
+    <div class="anim-up" style="margin-top:40px"><p class="subtitle" style="color:var(--text3)">Questions?</p></div>
+  </div>
+</div>
+
+</div>
+
+<!-- Navigation -->
+<div class="nav-bar">
+  <button class="nav-btn" onclick="prevSlide()" id="prevBtn">‹</button>
+  <span class="slide-counter" id="counter">01 / 10</span>
+  <div class="slide-indicators" id="dots"></div>
+  <button class="nav-btn" onclick="nextSlide()" id="nextBtn">›</button>
+</div>
+
+<script>
+// Background particles
+const canvas = document.getElementById('bg-canvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let mouse = { x: 0, y: 0 };
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+class Particle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height;
+    this.size = Math.random() * 2 + 0.5;
+    this.speedX = (Math.random() - 0.5) * 0.3;
+    this.speedY = (Math.random() - 0.5) * 0.3;
+    this.opacity = Math.random() * 0.5 + 0.1;
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+    const dx = mouse.x - this.x;
+    const dy = mouse.y - this.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 120) {
+      this.x -= dx * 0.005;
+      this.y -= dy * 0.005;
+    }
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(59, 130, 246, ${this.opacity})`;
+    ctx.fill();
+  }
+}
+
+for (let i = 0; i < 80; i++) particles.push(new Particle());
+
+function animateBg() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(animateBg);
+}
+
+document.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+animateBg();
+
+// Slide navigation
+const slides = document.querySelectorAll('.slide');
+const totalSlides = slides.length;
+let current = 0;
+
+function createDots() {
+  const container = document.getElementById('dots');
+  for (let i = 0; i < totalSlides; i++) {
+    const dot = document.createElement('div');
+    dot.className = 'dot' + (i === 0 ? ' active' : '');
+    dot.onclick = () => goToSlide(i);
+    container.appendChild(dot);
+  }
+}
+createDots();
+
+function updateCounter() {
+  document.getElementById('counter').textContent = String(current + 1).padStart(2, '0') + ' / ' + String(totalSlides).padStart(2, '0');
+}
+
+function goToSlide(index) {
+  if (index === current) return;
+  const prev = current;
+  current = Math.max(0, Math.min(index, totalSlides - 1));
+  slides[prev].classList.remove('active');
+  slides[prev].classList.add('prev');
+  slides[current].classList.remove('prev');
+  slides[current].classList.add('active');
+  document.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === current));
+  updateCounter();
+}
+
+function nextSlide() { goToSlide(current + 1); }
+function prevSlide() { goToSlide(current - 1); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') { e.preventDefault(); nextSlide(); }
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); prevSlide(); }
+});
+
+// Touch support
+let touchStartX = 0;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+document.addEventListener('touchend', e => {
+  const diff = touchStartX - e.changedTouches[0].clientX;
+  if (Math.abs(diff) > 50) diff > 0 ? nextSlide() : prevSlide();
+});
+
+updateCounter();
+</script>
+</body>
+</html>

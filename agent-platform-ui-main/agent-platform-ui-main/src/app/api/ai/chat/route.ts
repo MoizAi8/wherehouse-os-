@@ -12,16 +12,23 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: "No user message" }), { status: 400 })
     }
 
-    const backendRes = await fetch(`${BACKEND_URL}/api/chat/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: lastUserMsg.content }),
-    })
+    let reply: string | null = null
+    try {
+      const backendRes = await fetch(`${BACKEND_URL}/api/chat/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: lastUserMsg.content }),
+        signal: AbortSignal.timeout(5000),
+      })
+      if (backendRes.ok) {
+        const data = await backendRes.json()
+        reply = data.reply || null
+      }
+    } catch {
+      // Backend unavailable — fall through to AI stream
+    }
 
-    if (backendRes.ok) {
-      const data = await backendRes.json()
-      const reply = data.reply || ""
-
+    if (reply) {
       const encoder = new TextEncoder()
       const readable = new ReadableStream({
         start(controller) {
@@ -29,7 +36,6 @@ export async function POST(req: NextRequest) {
           controller.close()
         },
       })
-
       return new Response(readable, {
         headers: {
           "Content-Type": "text/plain; charset=utf-8",
@@ -39,7 +45,6 @@ export async function POST(req: NextRequest) {
     }
 
     const stream = await streamChat(messages)
-
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
       async start(controller) {
