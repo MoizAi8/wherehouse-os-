@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { motion } from "framer-motion"
-import { Bot, Send, Loader2, Package } from "lucide-react"
+import { Bot, Send, Loader2, Package, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Message } from "@/lib/ai/client"
@@ -34,6 +34,11 @@ export function AIAssistant() {
     }
   }, [messages, streamContent])
 
+  const clearChat = () => {
+    setMessages([{ id: "0", role: "assistant", content: "Chat cleared. Ask me anything about your warehouse." }])
+    idCounter.current = 0
+  }
+
   const handleSend = useCallback(async (text: string) => {
     if (!text.trim() || streaming) return
 
@@ -45,30 +50,17 @@ export function AIAssistant() {
     setStreamContent("")
 
     try {
-      const res = await fetch("/api/ai/chat", {
+      const res = await fetch("/api/chat/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: [...messages, userMsg] }),
+        body: JSON.stringify({ message: text }),
       })
 
       if (!res.ok) throw new Error("Failed")
 
-      const reader = res.body?.getReader()
-      const decoder = new TextDecoder()
-      let content = ""
-
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          content += decoder.decode(value, { stream: true })
-          setStreamContent(content)
-        }
-      }
-
+      const data = await res.json()
       idCounter.current += 1
-      setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content }])
-      setStreamContent("")
+      setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: data.reply }])
     } catch {
       idCounter.current += 1
       setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: "AI service unavailable. Check your API key." }])
@@ -92,6 +84,12 @@ export function AIAssistant() {
             </div>
           </div>
         </div>
+        <button onClick={clearChat}
+          className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+          title="Clear chat"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
       </div>
 
       <ScrollArea className="flex-1 p-5" ref={scrollRef}>

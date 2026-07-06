@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import * as THREE from "three"
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js"
 import { motion } from "framer-motion"
-import { ArrowDown, Bot, Cpu, Shield } from "lucide-react"
+import { Bot, Shield } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 function HeroScene() {
@@ -206,15 +206,6 @@ export function WarehouseHero() {
           className="mt-8 flex items-center gap-4"
         >
           <Button size="xl" className="gap-2" onClick={() => router.push("/dashboard")}><Bot className="h-4 w-4" /> Launch Dashboard</Button>
-          <Button variant="glass" size="xl" className="gap-2" onClick={() => router.push("/dashboard")}><Cpu className="h-4 w-4" /> View Demo</Button>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1, duration: 1 }}
-          className="absolute bottom-8 left-1/2 -translate-x-1/2"
-        >
-          <motion.div animate={{ y: [0, 6, 0] }} transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}>
-            <ArrowDown className="h-5 w-5 text-muted-foreground" />
-          </motion.div>
         </motion.div>
       </div>
     </section>

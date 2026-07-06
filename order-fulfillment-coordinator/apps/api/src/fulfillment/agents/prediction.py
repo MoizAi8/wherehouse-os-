@@ -58,10 +58,11 @@ class PredictionAgent:
         return min(probability, 0.95)
 
     async def _get_carrier_failure_rate(self, carrier_name: str) -> float:
+        from sqlalchemy.types import Integer
         result = await self.db.execute(
             select(
                 func.avg(
-                    func.cast(Shipment.is_delayed, type_=type(1))  # type: ignore
+                    func.cast(Shipment.is_delayed, Integer)  # type: ignore
                 )
             ).where(Shipment.carrier_name == carrier_name)
         )

@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["*"]
 
     openai_api_key: str = ""
-    openai_model: str = "gpt-4o"
+    openai_base_url: str = ""
+    openai_model: str = "gpt-4o-mini"
 
     qdrant_url: str = "http://localhost:6333"
     qdrant_api_key: str = ""

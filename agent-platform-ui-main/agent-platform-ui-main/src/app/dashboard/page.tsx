@@ -3,7 +3,7 @@
 import { Suspense } from "react"
 import { motion } from "framer-motion"
 import { AgentStatusGrid } from "@/components/dashboard/AgentStatusGrid"
-import { Badge } from "@/components/ui/badge"
+
 import { SkeletonCard } from "@/components/ui/SkeletonCard"
 import { ErrorBoundary } from "@/components/ui/ErrorBoundary"
 import { AIAssistant } from "@/components/ai/AIAssistant"
@@ -23,10 +23,7 @@ function AgentCountDisplay() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-semibold tracking-tight text-foreground">Warehouse OS</h1>
-            <Badge variant="secondary" className="text-[10px] gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-              Prompt Mode
-            </Badge>
+
           </div>
           <p className="text-sm text-muted-foreground">Ask the AI to manage your warehouse</p>
         </div>
