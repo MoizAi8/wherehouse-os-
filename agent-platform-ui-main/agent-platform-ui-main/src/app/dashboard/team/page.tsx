@@ -26,7 +26,7 @@ const containerVariants = {
 
 const cardVariants = {
   hidden: { opacity: 0, y: 16 },
-  visible: { transition: { duration: 0.4, ease: "easeOut" } },
+  visible: { transition: { duration: 0.4, ease: "easeOut" as const } },
 }
 
 const rowVariants = {
@@ -34,7 +34,7 @@ const rowVariants = {
   visible: (i: number) => ({
     opacity: 1,
     x: 0,
-    transition: { delay: i * 0.04, duration: 0.35, ease: "easeOut" },
+    transition: { delay: i * 0.04, duration: 0.35, ease: "easeOut" as const },
   }),
 }
 

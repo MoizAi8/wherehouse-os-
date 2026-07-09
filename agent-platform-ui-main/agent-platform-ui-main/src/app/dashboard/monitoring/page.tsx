@@ -52,7 +52,7 @@ export default function MonitoringPage() {
   }
   const cardVariants = {
     hidden: { opacity: 0, y: 20 },
-    visible: { transition: { duration: 0.5, ease: "easeOut" } },
+    visible: { transition: { duration: 0.5, ease: "easeOut" as const } },
   }
 
   const agents = [
