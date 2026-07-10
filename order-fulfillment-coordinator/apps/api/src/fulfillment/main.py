@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -10,6 +11,12 @@ from fulfillment.config import settings
 from fulfillment.database import init_db
 from fulfillment.vector_store import init_collections
 from fulfillment.api import auth, chat
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger("fulfillment")
 from fulfillment.api.v1 import (
     agents,
     analytics,

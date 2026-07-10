@@ -27,7 +27,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict[str, str]:
     if token is None:
-        return {"user_id": "demo-user", "role": "admin"}
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Provide a valid JWT token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     try:
         payload = jwt.decode(
             token,
@@ -39,4 +43,8 @@ async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict[s
             "role": payload.get("role", "viewer"),
         }
     except JWTError:
-        return {"user_id": "demo-user", "role": "admin"}
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )

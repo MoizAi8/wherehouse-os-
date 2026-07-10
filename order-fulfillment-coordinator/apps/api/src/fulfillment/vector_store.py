@@ -17,19 +17,23 @@ from qdrant_client.models import (
 
 from fulfillment.config import settings
 
-from fulfillment.vector_store_mock import MockQdrantClient
+import logging
+logger = logging.getLogger("fulfillment.vector_store")
 
+qdrant: AsyncQdrantClient | None = None
 if settings.qdrant_url:
     qdrant = AsyncQdrantClient(
         url=settings.qdrant_url,
         api_key=settings.qdrant_api_key if settings.qdrant_api_key else None,
     )
 else:
-    qdrant = MockQdrantClient()
+    logger.warning("QDRANT_URL not set. Vector search features will return empty results.")
 
-openai_client: AsyncOpenAI | None = None
-if settings.openai_api_key:
-    openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+if not settings.openai_api_key:
+    raise RuntimeError(
+        "OPENAI_API_KEY is not configured. The system requires OpenAI for embeddings and LLM responses."
+    )
+openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 COLLECTIONS: dict[str, int] = {
     "shipment_events": 1536,
@@ -39,17 +43,10 @@ COLLECTIONS: dict[str, int] = {
 }
 
 
-def _mock_embed(text: str) -> list[float]:
-    """Deterministic mock embedding for demo without OpenAI key."""
-    import hashlib
-    hash_obj = hashlib.md5(text.encode())
-    # Convert to 1536-dim vector
-    base = [float(b) / 255.0 for b in hash_obj.digest()]
-    # Extend to 1536 dimensions
-    return (base * (1536 // len(base) + 1))[:1536]
-
-
 async def init_collections() -> None:
+    if qdrant is None:
+        logger.warning("Qdrant not available — skipping collection initialization.")
+        return
     existing = {c.name for c in (await qdrant.get_collections()).collections}
     for name, size in COLLECTIONS.items():
         if name not in existing:
@@ -63,16 +60,16 @@ async def init_collections() -> None:
 
 
 async def embed(text: str) -> list[float]:
-    if openai_client:
-        resp = await openai_client.embeddings.create(
-            model="text-embedding-3-small",
-            input=text,
-        )
-        return resp.data[0].embedding
-    return _mock_embed(text)
+    resp = await openai_client.embeddings.create(
+        model="text-embedding-3-small",
+        input=text,
+    )
+    return resp.data[0].embedding
 
 
 async def upsert_shipment_event(event: dict[str, Any]) -> None:
+    if qdrant is None:
+        return
     text = (
         f"carrier:{event['carrier']} "
         f"status:{event['status']} "
@@ -105,6 +102,8 @@ async def search_similar_delays(
     status: str,
     limit: int = 10,
 ) -> list[Any]:
+    if qdrant is None:
+        return []
     vector = await embed(f"carrier:{carrier} status:{status}")
     return await qdrant.search(
         collection_name="shipment_events",
@@ -119,6 +118,8 @@ async def search_similar_delays(
 
 
 async def upsert_product(product: dict[str, Any]) -> None:
+    if qdrant is None:
+        return
     text = (
         f"{product['name']} "
         f"{product['category']} "
@@ -145,6 +146,8 @@ async def upsert_product(product: dict[str, Any]) -> None:
 
 
 async def search_similar_products(query: str, limit: int = 5) -> list[Any]:
+    if qdrant is None:
+        return []
     vector = await embed(query)
     return await qdrant.search(
         collection_name="product_catalog",
@@ -154,6 +157,8 @@ async def search_similar_products(query: str, limit: int = 5) -> list[Any]:
 
 
 async def upsert_customer_history(customer: dict[str, Any]) -> None:
+    if qdrant is None:
+        return
     text = (
         f"customer {customer['customer_id']} "
         f"sla:{customer['preferred_sla']} "
@@ -180,6 +185,8 @@ async def search_similar_customers(
     avg_value: float,
     limit: int = 3,
 ) -> list[Any]:
+    if qdrant is None:
+        return []
     vector = await embed(f"sla:{sla_tier} value:{avg_value}")
     return await qdrant.search(
         collection_name="customer_order_history",
@@ -189,6 +196,8 @@ async def search_similar_customers(
 
 
 async def upsert_agent_decision(decision: dict[str, Any]) -> None:
+    if qdrant is None:
+        return
     text = (
         f"agent:{decision['agent_name']} "
         f"event:{decision['event_type']} "
@@ -213,6 +222,8 @@ async def search_past_decisions(
     event_type: str,
     limit: int = 3,
 ) -> list[Any]:
+    if qdrant is None:
+        return []
     vector = await embed(f"agent:{agent_name} event:{event_type}")
     return await qdrant.search(
         collection_name="agent_decisions",

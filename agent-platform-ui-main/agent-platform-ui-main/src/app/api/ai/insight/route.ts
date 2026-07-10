@@ -1,16 +1,21 @@
 import { NextRequest } from "next/server"
 
+const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000"
+
 export async function POST(req: NextRequest) {
   try {
-    await req.json()
-    const insights = [
-      { metric: "Active Agents", insight: "6 agents online — 2 underutilized (PredictionAgent, CommunicationAgent)", severity: "info" },
-      { metric: "Orders Processed", insight: "8,421 orders today — +12% vs yesterday. Scaling recommended.", severity: "info" },
-      { metric: "System Uptime", insight: "99.97% — no degradation detected", severity: "info" },
-      { metric: "Avg Response", insight: "47ms — within SLA. Zone C latency up 3ms", severity: "warning" },
-    ]
-
-    return Response.json({ insights })
+    const body = await req.json()
+    const backendRes = await fetch(`${BACKEND_URL}/api/chat/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "Give me current insights and recommendations for the warehouse system." }),
+      signal: AbortSignal.timeout(10000),
+    })
+    if (!backendRes.ok) {
+      return Response.json({ error: "Insight generation failed" }, { status: 500 })
+    }
+    const data = await backendRes.json()
+    return Response.json({ insights: [{ metric: "AI Insight", insight: data.reply, severity: "info" }] })
   } catch {
     return Response.json({ error: "Insight generation failed" }, { status: 500 })
   }

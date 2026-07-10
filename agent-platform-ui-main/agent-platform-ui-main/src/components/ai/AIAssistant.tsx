@@ -21,7 +21,7 @@ const suggestions = [
 export function AIAssistant() {
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([
-    { id: "0", role: "assistant", content: "I'm Warehouse OS AI. Ask me about agents, orders, metrics, or anything about your warehouse." },
+    { id: "0", role: "assistant", content: "👋 Welcome to Warehouse OS! Send a message to get started." },
   ])
   const [streaming, setStreaming] = useState(false)
   const [streamContent, setStreamContent] = useState("")
@@ -35,7 +35,7 @@ export function AIAssistant() {
   }, [messages, streamContent])
 
   const clearChat = () => {
-    setMessages([{ id: "0", role: "assistant", content: "Chat cleared. Ask me anything about your warehouse." }])
+    setMessages([{ id: "0", role: "assistant", content: "👋 Chat cleared. Send a message to start a new conversation." }])
     idCounter.current = 0
   }
 
@@ -61,9 +61,10 @@ export function AIAssistant() {
       const data = await res.json()
       idCounter.current += 1
       setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: data.reply }])
-    } catch {
+    } catch (err) {
       idCounter.current += 1
-      setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: "AI service unavailable. Check your API key." }])
+      const errMsg = err instanceof Error ? err.message : "AI service unavailable. Check your API key and backend connection."
+      setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: `Error: ${errMsg}` }])
     } finally {
       setStreaming(false)
     }

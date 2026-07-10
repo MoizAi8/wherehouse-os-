@@ -18,14 +18,14 @@ export async function POST(req: NextRequest) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: lastUserMsg.content }),
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(10000),
       })
       if (backendRes.ok) {
         const data = await backendRes.json()
         reply = data.reply || null
       }
     } catch {
-      // Backend unavailable — fall through to AI stream
+      // Backend unavailable, fall through to direct AI stream
     }
 
     if (reply) {
@@ -55,8 +55,9 @@ export async function POST(req: NextRequest) {
               controller.enqueue(encoder.encode(content))
             }
           }
-        } catch {
-          controller.enqueue(encoder.encode("Sorry, I couldn't process that request."))
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : "Failed to generate response"
+          controller.enqueue(encoder.encode(`Error: ${errMsg}`))
         } finally {
           controller.close()
         }
@@ -69,9 +70,10 @@ export async function POST(req: NextRequest) {
         "Cache-Control": "no-cache",
       },
     })
-  } catch {
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : "AI service unavailable"
     return new Response(
-      JSON.stringify({ error: "AI service unavailable" }),
+      JSON.stringify({ error: errMsg }),
       { status: 500 }
     )
   }
