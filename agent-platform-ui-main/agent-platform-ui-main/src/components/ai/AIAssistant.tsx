@@ -18,7 +18,7 @@ const suggestions = [
   "How are the agents performing?",
 ]
 
-export function AIAssistant() {
+export function AIAssistant({ initialContext }: { initialContext?: { name: string; role: string } | null }) {
   const [input, setInput] = useState("")
   const [messages, setMessages] = useState<Message[]>([
     { id: "0", role: "assistant", content: "👋 Welcome to Warehouse OS! Send a message to get started." },
@@ -27,6 +27,12 @@ export function AIAssistant() {
   const [streamContent, setStreamContent] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
   const idCounter = useRef(0)
+
+  useEffect(() => {
+    if (initialContext) {
+      setInput(`Show me details about ${initialContext.name} (${initialContext.role})`)
+    }
+  }, [initialContext])
 
   useEffect(() => {
     if (scrollRef.current) {

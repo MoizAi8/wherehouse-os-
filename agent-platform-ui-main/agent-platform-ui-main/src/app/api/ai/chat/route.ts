@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const stream = await streamChat(messages)
+    const chatMessages = messages.map((m, i) => ({ id: `msg-${i}`, role: m.role as "user" | "assistant" | "system", content: m.content }))
+    const stream = await streamChat(chatMessages)
     const encoder = new TextEncoder()
     const readable = new ReadableStream({
       async start(controller) {

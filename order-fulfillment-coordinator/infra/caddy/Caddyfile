@@ -1,0 +1,38 @@
+# ── Domain-based routing ────────────────────────────────
+{$DOMAIN:localhost} {
+    tls {$SSL_EMAIL:off}
+
+    # API
+    handle_path /api/* {
+        reverse_proxy {$API_URL:http://api:8000}
+    }
+
+    # Health
+    handle_path /health {
+        reverse_proxy {$API_URL:http://api:8000}
+    }
+
+    # WebSocket
+    handle_path /ws/* {
+        reverse_proxy {$API_URL:http://api:8000}
+    }
+
+    # Frontend — everything else
+    handle {
+        reverse_proxy {$FRONTEND_URL:http://frontend:3000}
+    }
+
+    # Security headers
+    header {
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
+    }
+}
+
+# ── HTTP→HTTPS redirect ────────────────────────────────
+http://{$DOMAIN:localhost} {
+    redir https://{$DOMAIN:localhost}{uri}
+}

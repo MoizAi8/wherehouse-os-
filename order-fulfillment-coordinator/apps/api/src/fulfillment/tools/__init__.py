@@ -8,6 +8,13 @@ from fulfillment.tools.analytics import (
     compute_shipment_stats,
     get_delivery_performance,
 )
+from fulfillment.tools.integrations import (
+    check_odoo_connection,
+    create_odoo_sale_order,
+    fetch_odoo_products,
+    fetch_odoo_sale_orders,
+    get_active_odoo_connection,
+)
 
 __all__ = [
     "get_carrier_rate",
@@ -21,4 +28,9 @@ __all__ = [
     "compute_carrier_kpis",
     "compute_shipment_stats",
     "get_delivery_performance",
+    "get_active_odoo_connection",
+    "check_odoo_connection",
+    "fetch_odoo_sale_orders",
+    "fetch_odoo_products",
+    "create_odoo_sale_order",
 ]

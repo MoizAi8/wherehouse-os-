@@ -15,7 +15,7 @@ function HeroScene() {
     if (!canvasRef.current) return
     const canvas = canvasRef.current
     const scene = new THREE.Scene()
-    scene.background = new THREE.Color(0x09090b)
+    scene.background = new THREE.Color(0x08080e)
 
     const camera = new THREE.PerspectiveCamera(45, canvas.clientWidth / canvas.clientHeight, 0.1, 100)
     camera.position.set(8, 4, 10)
@@ -40,19 +40,19 @@ function HeroScene() {
     controls.enablePan = false
     controls.target.set(0, 0, 0)
 
-    const ambientLight = new THREE.AmbientLight(0x404060, 0.4)
+    const ambientLight = new THREE.AmbientLight(0x1a3a3a, 0.4)
     scene.add(ambientLight)
-    const mainLight = new THREE.DirectionalLight(0x8b5cf6, 2)
+    const mainLight = new THREE.DirectionalLight(0x06d6a0, 2)
     mainLight.position.set(5, 10, 5)
     mainLight.castShadow = true
     scene.add(mainLight)
-    const fillLight = new THREE.DirectionalLight(0x6366f1, 1)
+    const fillLight = new THREE.DirectionalLight(0x22d3ee, 1)
     fillLight.position.set(-5, 0, 5)
     scene.add(fillLight)
-    const rimLight = new THREE.DirectionalLight(0xa78bfa, 0.8)
+    const rimLight = new THREE.DirectionalLight(0x5eead4, 0.8)
     rimLight.position.set(0, -3, -8)
     scene.add(rimLight)
-    const pointLight = new THREE.PointLight(0x8b5cf6, 1, 15)
+    const pointLight = new THREE.PointLight(0x06b6d4, 1, 15)
     pointLight.position.set(0, -2, 0)
     scene.add(pointLight)
 
@@ -98,17 +98,17 @@ function HeroScene() {
     }
 
     const rackPositions = [
-      { x: -3, z: -2, h: 5, c: 0x6366f1 },
-      { x: 0, z: -2, h: 6, c: 0x8b5cf6 },
-      { x: 3, z: -2, h: 4, c: 0x6366f1 },
-      { x: -2, z: 2, h: 5, c: 0x7c3aed },
-      { x: 2, z: 2, h: 5, c: 0x6366f1 },
+      { x: -3, z: -2, h: 5, c: 0x06d6a0 },
+      { x: 0, z: -2, h: 6, c: 0x22d3ee },
+      { x: 3, z: -2, h: 4, c: 0x06d6a0 },
+      { x: -2, z: 2, h: 5, c: 0x06b6d4 },
+      { x: 2, z: 2, h: 5, c: 0x06d6a0 },
     ]
     rackPositions.forEach((r) => scene.add(createRack(r.x, r.z, r.h, r.c)))
 
     const glowRing = new THREE.Mesh(
       new THREE.RingGeometry(2.5, 3, 64),
-      new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 0.1, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0x22d3ee, transparent: true, opacity: 0.1, side: THREE.DoubleSide })
     )
     glowRing.rotation.x = -Math.PI / 2
     glowRing.position.y = -0.8
@@ -116,7 +116,7 @@ function HeroScene() {
 
     const innerRing = new THREE.Mesh(
       new THREE.RingGeometry(1.5, 1.8, 48),
-      new THREE.MeshBasicMaterial({ color: 0x6366f1, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0x06d6a0, transparent: true, opacity: 0.15, side: THREE.DoubleSide })
     )
     innerRing.rotation.x = -Math.PI / 2
     innerRing.position.y = -0.6
@@ -129,7 +129,7 @@ function HeroScene() {
     particlesGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3))
     const particles = new THREE.Points(
       particlesGeo,
-      new THREE.PointsMaterial({ color: 0x8b5cf6, size: 0.02, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending })
+      new THREE.PointsMaterial({ color: 0x22d3ee, size: 0.02, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending })
     )
     particles.position.y = 2
     scene.add(particles)

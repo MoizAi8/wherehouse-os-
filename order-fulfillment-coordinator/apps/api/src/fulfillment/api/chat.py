@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sqlfunc
 
 from fulfillment.api.deps import get_current_user, get_db
+from fulfillment.agents.intent_analyzer import IntentAnalyzer
 from fulfillment.config import settings
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment
@@ -36,83 +37,55 @@ class ChatResponse(BaseModel):
 
 _openai_client: AsyncOpenAI | None = None
 if settings.openai_api_key:
-    kwargs = dict(api_key=settings.openai_api_key)
+    kwargs = dict(api_key=settings.openai_api_key, timeout=8.0, max_retries=0)
     if settings.openai_base_url:
         kwargs["base_url"] = settings.openai_base_url
     _openai_client = AsyncOpenAI(**kwargs)
 
+_intent_analyzer = IntentAnalyzer(_openai_client)
 
-INTENT_DESCRIPTIONS: dict[str, str] = {
-    "greeting": "User is greeting or saying hello/hi",
-    "help": "User is asking what the system can do or requesting help/options",
-    "create_order": "User wants to create a new order",
-    "list_orders": "User wants to see all orders or a list of orders",
-    "check_status": "User wants to check status of a specific order or shipment",
-    "agent_count": "User wants to know about agents — how many, their health, active status",
-    "agent_perf": "User wants to know how agents are performing overall",
-    "metrics": "User wants system KPIs, metrics, or order numbers",
-    "insight": "User wants suggestions, priorities, recommendations, or optimizations",
-    "proceed_delivery": "User wants to route/process/dispatch all pending orders for delivery",
-    "filter_orders": "User wants to filter/see orders by status — pending or delayed",
-    "fulfillment_centers": "User wants info about fulfillment center assignments or carrier per order",
-    "carrier_usage": "User wants to know which carriers are used and cost per carrier",
-    "active_shipments": "User wants to see currently active/in-transit shipments",
-    "delayed_shipments": "User wants to see list of delayed shipments and reasons",
-    "on_time_shipments": "User wants to see on-time shipments",
-    "high_risk_shipments": "User wants to see high-risk shipments or failure predictions",
-    "reroute_list": "User wants info about rerouted shipments",
-    "cost_analysis": "User wants shipping cost analysis details",
-    "notification_stats": "User wants notification statistics",
-    "cycle_stats": "User wants monitor cycle information",
-    "oldest_pending": "User wants to know the oldest pending order",
+
+INTENT_MAP = {
+    "ROUTE_ORDER": "proceed_delivery",
+    "TRACK_SHIPMENT": "check_status",
+    "PREDICT_RISK": "insight",
+    "OPTIMIZE_COST": "cost_analysis",
+    "REROUTE_SHIPMENT": "reroute_list",
+    "SEND_NOTIFICATION": "help",
+    "LIST_ORDERS": "list_orders",
+    "CHECK_STATUS": "check_status",
+    "AGENT_INFO": "agent_count",
+    "GET_METRICS": "metrics",
+    "GET_INSIGHT": "insight",
+    "FILTER_ORDERS": "filter_orders",
+    "FULFILLMENT_CENTERS": "fulfillment_centers",
+    "CARRIER_USAGE": "carrier_usage",
+    "ACTIVE_SHIPMENTS": "active_shipments",
+    "DELAYED_SHIPMENTS": "delayed_shipments",
+    "ON_TIME_SHIPMENTS": "on_time_shipments",
+    "HIGH_RISK_SHIPMENTS": "high_risk_shipments",
+    "COST_ANALYSIS": "cost_analysis",
+    "REROUTE_LIST": "reroute_list",
+    "NOTIFICATION_STATS": "notification_stats",
+    "CYCLE_STATS": "cycle_stats",
+    "OLDEST_PENDING": "oldest_pending",
+    "HELP": "help",
+    "GREETING": "greeting",
+    "CREATE_ORDER": "create_order",
 }
 
-INTENT_NAMES = list(INTENT_DESCRIPTIONS.keys())
-
-
-async def _llm_classify_intent(text: str) -> str | None:
-    if not _openai_client:
-        return None
-    intent_list = "\n".join(f"- {name}: {desc}" for name, desc in INTENT_DESCRIPTIONS.items())
-    prompt = (
-        "Classify this warehouse/fulfillment system query into ONE of these intents. "
-        "Reply with ONLY the intent name, nothing else.\n\n"
-        f"{intent_list}\n\n"
-        f"Query: \"{text}\"\n"
-        "Intent:"
-    )
-    logger.info("LLM intent classification request sent | query='%s'", text[:60])
-    resp = await _openai_client.chat.completions.create(
-        model=settings.openai_model or "gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-        max_tokens=30,
-    )
-    raw = resp.choices[0].message.content.strip().lower().rstrip(".")
-    intent = raw.replace("-", "_").replace(" ", "_").strip("_")
-    logger.info("LLM intent classification response | intent='%s'", intent)
-    if intent in INTENT_NAMES:
-        return intent
-    for known in INTENT_NAMES:
-        if known in raw:
-            return known
-    return None
-
-
 async def detect_intent(text: str) -> str:
-    if _openai_client:
-        try:
-            llm_intent = await _llm_classify_intent(text)
-            if llm_intent:
-                return llm_intent
-        except Exception as e:
-            logger.warning("LLM intent classification failed | error='%s'", e)
-    return "help"
+    result = await _intent_analyzer.analyze(text)
+    logger.info(
+        "Intent analyzed | intent=%s agent=%s confidence=%.2f reason='%s' missing=%s",
+        result.intent, result.required_agent, result.confidence, result.reason, result.missing_information,
+    )
+    return INTENT_MAP.get(result.intent, "help")
 
 
-async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: int = 500) -> str:
+async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: int = 500, fallback: str | None = None) -> str:
     if not _openai_client:
-        return "AI service is not configured. Set OPENAI_API_KEY in your environment."
+        return fallback or "AI service is not configured."
     logger.info("LLM response generation request sent")
     try:
         resp = await _openai_client.chat.completions.create(
@@ -129,14 +102,76 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
         return reply
     except Exception as e:
         logger.error("LLM response generation failed | error='%s'", e)
-        return "I'm having trouble connecting to the AI service right now. Please check that the API key is valid and has credits, then try again."
+        return fallback or "I'm having trouble processing your request right now. Please try again."
 
 
 _CHAT_SYSTEM_PROMPT = (
-    "You are a helpful warehouse order fulfillment assistant. "
-    "You help operators manage orders, shipments, agents, and system metrics. "
-    "Keep responses concise, friendly, and data-driven. "
-    "Use emojis sparingly. Always answer in English."
+    "# Enterprise AI Multi-Agent System Prompt\n\n"
+    "You are an advanced enterprise-grade AI agent operating within a Multi-Agent AI System.\n\n"
+    "Your primary objective is to provide accurate, context-aware, logical, and reliable responses. "
+    "Never rely only on predefined prompts or hardcoded examples. Instead, understand the user's intent and reason step by step before producing an answer.\n\n"
+    "## Core Responsibilities\n\n"
+    "- Understand the real intent behind every user question.\n"
+    "- Analyze all available context before answering.\n"
+    "- If additional context is available from memory, knowledge base, vector database, APIs, tools, or previous conversation, use it.\n"
+    "- If information is missing, clearly state what is missing instead of making assumptions.\n"
+    "- Never hallucinate facts.\n"
+    "- Always prefer factual, verifiable information.\n\n"
+    "## Reasoning Process\n\n"
+    "For every request:\n\n"
+    "1. Understand the user's goal.\n"
+    "2. Identify the domain.\n"
+    "3. Gather relevant context.\n"
+    "4. Decide whether tools or memory are required.\n"
+    "5. Validate retrieved information.\n"
+    "6. Produce a complete and well-structured response.\n"
+    "7. Explain uncertainty when confidence is low.\n\n"
+    "## Context Priority\n\n"
+    "Always use information in the following order:\n\n"
+    "1. User Input\n"
+    "2. Conversation History\n"
+    "3. Long-Term Memory\n"
+    "4. Knowledge Base / RAG\n"
+    "5. External Tools / APIs\n"
+    "6. General LLM Knowledge\n\n"
+    "Never ignore higher-priority context.\n\n"
+    "## Response Quality\n\n"
+    "Every answer should be:\n\n"
+    "- Accurate\n"
+    "- Context-aware\n"
+    "- Logical\n"
+    "- Complete\n"
+    "- Consistent\n"
+    "- Actionable\n"
+    "- Professional\n\n"
+    "Avoid vague or generic responses.\n\n"
+    "## Handling Unknown Questions\n\n"
+    "If the answer cannot be determined:\n\n"
+    "- Say that the available information is insufficient.\n"
+    "- Explain what additional information is needed.\n"
+    "- Never invent data.\n\n"
+    "## Multi-Agent Collaboration\n\n"
+    "If another specialized agent is better suited for the task:\n\n"
+    "- Route the task appropriately.\n"
+    "- Share all required context.\n"
+    "- Return the integrated final answer.\n\n"
+    "## Error Prevention\n\n"
+    "Never:\n\n"
+    "- Guess missing information.\n"
+    "- Contradict previous context.\n"
+    "- Ignore user instructions.\n"
+    "- Produce fabricated citations.\n"
+    "- Repeat predefined template answers.\n\n"
+    "## Output Style\n\n"
+    "Always produce responses that are:\n\n"
+    "- Structured\n"
+    "- Easy to understand\n"
+    "- Technically accurate\n"
+    "- Relevant to the user's actual question\n\n"
+    "Use headings and bullet points when appropriate.\n\n"
+    "## Goal\n\n"
+    "Your goal is not merely to answer prompts.\n\n"
+    "Your goal is to understand problems, reason intelligently, use available knowledge, collaborate with other agents when necessary, and provide the most accurate response possible."
 )
 
 
@@ -156,11 +191,15 @@ async def chat(
 
     if intent == "greeting":
         logger.info("LLM request sent | intent=greeting")
-        reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
-            f"The user said: \"{message}\"\n\nRespond with a friendly greeting and ask how you can help them with their warehouse.",
-            max_tokens=100,
-        )
+        reply = "Hello! I'm your warehouse operations assistant. How can I help you today?"
+        if _openai_client:
+            r = await _generate_llm_reply(
+                _CHAT_SYSTEM_PROMPT,
+                f"The user said: \"{message}\"\n\nRespond with a friendly greeting and ask how you can help them with their warehouse.",
+                max_tokens=100,
+            )
+            if "trouble" not in r and "not configured" not in r:
+                reply = r
         return ChatResponse(reply=reply, action="greeting")
 
     if intent == "help":
@@ -184,6 +223,7 @@ async def chat(
             _CHAT_SYSTEM_PROMPT,
             f"The user needs help. Here is what the system can do:\n{system_data}\n\nUser said: \"{message}\"\n\nExplain how they can interact with the system.",
             max_tokens=300,
+            fallback=f"I can help you with: creating orders, listing orders, checking shipment status, agent info, system metrics, and more. What would you like to do?",
         )
         return ChatResponse(reply=reply, action="help")
 
@@ -818,6 +858,7 @@ async def chat(
         f"proceed delivery, filter orders, fulfillment centers, carriers, shipments, "
         f"cost analysis, notifications, cycle stats. Keep it helpful and concise.",
         max_tokens=300,
+        fallback="I can help you with: creating orders, listing orders, checking shipment status, agent info, system metrics, delivery routing, and more. What would you like to do?",
     )
     return ChatResponse(reply=reply, action="help")
 

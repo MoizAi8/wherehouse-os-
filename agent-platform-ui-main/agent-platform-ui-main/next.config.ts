@@ -2,7 +2,9 @@ import type { NextConfig } from "next"
 
 const nextConfig: NextConfig = {
   transpilePackages: ["three"],
+  output: process.env.NODE_ENV === "production" ? "standalone" : undefined,
   async rewrites() {
+    if (process.env.NODE_ENV === "production") return {}
     return {
       fallback: [
         {

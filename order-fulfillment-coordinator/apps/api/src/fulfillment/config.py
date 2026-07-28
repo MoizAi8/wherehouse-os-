@@ -50,5 +50,11 @@ class Settings(BaseSettings):
     failed_delivery_threshold_pct: float = 10.0
     sla_critical_hours: int = 2
 
+    odoo_url: str = ""
+    odoo_db: str = ""
+    odoo_username: str = ""
+    odoo_password: str = ""
+    odoo_verify_ssl: bool = True
+
 
 settings = Settings()

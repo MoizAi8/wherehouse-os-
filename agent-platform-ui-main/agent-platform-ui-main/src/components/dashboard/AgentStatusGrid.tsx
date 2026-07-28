@@ -8,7 +8,7 @@ import { useAgentMonitor } from "@/hooks/use-agents"
 import { useOrders } from "@/hooks/use-orders"
 import { useSearch } from "@/contexts/SearchContext"
 
-interface AgentInfo {
+export interface AgentInfo {
   id: string
   name: string
   role: string
@@ -19,7 +19,7 @@ interface AgentInfo {
   accuracy: number
 }
 
-export function AgentStatusGrid() {
+export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { name: string; role: string }) => void }) {
   const { data: monitorData, loading, error, refetch } = useAgentMonitor()
   const { data: ordersData } = useOrders({ limit: 100 })
   const { query } = useSearch()
@@ -110,7 +110,7 @@ export function AgentStatusGrid() {
   return (
     <div className="space-y-2" role="list" aria-label="Agent status list">
       {filtered.map((agent, i) => (
-        <AgentCard key={agent.id} agent={agent} index={i} />
+        <AgentCard key={agent.id} agent={agent} index={i} onSelect={onAgentSelect} />
       ))}
       {filtered.length === 0 && (
         <p className="text-sm text-muted-foreground text-center py-8">No agents match your search</p>

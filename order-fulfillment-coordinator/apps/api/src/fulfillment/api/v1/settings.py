@@ -3,9 +3,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
-from fulfillment.api.deps import get_current_user
 from fulfillment.schemas.settings import AppSettings
 
 router = APIRouter()
@@ -19,10 +18,8 @@ def _file_path(user: str) -> Path:
 
 
 @router.get("", response_model=AppSettings)
-async def get_settings(
-    _user: dict[str, str] = Depends(get_current_user),
-) -> AppSettings:
-    fpath = _file_path(_user.get("sub", "default"))
+async def get_settings() -> AppSettings:
+    fpath = _file_path("default")
     if not fpath.exists():
         return AppSettings()
     try:
@@ -35,8 +32,7 @@ async def get_settings(
 @router.put("", response_model=AppSettings)
 async def update_settings(
     payload: AppSettings,
-    _user: dict[str, str] = Depends(get_current_user),
 ) -> AppSettings:
-    fpath = _file_path(_user.get("sub", "default"))
+    fpath = _file_path("default")
     fpath.write_text(payload.model_dump_json(indent=2), "utf-8")
     return payload

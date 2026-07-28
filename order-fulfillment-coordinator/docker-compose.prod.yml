@@ -3,19 +3,29 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${POSTGRES_DB:-fulfillment}
+      POSTGRES_USER: ${POSTGRES_USER:-fulfillment}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fulfillment}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
   api:
     build:
@@ -23,53 +33,113 @@ services:
       dockerfile: Dockerfile
       target: production
     restart: unless-stopped
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      APP_NAME: "Order Fulfillment Coordinator"
+      APP_VERSION: "${APP_VERSION:-0.1.0}"
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fulfillment}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fulfillment}
+      DATABASE_SYNC_URL: postgresql://${POSTGRES_USER:-fulfillment}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fulfillment}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET}
+      JWT_ALGORITHM: HS256
+      JWT_EXPIRATION_MINUTES: "${JWT_EXPIRATION_MINUTES:-60}"
+      CORS_ORIGINS: "${FRONTEND_URL:-http://localhost:3000}"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      EASYPOST_API_KEY: ${EASYPOST_API_KEY}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN}
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
-      SMARTYSTREETS_AUTH_ID: ${SMARTYSTREETS_AUTH_ID}
-      SMARTYSTREETS_AUTH_TOKEN: ${SMARTYSTREETS_AUTH_TOKEN}
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
+      OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
+      TWILIO_ACCOUNT_SID: "${TWILIO_ACCOUNT_SID:-}"
+      TWILIO_AUTH_TOKEN: "${TWILIO_AUTH_TOKEN:-}"
+      TWILIO_PHONE_NUMBER: "${TWILIO_PHONE_NUMBER:-}"
+      SENDGRID_API_KEY: "${SENDGRID_API_KEY:-}"
+      SENDGRID_FROM_EMAIL: "${SENDGRID_FROM_EMAIL:-noreply@fulfillment.com}"
+      EASYPOST_API_KEY: "${EASYPOST_API_KEY:-}"
+      SMARTYSTREETS_AUTH_ID: "${SMARTYSTREETS_AUTH_ID:-}"
+      SMARTYSTREETS_AUTH_TOKEN: "${SMARTYSTREETS_AUTH_TOKEN:-}"
+      ODOO_URL: "${ODOO_URL:-}"
+      ODOO_DB: "${ODOO_DB:-}"
+      ODOO_USERNAME: "${ODOO_USERNAME:-}"
+      ODOO_PASSWORD: "${ODOO_PASSWORD:-}"
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   celery-worker:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
       target: production
-    command: uv run celery -A fulfillment.tasks worker --loglevel=info
+    command: celery -A fulfillment.tasks worker --loglevel=info
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fulfillment}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fulfillment}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   celery-beat:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
       target: production
-    command: uv run celery -A fulfillment.tasks beat --loglevel=info
+    command: celery -A fulfillment.tasks beat --loglevel=info
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fulfillment}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fulfillment}
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET}
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../agent-platform-ui-main/agent-platform-ui-main
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "${FRONTEND_URL:-http://localhost:3000}"
+    restart: unless-stopped
+    expose:
+      - "3000"
+    environment:
+      NEXTAUTH_SECRET: ${JWT_SECRET}
+      NEXTAUTH_URL: "${FRONTEND_URL:-http://localhost:3000}"
+      BACKEND_URL: "http://api:8000"
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      API_URL: "${API_URL:-http://api:8000}"
+      FRONTEND_URL: "${FRONTEND_URL:-http://frontend:3000}"
+      DOMAIN: "${DOMAIN:-localhost}"
 
 volumes:
   pgdata:
+  caddy_data:
+  caddy_config:

@@ -74,7 +74,7 @@ export function LandingSections() {
           <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {stats.map((stat, i) => (
               <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.1, duration: 0.6 }}
-                className="group relative rounded-2xl border border-border/50 bg-card/50 p-8 text-center transition-all duration-300 hover:border-accent/30 hover:shadow-[0_0_40px_-10px_rgba(139,92,246,0.15)]"
+                className="group relative rounded-2xl border border-border/50 bg-card/50 p-8 text-center transition-all duration-300 hover:border-accent/30 hover:shadow-[0_0_40px_-10px_rgba(6,214,160,0.15)]"
               >
                 <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 text-accent transition-all group-hover:scale-110 group-hover:bg-accent/20">
                   <stat.icon className="h-6 w-6" />
@@ -103,7 +103,7 @@ export function LandingSections() {
 
           <div className="grid gap-8 lg:grid-cols-3">
             {features.map((feat) => (
-              <div key={feat.title} className="feature-card group relative rounded-2xl border border-border/50 bg-card/40 p-8 transition-all duration-500 hover:border-accent/30 hover:bg-card/80 hover:shadow-[0_0_50px_-15px_rgba(139,92,246,0.12)]">
+              <div key={feat.title} className="feature-card group relative rounded-2xl border border-border/50 bg-card/40 p-8 transition-all duration-500 hover:border-accent/30 hover:bg-card/80 hover:shadow-[0_0_50px_-15px_rgba(6,214,160,0.12)]">
                 <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-xl bg-accent/10 text-accent transition-all duration-300 group-hover:scale-110 group-hover:bg-accent/20">
                   <feat.icon className="h-6 w-6" />
                 </div>
