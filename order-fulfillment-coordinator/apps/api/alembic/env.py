@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from fulfillment.config import settings
 from fulfillment.database import Base
+import fulfillment.models  # noqa: F401  (register all tables on Base.metadata)
 
 config = context.config
 if config.config_file_name is not None:

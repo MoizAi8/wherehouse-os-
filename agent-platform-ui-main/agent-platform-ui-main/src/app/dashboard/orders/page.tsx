@@ -38,7 +38,7 @@ export default function OrdersPage() {
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           Orders {data ? `(${data.total})` : ""}
         </h1>
-        <p className="text-sm text-muted-foreground">Ask AI to manage orders via chat</p>
+        <p className="text-sm text-muted-foreground">Browse orders or ask the AI to create and manage them</p>
       </div>
 
       {error && (
@@ -61,6 +61,7 @@ export default function OrdersPage() {
             <Package className="h-6 w-6 text-muted-foreground" />
           </div>
           <h3 className="text-sm font-medium text-foreground">No orders yet</h3>
+          <p className="text-xs text-muted-foreground mt-1">Ask the AI to create one, or create it here.</p>
         </div>
       )}
 

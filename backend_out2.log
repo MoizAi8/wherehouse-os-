@@ -1,0 +1,44 @@
+
+   FastAPI   Starting development server 🚀
+ 
+             Searching for package file structure from directories with        
+             __init__.py files                                                 
+             Importing from C:\Users\AC\Desktop\final                          
+             project\order-fulfillment-coordinator\apps\api\src                
+ 
+    module   📁 fulfillment    
+             ├── 🐍 __init__.py
+             └── 🐍 main.py    
+ 
+      code   Importing the FastAPI app object from the module with the         
+             following code:                                                   
+ 
+             from fulfillment.main import app
+ 
+       app   Using import string: fulfillment.main:app
+ 
+    server   Server started at http://127.0.0.1:8000
+    server   Documentation at http://127.0.0.1:8000/docs
+ 
+       tip   Running in development mode, for production use: fastapi run
+ 
+             Logs:
+ 
+2026-07-02 14:22:17,134 INFO sqlalchemy.engine.Engine BEGIN (implicit)
+2026-07-02 14:22:17,138 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("orders")
+2026-07-02 14:22:17,139 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-02 14:22:17,150 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("shipments")
+2026-07-02 14:22:17,151 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-02 14:22:17,153 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("fulfillment_centers")
+2026-07-02 14:22:17,154 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-02 14:22:17,157 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("carrier_rates")
+2026-07-02 14:22:17,157 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-02 14:22:17,160 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("agent_events")
+2026-07-02 14:22:17,160 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-02 14:22:17,163 INFO sqlalchemy.engine.Engine PRAGMA main.table_info("notifications")
+2026-07-02 14:22:17,163 INFO sqlalchemy.engine.Engine [raw sql] ()
+2026-07-02 14:22:17,166 INFO sqlalchemy.engine.Engine COMMIT
+[Qdrant] Collection created: shipment_events
+[Qdrant] Collection created: product_catalog
+[Qdrant] Collection created: customer_order_history
+[Qdrant] Collection created: agent_decisions

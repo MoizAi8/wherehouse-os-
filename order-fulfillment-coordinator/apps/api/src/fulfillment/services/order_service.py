@@ -24,6 +24,20 @@ from fulfillment.schemas.webhook import OrderPlacedWebhook
 logger = logging.getLogger(__name__)
 
 
+def _coerce_order_status(raw: str) -> OrderStatus:
+    """Convert a raw status string to an OrderStatus member.
+
+    Prevents enum-vs-string comparison that silently works on SQLite but
+    fails on PostgreSQL (critical rule #8).
+    """
+    try:
+        return OrderStatus(raw)
+    except ValueError:
+        raise ValueError(
+            f"Invalid order status '{raw}'. Valid: {[e.value for e in OrderStatus]}"
+        )
+
+
 class OrderService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -36,7 +50,8 @@ class OrderService:
     ) -> list[OrderRead]:
         query = select(Order).offset(skip).limit(limit).order_by(Order.created_at.desc())
         if status_filter:
-            query = query.where(Order.status == status_filter)
+            status_enum = _coerce_order_status(status_filter)
+            query = query.where(Order.status == status_enum)
         result = await self.db.execute(query)
         orders = list(result.scalars().all())
         return [OrderRead.model_validate(o) for o in orders]
@@ -44,7 +59,8 @@ class OrderService:
     async def count_orders(self, status_filter: str | None = None) -> int:
         query = select(func.count()).select_from(Order)
         if status_filter:
-            query = query.where(Order.status == status_filter)
+            status_enum = _coerce_order_status(status_filter)
+            query = query.where(Order.status == status_enum)
         result = await self.db.execute(query)
         return result.scalar_one()
 

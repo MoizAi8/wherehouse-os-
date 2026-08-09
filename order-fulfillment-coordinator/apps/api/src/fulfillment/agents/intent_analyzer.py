@@ -256,7 +256,17 @@ class IntentAnalyzer:
                 max_tokens=300,
                 timeout=6,
             )
-            raw = resp.choices[0].message.content.strip()
+            content = resp.choices[0].message.content
+            if not content:
+                return IntentResult({
+                    "intent": "HELP",
+                    "required_agent": "MonitorAgent",
+                    "confidence": 0.0,
+                    "reason": "No LLM response",
+                    "missing_information": [],
+                    "secondary_agents": [],
+                })
+            raw = content.strip()
             raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
             data = json.loads(raw)
 

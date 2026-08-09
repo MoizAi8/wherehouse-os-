@@ -1,4 +1,5 @@
-import asyncio, traceback
+import asyncio
+import traceback
 from fulfillment.database import async_session_factory
 from fulfillment.agents.monitor import MonitorAgent
 from fulfillment.agents.prediction import PredictionAgent
@@ -15,7 +16,7 @@ async def test():
                 rl = pred['risk_level']
                 fp = pred['failure_probability']
                 print(f'  OK: {s.id[:8]}, Risk: {rl}, Prob: {fp}', flush=True)
-            except Exception as e:
+            except Exception:
                 traceback.print_exc()
 
 asyncio.run(test())

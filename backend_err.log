@@ -1,11 +1,42 @@
+QDRANT_URL not set. Vector search features will return empty results.
       INFO   Will watch for changes in these directories:                      
              ['C:\\Users\\AC\\Desktop\\final                                   
              project\\order-fulfillment-coordinator\\apps\\api']
+2026-07-09 16:01:44,867 | uvicorn.error | INFO | Will watch for changes in these directories: ['C:\\Users\\AC\\Desktop\\final project\\order-fulfillment-coordinator\\apps\\api']
       INFO   Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
-      INFO   Started reloader process [13064] using WatchFiles
-      INFO   Started server process [5408]
+2026-07-09 16:01:44,871 | uvicorn.error | INFO | Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+      INFO   Started reloader process [1592] using WatchFiles
+2026-07-09 16:01:44,873 | uvicorn.error | INFO | Started reloader process [1592] using WatchFiles
+QDRANT_URL not set. Vector search features will return empty results.
+      INFO   Started server process [5968]
+2026-07-09 16:02:13,357 | uvicorn.error | INFO | Started server process [5968]
       INFO   Waiting for application startup.
+2026-07-09 16:02:13,389 | uvicorn.error | INFO | Waiting for application startup.
+2026-07-09 16:02:13,410 | sqlalchemy.engine.Engine | INFO | BEGIN (implicit)
+2026-07-09 16:02:13,412 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("orders")
+2026-07-09 16:02:13,413 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:02:13,417 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("shipments")
+2026-07-09 16:02:13,418 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:02:13,421 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("fulfillment_centers")
+2026-07-09 16:02:13,422 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:02:13,425 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("carrier_rates")
+2026-07-09 16:02:13,426 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:02:13,429 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("agent_events")
+2026-07-09 16:02:13,430 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:02:13,433 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("notifications")
+2026-07-09 16:02:13,434 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:02:13,438 | sqlalchemy.engine.Engine | INFO | COMMIT
+2026-07-09 16:02:13,440 | fulfillment.vector_store | WARNING | Qdrant not available — skipping collection initialization.
       INFO   Application startup complete.
+2026-07-09 16:02:13,441 | uvicorn.error | INFO | Application startup complete.
+2026-07-09 16:04:23,846 | fulfillment.chat | INFO | User request received | message='Tell me a joke'
+2026-07-09 16:04:23,847 | fulfillment.chat | INFO | LLM intent classification request sent | query='Tell me a joke'
+2026-07-09 16:04:29,121 | httpx | INFO | HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-07-09 16:04:29,128 | fulfillment.chat | WARNING | LLM intent classification failed | error='Error code: 401 - {'type': 'error', 'error': {'type': 'CreditsError', 'message': 'No payment method. Add a payment method here: https://opencode.ai/workspace/wrk_01KTHJN40AACYKP20W9YQCK8EZ/billing'}}'
+2026-07-09 16:04:29,128 | fulfillment.chat | INFO | Intent detected | intent='help'
+2026-07-09 16:04:29,129 | fulfillment.chat | INFO | LLM request sent | intent=help
+2026-07-09 16:04:29,130 | fulfillment.chat | INFO | LLM response generation request sent
+2026-07-09 16:04:29,425 | httpx | INFO | HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 401 Unauthorized"
      ERROR   Exception in ASGI application
 Traceback (most recent call last):
   File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
@@ -53,79 +84,283 @@ Traceback (most recent call last):
   File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 328, in run_endpoint_function
     return await dependant.call(**values)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 294, in chat
-    result = await service.route_order(o.id)
-             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\services\order_service.py", line 164, in route_order
-    await self.db.flush()
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\ext\asyncio\session.py", line 786, in flush
-    await greenlet_spawn(self.sync_session.flush, objects=objects)
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\util\_concurrency_py3k.py", line 203, in greenlet_spawn
-    result = context.switch(value)
-             ^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4352, in flush
-    self._flush(objects)
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4487, in _flush
-    with util.safe_reraise():
-         ^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py", line 122, in __exit__
-    raise exc_value.with_traceback(exc_tb)
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\session.py", line 4448, in _flush
-    flush_context.execute()
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 465, in execute
-    rec.execute(self)
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\unitofwork.py", line 641, in execute
-    util.preloaded.orm_persistence.save_obj(
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 86, in save_obj
-    _emit_update_statements(
-  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\sqlalchemy\orm\persistence.py", line 949, in _emit_update_statements
-    raise orm_exc.StaleDataError(
-sqlalchemy.orm.exc.StaleDataError: UPDATE statement on table 'fulfillment_centers' expected to update 1 row(s); 0 were matched.
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c2d74cb9-537d-49f8-ac42-e22f4ae03abe: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment 37050597-4b6b-4fb8-bb52-1584f315e109: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment c48bb3ea-51d1-4d1c-be6f-cbb82f989b70: can't compare offset-naive and offset-aware datetimes
-Delay check failed for shipment f7505879-6c0c-47b9-9c4c-df363c251527: can't compare offset-naive and offset-aware datetimes
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 179, in chat
+    reply = await _generate_llm_reply(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 117, in _generate_llm_reply
+    resp = await _openai_client.chat.completions.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 2814, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\_base_client.py", line 1931, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\_base_client.py", line 1716, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'type': 'error', 'error': {'type': 'CreditsError', 'message': 'No payment method. Add a payment method here: https://opencode.ai/workspace/wrk_01KTHJN40AACYKP20W9YQCK8EZ/billing'}}
+2026-07-09 16:04:29,432 | uvicorn.error | ERROR | Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\applications.py", line 1159, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 680, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 134, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 120, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 674, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 328, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 179, in chat
+    reply = await _generate_llm_reply(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 117, in _generate_llm_reply
+    resp = await _openai_client.chat.completions.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 2814, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\_base_client.py", line 1931, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\_base_client.py", line 1716, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'type': 'error', 'error': {'type': 'CreditsError', 'message': 'No payment method. Add a payment method here: https://opencode.ai/workspace/wrk_01KTHJN40AACYKP20W9YQCK8EZ/billing'}}
+2026-07-09 16:05:00,955 | fulfillment.chat | INFO | User request received | message='Tell me a joke about programming'
+2026-07-09 16:05:00,956 | fulfillment.chat | INFO | LLM intent classification request sent | query='Tell me a joke about programming'
+2026-07-09 16:05:01,697 | httpx | INFO | HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+2026-07-09 16:05:01,704 | fulfillment.chat | WARNING | LLM intent classification failed | error='Error code: 401 - {'type': 'error', 'error': {'type': 'CreditsError', 'message': 'No payment method. Add a payment method here: https://opencode.ai/workspace/wrk_01KTHJN40AACYKP20W9YQCK8EZ/billing'}}'
+2026-07-09 16:05:01,705 | fulfillment.chat | INFO | Intent detected | intent='help'
+2026-07-09 16:05:01,705 | fulfillment.chat | INFO | LLM request sent | intent=help
+2026-07-09 16:05:01,706 | fulfillment.chat | INFO | LLM response generation request sent
+2026-07-09 16:05:01,997 | httpx | INFO | HTTP Request: POST https://opencode.ai/zen/v1/chat/completions "HTTP/1.1 401 Unauthorized"
+     ERROR   Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\applications.py", line 1159, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 680, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 134, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 120, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 674, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 328, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 179, in chat
+    reply = await _generate_llm_reply(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 117, in _generate_llm_reply
+    resp = await _openai_client.chat.completions.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 2814, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\_base_client.py", line 1931, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\_base_client.py", line 1716, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'type': 'error', 'error': {'type': 'CreditsError', 'message': 'No payment method. Add a payment method here: https://opencode.ai/workspace/wrk_01KTHJN40AACYKP20W9YQCK8EZ/billing'}}
+2026-07-09 16:05:02,006 | uvicorn.error | ERROR | Exception in ASGI application
+Traceback (most recent call last):
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\uvicorn\protocols\http\httptools_impl.py", line 421, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\uvicorn\middleware\proxy_headers.py", line 62, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\applications.py", line 1159, in __call__
+    await super().__call__(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\applications.py", line 90, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 186, in __call__
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\cors.py", line 88, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\middleware\exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\middleware\asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 660, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 680, in app
+    await route.handle(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\routing.py", line 276, in handle
+    await self.app(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 134, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\starlette\_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 120, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 674, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\fastapi\routing.py", line 328, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 179, in chat
+    reply = await _generate_llm_reply(
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\src\fulfillment\api\chat.py", line 117, in _generate_llm_reply
+    resp = await _openai_client.chat.completions.create(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\resources\chat\completions\completions.py", line 2814, in create
+    return await self._post(
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\_base_client.py", line 1931, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\AC\Desktop\final project\order-fulfillment-coordinator\apps\api\.venv\Lib\site-packages\openai\_base_client.py", line 1716, in request
+    raise self._make_status_error_from_response(err.response) from None
+openai.AuthenticationError: Error code: 401 - {'type': 'error', 'error': {'type': 'CreditsError', 'message': 'No payment method. Add a payment method here: https://opencode.ai/workspace/wrk_01KTHJN40AACYKP20W9YQCK8EZ/billing'}}
+2026-07-09 16:05:26,620 | watchfiles.main | INFO | 1 change detected
+   WARNING   WatchFiles detected changes in 'src\fulfillment\api\chat.py'.     
+             Reloading...
+2026-07-09 16:05:26,635 | uvicorn.error | WARNING | WatchFiles detected changes in 'src\fulfillment\api\chat.py'. Reloading...
+
+      INFO   Shutting down
+2026-07-09 16:06:18,861 | uvicorn.error | INFO | Shutting down
+      INFO   Waiting for application shutdown.
+2026-07-09 16:06:18,988 | uvicorn.error | INFO | Waiting for application shutdown.
+      INFO   Application shutdown complete.
+2026-07-09 16:06:18,992 | uvicorn.error | INFO | Application shutdown complete.
+      INFO   Finished server process [5968]
+2026-07-09 16:06:18,994 | uvicorn.error | INFO | Finished server process [5968]
+2026-07-09 16:06:23,616 | watchfiles.main | INFO | 1 change detected
+   WARNING   WatchFiles detected changes in 'src\fulfillment\api\chat.py'.     
+             Reloading...
+2026-07-09 16:06:23,617 | uvicorn.error | WARNING | WatchFiles detected changes in 'src\fulfillment\api\chat.py'. Reloading...
+QDRANT_URL not set. Vector search features will return empty results.
+      INFO   Started server process [7512]
+2026-07-09 16:06:43,143 | uvicorn.error | INFO | Started server process [7512]
+      INFO   Waiting for application startup.
+2026-07-09 16:06:43,169 | uvicorn.error | INFO | Waiting for application startup.
+2026-07-09 16:06:43,205 | sqlalchemy.engine.Engine | INFO | BEGIN (implicit)
+2026-07-09 16:06:43,207 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("orders")
+2026-07-09 16:06:43,208 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:06:43,212 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("shipments")
+2026-07-09 16:06:43,214 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:06:43,217 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("fulfillment_centers")
+2026-07-09 16:06:43,218 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:06:43,221 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("carrier_rates")
+2026-07-09 16:06:43,222 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:06:43,226 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("agent_events")
+2026-07-09 16:06:43,227 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:06:43,229 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("notifications")
+2026-07-09 16:06:43,231 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:06:43,234 | sqlalchemy.engine.Engine | INFO | COMMIT
+2026-07-09 16:06:43,237 | fulfillment.vector_store | WARNING | Qdrant not available — skipping collection initialization.
+      INFO   Application startup complete.
+2026-07-09 16:06:43,237 | uvicorn.error | INFO | Application startup complete.
+
+      INFO   Shutting down
+2026-07-09 16:06:43,240 | uvicorn.error | INFO | Shutting down
+      INFO   Waiting for application shutdown.
+2026-07-09 16:06:43,344 | uvicorn.error | INFO | Waiting for application shutdown.
+      INFO   Application shutdown complete.
+2026-07-09 16:06:43,347 | uvicorn.error | INFO | Application shutdown complete.
+      INFO   Finished server process [7512]
+2026-07-09 16:06:43,349 | uvicorn.error | INFO | Finished server process [7512]
+2026-07-09 16:06:45,634 | watchfiles.main | INFO | 5 changes detected
+QDRANT_URL not set. Vector search features will return empty results.
+      INFO   Started server process [10724]
+2026-07-09 16:07:22,711 | uvicorn.error | INFO | Started server process [10724]
+      INFO   Waiting for application startup.
+2026-07-09 16:07:22,756 | uvicorn.error | INFO | Waiting for application startup.
+2026-07-09 16:07:22,774 | sqlalchemy.engine.Engine | INFO | BEGIN (implicit)
+2026-07-09 16:07:22,777 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("orders")
+2026-07-09 16:07:22,778 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:07:22,783 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("shipments")
+2026-07-09 16:07:22,784 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:07:22,789 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("fulfillment_centers")
+2026-07-09 16:07:22,790 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:07:22,793 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("carrier_rates")
+2026-07-09 16:07:22,794 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:07:22,798 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("agent_events")
+2026-07-09 16:07:22,799 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:07:22,806 | sqlalchemy.engine.Engine | INFO | PRAGMA main.table_info("notifications")
+2026-07-09 16:07:22,807 | sqlalchemy.engine.Engine | INFO | [raw sql] ()
+2026-07-09 16:07:22,810 | sqlalchemy.engine.Engine | INFO | COMMIT
+2026-07-09 16:07:22,813 | fulfillment.vector_store | WARNING | Qdrant not available — skipping collection initialization.
+      INFO   Application startup complete.
+2026-07-09 16:07:22,814 | uvicorn.error | INFO | Application startup complete.

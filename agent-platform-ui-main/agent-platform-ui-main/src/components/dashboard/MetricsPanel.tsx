@@ -3,13 +3,11 @@
 import { Bot, Package, TrendingUp, Zap } from "lucide-react"
 import { MetricCard } from "./MetricCard"
 import { useKPIs } from "@/hooks/use-analytics"
-import { useOrders } from "@/hooks/use-orders"
 
 export function MetricsPanel() {
   const { data: kpis, loading: kpisLoading } = useKPIs()
-  const { loading: ordersLoading } = useOrders({ limit: 1 })
 
-  const loading = kpisLoading || ordersLoading
+  const loading = kpisLoading
 
   const metrics = loading
     ? [

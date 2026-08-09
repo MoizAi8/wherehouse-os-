@@ -56,7 +56,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     setStreamContent("")
 
     try {
-      const res = await fetch("/api/chat/", {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),

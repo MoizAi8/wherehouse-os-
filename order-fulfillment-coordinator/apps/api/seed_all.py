@@ -1,4 +1,5 @@
-import sqlite3, uuid
+import sqlite3
+import uuid
 conn = sqlite3.connect('fulfillment.db')
 c = conn.cursor()
 fcs = [
@@ -9,10 +10,21 @@ fcs = [
 for fc in fcs:
     c.execute('INSERT INTO fulfillment_centers (id, name, address, zip_code, city, state, country, latitude, longitude, is_active, capacity_pct, max_daily_orders, current_daily_orders) VALUES (?,?,?,?,?,?,?,?,?,1,?,?,?)', (str(uuid.uuid4()), *fc))
 carriers_data = [
-    ('DHL','Express',100,5000,0,10,15.0,2.5,1,3), ('FedEx','Express',100,5000,0,10,12.0,3.0,1,4),
-    ('FedEx','Economy',5001,10000,0,25,10.0,2.0,3,6), ('UPS','Express',100,5000,0,10,14.0,3.5,1,3),
-    ('UPS','Economy',5001,10000,0,25,9.0,2.5,3,7), ('USPS','Priority',100,5000,0,10,8.0,1.5,2,5),
-    ('TCS','Express',100,5000,0,10,11.0,2.0,1,3), ('Leopards','Standard',100,5000,0,10,7.0,1.0,2,5),
+    # origin_zip must match a fulfillment_centers.zip_code so routing can join them.
+    # destination_zip must match the customer order's shipping_zip to be selectable.
+    # Each Pakistani FC city has carriers serving it (domestic + a couple of
+    # international origin bands for cross-border orders).
+    ('TCS', 'Express', '54000', '54000', 0, 50, 12.0, 1.8, 1, 3),
+    ('TCS', 'Express', '74000', '74000', 0, 50, 12.0, 1.8, 1, 3),
+    ('TCS', 'Express', '44000', '44000', 0, 50, 12.0, 1.8, 1, 3),
+    ('Leopards', 'Standard', '54000', '54000', 0, 20, 8.0, 1.2, 2, 5),
+    ('Leopards', 'Standard', '74000', '74000', 0, 20, 8.0, 1.2, 2, 5),
+    ('Leopards', 'Standard', '44000', '44000', 0, 20, 8.0, 1.2, 2, 5),
+    ('DHL', 'Express', '54000', '54000', 0, 30, 18.0, 2.5, 1, 4),
+    ('FedEx', 'Economy', '54000', '54000', 0, 30, 14.0, 2.0, 2, 5),
+    # International cross-border bands (origin is a major airport ZIP).
+    ('DHL', 'Express', '10001', '10001', 0, 30, 25.0, 3.5, 2, 6),
+    ('FedEx', 'Economy', '10001', '10001', 0, 30, 19.0, 2.2, 3, 7),
 ]
 for cd in carriers_data:
     c.execute('INSERT INTO carrier_rates (id, carrier_name, service_name, origin_zip, destination_zip, weight_kg_min, weight_kg_max, base_rate, rate_per_kg, estimated_days_min, estimated_days_max, is_active) VALUES (?,?,?,?,?,?,?,?,?,?,?,1)', (str(uuid.uuid4()), *cd))

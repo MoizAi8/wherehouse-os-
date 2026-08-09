@@ -1,7 +1,7 @@
 [project]
 name = "order-fulfillment-coordinator"
 version = "0.1.0"
-description = "AI-driven Order Fulfillment Coordinator"
+description = "FulfillOS — AI-driven order fulfillment coordinator"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.115.0",
@@ -14,7 +14,9 @@ dependencies = [
     "celery[redis]",
     "redis",
     "python-jose[cryptography]",
-    "passlib[bcrypt]",
+    "bcrypt>=4.0.0",
+    "cryptography>=42.0.0",
+    "slowapi",
     "httpx",
     "twilio",
     "sendgrid",
@@ -60,3 +62,4 @@ warn_unused_ignores = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["src"]

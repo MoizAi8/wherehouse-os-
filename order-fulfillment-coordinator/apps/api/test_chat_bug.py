@@ -1,4 +1,6 @@
-import asyncio, traceback, sys
+import asyncio
+import traceback
+import sys
 
 async def test():
     from fulfillment.main import app
@@ -13,7 +15,7 @@ async def test():
         else:
             data = resp.json()
             print(f'Reply: {data["reply"][:200]}', flush=True)
-    except Exception as e:
+    except Exception:
         traceback.print_exc()
         sys.exit(1)
 

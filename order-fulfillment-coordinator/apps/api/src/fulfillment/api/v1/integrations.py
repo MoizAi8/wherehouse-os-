@@ -8,8 +8,8 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.api.deps import get_db, get_current_user
+from fulfillment.encryption import encrypt_secret, decrypt_secret
 from fulfillment.models.integration import IntegrationConnection
-from fulfillment.models.fulfillment_center import FulfillmentCenter
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.schemas.integration import (
     IntegrationConnectRequest,
@@ -78,7 +78,7 @@ async def connect_integration(
                 base_url=payload.base_url,
                 db_name=payload.db,
                 username=payload.username,
-                api_key=secret,
+                api_key=encrypt_secret(secret),
                 is_connected=True,
                 sync_status="connected",
                 version=status_result.get("version"),
@@ -92,7 +92,7 @@ async def connect_integration(
             conn.error_message = None
             if payload.label:
                 conn.label = payload.label
-            conn.api_key = secret
+            conn.api_key = encrypt_secret(secret)
             conn.db_name = payload.db
             conn.username = payload.username
             conn.base_url = payload.base_url
@@ -153,7 +153,7 @@ async def test_connection(
         url=conn.base_url,
         db=conn.db_name or "",
         username=conn.username or "",
-        password=conn.api_key or "",
+        password=decrypt_secret(conn.api_key) or "",
     )
     try:
         status_result = await client.check_connection()
@@ -192,7 +192,7 @@ async def sync_from_odoo(
         url=conn.base_url,
         db=conn.db_name or "",
         username=conn.username or "",
-        password=conn.api_key or "",
+        password=decrypt_secret(conn.api_key) or "",
     )
     orders_created = 0
     orders_updated = 0

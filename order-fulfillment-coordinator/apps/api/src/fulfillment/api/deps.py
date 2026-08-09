@@ -1,16 +1,31 @@
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
+from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fulfillment.config import settings
 from fulfillment.database import async_session_factory
+from fulfillment.config import settings
+from fulfillment.models.user import User, UserRole
+from fulfillment.security import decode_access_token
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/token", auto_error=False)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login", auto_error=False)
+
+
+def _demo_user() -> User:
+    """A transient admin user used only in DEBUG (demo) mode when no token is sent."""
+    return User(
+        id="demo-user",
+        email="demo@fulfillment.io",
+        name="Demo User",
+        password_hash="",
+        role=UserRole.ADMIN,
+        is_active=True,
+        must_change_password=False,
+    )
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
@@ -25,18 +40,52 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def get_current_user(token: str | None = Depends(oauth2_scheme)) -> dict[str, str]:
-    if token is None:
-        return {"user_id": "dev-user", "role": "admin"}
-    try:
-        payload = jwt.decode(
-            token,
-            settings.jwt_secret,
-            algorithms=[settings.jwt_algorithm],
+async def get_current_user(
+    token: Annotated[str | None, Depends(oauth2_scheme)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> User:
+    if token:
+        payload = decode_access_token(token)
+        if payload is not None and payload.get("sub") is not None:
+            user = await db.get(User, payload["sub"])
+            if user is not None and user.is_active:
+                return user
+        if not settings.debug:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return _demo_user()
+
+    if settings.debug:
+        return _demo_user()
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+async def require_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin role required",
         )
-        return {
-            "user_id": payload.get("sub", "unknown"),
-            "role": payload.get("role", "viewer"),
-        }
-    except JWTError:
-        return {"user_id": "dev-user", "role": "admin"}
+    return current_user
+
+
+async def require_operator_or_admin(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    if current_user.role not in (UserRole.ADMIN, UserRole.OPERATOR):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operator or admin role required",
+        )
+    return current_user
+
+
+async def get_current_user_id(
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> str:
+    return current_user.id

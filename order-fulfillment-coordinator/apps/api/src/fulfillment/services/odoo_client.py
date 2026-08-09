@@ -40,7 +40,7 @@ class OdooClient:
         service: str,
         method: str,
         args: list[Any] | None = None,
-    ) -> dict[str, Any]:
+    ) -> Any:
         client = await self._get_client()
         payload = {
             "jsonrpc": "2.0",
@@ -58,9 +58,11 @@ class OdooClient:
         )
         response.raise_for_status()
         data = response.json()
-        if data.get("error"):
+        if isinstance(data, dict) and data.get("error"):
             raise OdooError(data["error"]["data"]["message"])
-        return data["result"]
+        if isinstance(data, dict):
+            return data["result"]
+        return data
 
     async def authenticate(self) -> int:
         result = await self._json_rpc("common", "authenticate", [
@@ -84,7 +86,7 @@ class OdooClient:
     ) -> Any:
         if self._uid is None:
             await self.authenticate()
-        params = [self.db, self._uid, self.password, model, method, args or []]
+        params: list[Any] = [self.db, self._uid, self.password, model, method, args or []]
         if kwargs:
             params.append(kwargs)
         return await self._json_rpc("object", "execute_kw", params)
@@ -107,22 +109,27 @@ class OdooClient:
             kwargs["offset"] = offset
         if order:
             kwargs["order"] = order
-        return await self._execute_kw(model, "search_read", [domain or []], kwargs)
+        result = await self._execute_kw(model, "search_read", [domain or []], kwargs)
+        return result if isinstance(result, list) else []
 
     async def create(self, model: str, values: dict[str, Any]) -> int:
-        return await self._execute_kw(model, "create", [values])
+        result = await self._execute_kw(model, "create", [values])
+        return result if isinstance(result, int) else 0
 
     async def write(self, model: str, ids: list[int], values: dict[str, Any]) -> bool:
-        return await self._execute_kw(model, "write", [ids, values])
+        result = await self._execute_kw(model, "write", [ids, values])
+        return bool(result)
 
     async def unlink(self, model: str, ids: list[int]) -> bool:
-        return await self._execute_kw(model, "unlink", [ids])
+        result = await self._execute_kw(model, "unlink", [ids])
+        return bool(result)
 
     async def read(self, model: str, ids: list[int], fields: list[str] | None = None) -> list[dict[str, Any]]:
         kwargs = {}
         if fields:
             kwargs["fields"] = fields
-        return await self._execute_kw(model, "read", [ids], kwargs)
+        result = await self._execute_kw(model, "read", [ids], kwargs)
+        return result if isinstance(result, list) else []
 
     async def get_sale_orders(
         self,

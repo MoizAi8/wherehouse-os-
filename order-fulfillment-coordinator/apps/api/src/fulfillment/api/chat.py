@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import re
 from datetime import datetime, timezone
@@ -37,10 +36,12 @@ class ChatResponse(BaseModel):
 
 _openai_client: AsyncOpenAI | None = None
 if settings.openai_api_key:
-    kwargs = dict(api_key=settings.openai_api_key, timeout=8.0, max_retries=0)
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
-    _openai_client = AsyncOpenAI(**kwargs)
+    _openai_client = AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url or None,
+        timeout=8.0,
+        max_retries=0,
+    )
 
 _intent_analyzer = IntentAnalyzer(_openai_client)
 
@@ -97,7 +98,8 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
             temperature=0.7,
             max_tokens=max_tokens,
         )
-        reply = resp.choices[0].message.content.strip()
+        content = resp.choices[0].message.content
+        reply = content.strip() if content else ""
         logger.info("LLM response generation received | length=%d", len(reply))
         return reply
     except Exception as e:
@@ -164,11 +166,19 @@ _CHAT_SYSTEM_PROMPT = (
     "- Repeat predefined template answers.\n\n"
     "## Output Style\n\n"
     "Always produce responses that are:\n\n"
-    "- Structured\n"
-    "- Easy to understand\n"
+    "- Clear and concise\n"
+    "- Easy to read\n"
     "- Technically accurate\n"
     "- Relevant to the user's actual question\n\n"
-    "Use headings and bullet points when appropriate.\n\n"
+    "Write naturally, like a professional software engineer talking to a client. "
+    "Keep sentences short and direct. Answer exactly what was asked and avoid repetition.\n\n"
+    "### Formatting Rules\n\n"
+    "- Never use decorative symbols such as ###, ##, ***, ---, @@@, !!!, >>> or ===.\n"
+    "- Never use emojis, ASCII art, or fancy ornaments.\n"
+    "- Do not use large markdown headings. If you need to label a section, write the label as plain text followed by a colon, e.g. \"Status:\".\n"
+    "- If you list items, use a simple hyphen list. No decorative bullets.\n"
+    "- When explaining code, explain simply and show code only when it adds value.\n"
+    "- Match the user's language where reasonable (for example, reply in Roman Urdu or mixed English if the user writes that way).\n"
     "## Goal\n\n"
     "Your goal is not merely to answer prompts.\n\n"
     "Your goal is to understand problems, reason intelligently, use available knowledge, collaborate with other agents when necessary, and provide the most accurate response possible."
@@ -223,7 +233,7 @@ async def chat(
             _CHAT_SYSTEM_PROMPT,
             f"The user needs help. Here is what the system can do:\n{system_data}\n\nUser said: \"{message}\"\n\nExplain how they can interact with the system.",
             max_tokens=300,
-            fallback=f"I can help you with: creating orders, listing orders, checking shipment status, agent info, system metrics, and more. What would you like to do?",
+            fallback="I can help you with: creating orders, listing orders, checking shipment status, agent info, system metrics, and more. What would you like to do?",
         )
         return ChatResponse(reply=reply, action="help")
 
@@ -367,8 +377,8 @@ async def chat(
 
         svc = OrderService(db)
         total_orders = await svc.count_orders()
-        pending = await svc.count_orders(status_filter="pending")
-        processing = await svc.count_orders(status_filter="processing")
+        pending_count = await svc.count_orders(status_filter="pending")
+        processing_count = await svc.count_orders(status_filter="processing")
 
         total_cost_r = await db.execute(select(sqlfunc.sum(Shipment.shipping_cost)))
         total_cost = float(total_cost_r.scalar() or 0)
@@ -378,14 +388,14 @@ async def chat(
 
         context = (
             f"FulfillmentOrchestrator: {monitor_events} cycles completed\n"
-            f"RoutingAgent: assigned carrier to {processing} orders\n"
+            f"RoutingAgent: assigned carrier to {processing_count} orders\n"
             f"MonitorAgent: monitoring {total_shipments} shipments\n"
             f"PredictionAgent: scoring {total_shipments} shipments\n"
             f"CostOptimizer: analyzed ${total_cost:.2f} total cost\n"
             f"ReroutingAgent: evaluating alternatives\n"
             f"CommunicationAgent: sending alerts\n\n"
             f"Active: {total_shipments} | Delayed: {delayed_count}\n"
-            f"Total orders: {total_orders} (Pending: {pending})"
+            f"Total orders: {total_orders} (Pending: {pending_count})"
         )
         logger.info("LLM request sent | intent=agent_perf")
         reply = await _generate_llm_reply(
@@ -397,15 +407,15 @@ async def chat(
 
     if intent == "metrics":
         total = await service.count_orders()
-        pending = await service.count_orders(status_filter="pending")
-        delayed = await service.count_orders(status_filter="delayed")
-        processing = await service.count_orders(status_filter="processing")
+        pending_count = await service.count_orders(status_filter="pending")
+        delayed_count = await service.count_orders(status_filter="delayed")
+        processing_count = await service.count_orders(status_filter="processing")
 
         context = (
             f"Orders: {total} total\n"
-            f"Pending: {pending}\n"
-            f"Processing: {processing}\n"
-            f"Delayed: {delayed}\n"
+            f"Pending: {pending_count}\n"
+            f"Processing: {processing_count}\n"
+            f"Delayed: {delayed_count}\n"
             f"Agents: 7 online"
         )
         logger.info("LLM request sent | intent=metrics")
@@ -418,11 +428,11 @@ async def chat(
 
     if intent == "insight":
         total_orders = await service.count_orders()
-        pending = await service.count_orders(status_filter="pending")
+        pending_count = await service.count_orders(status_filter="pending")
 
         context = (
             f"Total system orders: {total_orders}\n"
-            f"Pending orders needing delivery: {pending}\n"
+            f"Pending orders needing delivery: {pending_count}\n"
             f"Available action: route pending orders with 'Proceed delivery'"
         )
         logger.info("LLM request sent | intent=insight")
@@ -559,7 +569,7 @@ async def chat(
         context = (
             f"Orders total: {total} | Processing: {processing} | Pending: {pending_count}\n\n"
             f"Centers:\n" + "\n".join(fc_lines) + "\n\n"
-            f"Orders with Carriers:\n" + "\n".join(carrier_lines)
+            "Orders with Carriers:\n" + "\n".join(carrier_lines)
         ) if fc_lines else f"Orders total: {total} | Processing: {processing} | Pending: {pending_count}\nNo fulfillment centers found."
         logger.info("LLM request sent | intent=fulfillment_centers")
         reply = await _generate_llm_reply(
@@ -570,10 +580,10 @@ async def chat(
         return ChatResponse(reply=reply, action="fulfillment_centers")
 
     if intent == "oldest_pending":
-        result = await db.execute(
+        oldest_result = await db.execute(
             select(Order).where(Order.status == OrderStatus.PENDING).order_by(Order.created_at.asc()).limit(1)
         )
-        oldest = result.scalar_one_or_none()
+        oldest = oldest_result.scalar_one_or_none()
         if not oldest:
             logger.info("No pending orders for oldest query")
             reply = await _generate_llm_reply(
@@ -604,14 +614,14 @@ async def chat(
         return ChatResponse(reply=reply, action="oldest_pending")
 
     if intent == "carrier_usage":
-        result = await db.execute(
+        usage_result = await db.execute(
             select(
                 Shipment.carrier_name,
                 sqlfunc.count(Shipment.id).label("count"),
                 sqlfunc.sum(Shipment.shipping_cost).label("total_cost"),
             ).group_by(Shipment.carrier_name)
         )
-        rows = result.all()
+        rows = usage_result.all()
         if not rows:
             logger.info("No carrier usage data")
             reply = await _generate_llm_reply(
@@ -654,8 +664,8 @@ async def chat(
     if intent == "delayed_shipments":
         from fulfillment.agents.monitor import MonitorAgent
         agent = MonitorAgent(db)
-        shipments = await agent.get_active_shipments()
-        delayed = [s for s in shipments if getattr(s, "is_delayed", False)]
+        active = await agent.get_active_shipments()
+        delayed = [s for s in active if getattr(s, "is_delayed", False)]
         if not delayed:
             logger.info("No delayed shipments")
             reply = await _generate_llm_reply(
@@ -681,11 +691,11 @@ async def chat(
     if intent == "on_time_shipments":
         from fulfillment.agents.monitor import MonitorAgent
         agent = MonitorAgent(db)
-        shipments = await agent.get_active_shipments()
-        delayed = [s for s in shipments if getattr(s, "is_delayed", False)]
-        on_time = len(shipments) - len(delayed)
-        pct = round(on_time / len(shipments) * 100, 1) if shipments else 0
-        context = f"On-Time: {on_time} | Delayed: {len(delayed)} | Rate: {pct}%"
+        active = await agent.get_active_shipments()
+        delayed_ships = [s for s in active if getattr(s, "is_delayed", False)]
+        on_time = len(active) - len(delayed_ships)
+        pct = round(on_time / len(active) * 100, 1) if active else 0
+        context = f"On-Time: {on_time} | Delayed: {len(delayed_ships)} | Rate: {pct}%"
         logger.info("LLM request sent | intent=on_time_shipments")
         reply = await _generate_llm_reply(
             _CHAT_SYSTEM_PROMPT,
@@ -743,13 +753,13 @@ async def chat(
             )
             return ChatResponse(reply=reply, action="reroute_list")
         from fulfillment.models.shipment import Shipment as Shp
-        lines = []
+        reroute_lines: list[str] = []
         for ev in reroute_events[:8]:
             s_r = await db.execute(select(Shp).where(Shp.id == ev.entity_id))
-            s = s_r.scalar_one_or_none()
-            carrier = s.carrier_name if s else "N/A"
-            lines.append(f"#{ev.entity_id[:8] if ev.entity_id else 'N/A'} -> Current carrier: {carrier}")
-        context = f"Rerouted Shipments: {len(reroute_events)}\n" + "\n".join(lines)
+            found_shipment = s_r.scalar_one_or_none()
+            carrier = found_shipment.carrier_name if found_shipment else "N/A"
+            reroute_lines.append(f"#{ev.entity_id[:8] if ev.entity_id else 'N/A'} -> Current carrier: {carrier}")
+        context = f"Rerouted Shipments: {len(reroute_events)}\n" + "\n".join(reroute_lines)
         logger.info("LLM request sent | intent=reroute_list")
         reply = await _generate_llm_reply(
             _CHAT_SYSTEM_PROMPT,
@@ -801,12 +811,12 @@ async def chat(
         sent_n = await db.execute(select(sqlfunc.count(Notification.id)).where(Notification.status == "sent"))
         sent = sent_n.scalar() or 0
         failed_n = await db.execute(select(sqlfunc.count(Notification.id)).where(Notification.status == "failed"))
-        failed = failed_n.scalar() or 0
+        failed_count = failed_n.scalar() or 0
         customers_n = await db.execute(select(sqlfunc.count(Notification.recipient.distinct())))
         distinct_customers = customers_n.scalar() or 0
         context = (
             f"Total sent: {sent}\n"
-            f"Failed: {failed}\n"
+            f"Failed: {failed_count}\n"
             f"Unique customers notified: {distinct_customers}\n"
             f"Success rate: {round(sent / total * 100, 1) if total else 0}%"
         )
@@ -823,7 +833,7 @@ async def chat(
         from fulfillment.models.agent_event import AgentEvent
         agent = MonitorAgent(db)
         shipments = await agent.get_active_shipments()
-        delayed = sum(1 for s in shipments if getattr(s, "is_delayed", False))
+        delayed_count = sum(1 for s in shipments if getattr(s, "is_delayed", False))
         last_cycle = await db.execute(
             select(AgentEvent).where(AgentEvent.agent_name == "MonitorAgent").order_by(AgentEvent.created_at.desc()).limit(5)
         )
@@ -831,9 +841,9 @@ async def chat(
         now = datetime.now(timezone.utc)
         context = (
             f"Active shipments: {len(shipments)}\n"
-            f"Delayed: {delayed}\n"
-            f"On-time: {len(shipments) - delayed}\n"
-            f"On-time rate: {round((len(shipments) - delayed) / len(shipments) * 100, 1) if shipments else 0}%\n\n"
+            f"Delayed: {delayed_count}\n"
+            f"On-time: {len(shipments) - delayed_count}\n"
+            f"On-time rate: {round((len(shipments) - delayed_count) / len(shipments) * 100, 1) if shipments else 0}%\n\n"
         )
         if last_events:
             context += "Recent events:\n" + "\n".join(

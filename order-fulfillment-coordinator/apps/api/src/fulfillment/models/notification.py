@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, String, Text, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fulfillment.database import Base
@@ -19,11 +19,15 @@ class Notification(Base):
     )
     order_id: Mapped[str | None] = mapped_column(
         String(36),
+        ForeignKey("orders.id", ondelete="CASCADE"),
         nullable=True,
+        index=True,
     )
     shipment_id: Mapped[str | None] = mapped_column(
         String(36),
+        ForeignKey("shipments.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     recipient: Mapped[str] = mapped_column(String(255), nullable=False)
     channel: Mapped[str] = mapped_column(String(50), nullable=False)

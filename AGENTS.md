@@ -1,4 +1,4 @@
-# AGENTS.md — Order Fulfillment Coordinator
+# AGENTS.md — FulfillOS
 
 > Deployed as a multi-service Docker stack on **Oracle Cloud (OCI)**.
 > FastAPI backend + Celery workers + Next.js frontend, wrapped in Caddy with auto SSL.

@@ -4,17 +4,10 @@ import DashboardPage from "@/app/dashboard/page"
 
 vi.mock("@/hooks/use-analytics", () => ({
   useKPIs: () => ({
-    data: { total_orders: 8421, orders_shipped: 3200, orders_delivered: 2800, orders_delayed: 45, on_time_delivery_rate: 94.2, avg_shipping_cost: 24.50, total_shipping_cost: 205800.00 },
+    data: { total_orders: 8421, orders_shipped: 3200, orders_delivered: 2800, orders_delayed: 45, on_time_delivery_rate: 94.2, avg_delivery_time_days: 2.3, avg_shipping_cost: 24.5, total_shipping_cost: 205800.0, failed_delivery_rate: 1.2, period_start: null, period_end: null },
     loading: false, error: null, refetch: vi.fn(),
   }),
   useCarrierAnalytics: () => ({ data: [], loading: false, error: null }),
-}))
-
-vi.mock("@/hooks/use-orders", () => ({
-  useOrders: () => ({
-    data: { orders: [], total: 0 },
-    loading: false, error: null, refetch: vi.fn(),
-  }),
 }))
 
 vi.mock("@/hooks/use-agents", () => ({
@@ -31,40 +24,43 @@ vi.mock("@/hooks/use-shipments", () => ({
 describe("Category 1: Dashboard Overview", () => {
   it("Test 1: Dashboard renders correctly", () => {
     render(<DashboardPage />)
-    expect(screen.getByText("Overview")).toBeInTheDocument()
-    expect(screen.getByText("Real-time warehouse intelligence and agent coordination")).toBeInTheDocument()
+    expect(screen.getByText("Warehouse OS")).toBeInTheDocument()
+    expect(screen.getByText("Monitor agents and manage operations")).toBeInTheDocument()
   })
 
   it("Test 2: Metrics panel shows KPIs", () => {
     render(<DashboardPage />)
-    expect(screen.getByText("Active Agents")).toBeInTheDocument()
-    expect(screen.getByText("Orders Processed")).toBeInTheDocument()
-    expect(screen.getByText("On-Time Delivery")).toBeInTheDocument()
-    expect(screen.getByText("Avg Shipping Cost")).toBeInTheDocument()
+    expect(screen.getByText("Total Orders")).toBeInTheDocument()
+    expect(screen.getByText("On-Time Rate")).toBeInTheDocument()
+    expect(screen.getByText("Avg Delivery (days)")).toBeInTheDocument()
+    expect(screen.getByText("Shipments Today")).toBeInTheDocument()
+    expect(screen.getByText("8421")).toBeInTheDocument()
+    expect(screen.getByText("94.2%")).toBeInTheDocument()
   })
 
   it("Test 3: Agent status grid loads", () => {
     render(<DashboardPage />)
     expect(screen.getByText("Agent Status")).toBeInTheDocument()
+    expect(screen.getByText("RoutingAgent")).toBeInTheDocument()
   })
 
-  it("Test 4: Live badge renders", () => {
+  it("Test 4: Live indicator renders", () => {
     render(<DashboardPage />)
-    const liveBadges = screen.getAllByText("Live")
-    expect(liveBadges.length).toBeGreaterThan(0)
+    expect(screen.getByText("Online")).toBeInTheDocument()
   })
 
-  it("Test 5: Alerts panel renders", () => {
+  it("Test 5: Agent session summary renders", () => {
     render(<DashboardPage />)
-    const alertHeaders = screen.getAllByText("Alerts")
-    expect(alertHeaders.length).toBeGreaterThan(0)
+    expect(screen.getByText("Agent Session")).toBeInTheDocument()
+    expect(screen.getByText("Delays")).toBeInTheDocument()
+    expect(screen.getByText("Reroutes")).toBeInTheDocument()
   })
 
-  it("Test 6: Sync button works", () => {
+  it("Test 6: Clear chat button works", () => {
     render(<DashboardPage />)
-    const syncButton = screen.getByText("Sync")
-    expect(syncButton).toBeInTheDocument()
-    fireEvent.click(syncButton)
-    expect(screen.getByText("Syncing...")).toBeInTheDocument()
+    const clearButton = screen.getByTitle("Clear chat")
+    expect(clearButton).toBeInTheDocument()
+    fireEvent.click(clearButton)
+    expect(screen.getByText(/Chat cleared/)).toBeInTheDocument()
   })
 })

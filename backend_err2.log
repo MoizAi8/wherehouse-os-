@@ -1,2 +1,8 @@
-'C:\Users\AC\AppData\Roaming\uv\uv.exe' is not recognized as an internal or external command,
-operable program or batch file.
+      INFO   Will watch for changes in these directories:                      
+             ['C:\\Users\\AC\\Desktop\\final                                   
+             project\\order-fulfillment-coordinator\\apps\\api']
+      INFO   Uvicorn running on http://127.0.0.1:8000 (Press CTRL+C to quit)
+      INFO   Started reloader process [5612] using WatchFiles
+      INFO   Started server process [14192]
+      INFO   Waiting for application startup.
+      INFO   Application startup complete.

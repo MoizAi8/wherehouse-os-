@@ -7,6 +7,8 @@ from fulfillment.models.carrier_rate import CarrierRate
 from fulfillment.models.agent_event import AgentEvent
 from fulfillment.models.integration import IntegrationConnection
 from fulfillment.models.notification import Notification
+from fulfillment.models.user import User, UserRole
+from fulfillment.models.refresh_token import RefreshToken
 
 __all__ = [
     "Order",
@@ -16,4 +18,7 @@ __all__ = [
     "AgentEvent",
     "IntegrationConnection",
     "Notification",
+    "User",
+    "UserRole",
+    "RefreshToken",
 ]

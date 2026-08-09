@@ -5,6 +5,7 @@ import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvide
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { NoiseOverlay } from "@/components/effects/NoiseOverlay"
 import { SettingsProvider } from "@/contexts/SettingsContext"
+import { SessionProvider } from "@/components/providers/SessionProvider"
 import { SessionTimer } from "@/components/providers/SessionTimer"
 import { ThemeToggle } from "@/components/ui/ThemeToggle"
 
@@ -26,11 +27,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <TooltipProvider>
           <SmoothScrollProvider>
             <SettingsProvider>
-              <SessionTimer>
-                <NoiseOverlay />
-                <ThemeToggle />
-                <main id="main-content">{children}</main>
-              </SessionTimer>
+              <SessionProvider>
+                <SessionTimer>
+                  <NoiseOverlay />
+                  <ThemeToggle />
+                  <main id="main-content">{children}</main>
+                </SessionTimer>
+              </SessionProvider>
             </SettingsProvider>
           </SmoothScrollProvider>
         </TooltipProvider>

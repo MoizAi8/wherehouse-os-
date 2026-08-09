@@ -13,39 +13,28 @@ import asyncio
 import json
 import logging
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel, ValidationError
 
 from fulfillment.config import settings
-from fulfillment.schemas.agent import MonitorRequest, MonitorResponse
+from fulfillment.schemas.agent import MonitorResponse
 from fulfillment.schemas.order import OrderCreate
 from fulfillment.agents.orchestrator import FulfillmentOrchestrator
 from fulfillment.agents.monitor import MonitorAgent
-from fulfillment.agents.routing import RoutingAgent
 from fulfillment.agents.rerouting import ReroutingAgent
 from fulfillment.agents.communication import CommunicationAgent
 from fulfillment.agents.prediction import PredictionAgent
 from fulfillment.agents.cost_optimizer import CostOptimizer
-from fulfillment.guardrails.sla import sla_compliance
-from fulfillment.guardrails.cost import cost_cap
-from fulfillment.guardrails.failed_delivery import failed_delivery_threshold
-from fulfillment.guardrails.carrier_diversity import carrier_diversity, register_monopoly_carrier
 from fulfillment.guardrails.address import validate_address
-from fulfillment.guardrails.notifications import notification_frequency
-from fulfillment.tools.carriers import get_carrier_rate, shop_rates, list_carriers
-from fulfillment.tools.fulfillment import list_fulfillment_centers, find_nearest_fc, get_fc_capacity
-from fulfillment.tools.notifications import send_email_notification, send_sms_notification
-from fulfillment.tools.analytics import compute_shipment_stats, compute_carrier_kpis, get_delivery_performance
-from fulfillment.models.agent_event import AgentEvent
-from fulfillment.models.shipment import Shipment, ShipmentStatus
-from fulfillment.models.order import Order, OrderStatus
-from fulfillment.database import get_db, async_session_factory, engine, init_db
+from fulfillment.tools.carriers import list_carriers
+from fulfillment.database import engine
 from fulfillment.api.deps import get_current_user
+from fastapi import HTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -463,21 +452,100 @@ class TestSuite:
 
     @pytest.mark.asyncio
     async def test_api_authentication_failure(self):
-        """TEST 23: No auth returns demo user (dev mode)."""
-        result = await get_current_user(None)
-        assert result["user_id"] == "demo-user"
-        assert result["role"] == "admin"
+        """TEST 23: Missing auth token rejected with 401 in production (fail closed)."""
+        saved = settings.debug
+        settings.debug = False
+        try:
+            with pytest.raises(HTTPException) as excinfo:
+                await get_current_user(None, MagicMock())
+            assert excinfo.value.status_code == 401
+        finally:
+            settings.debug = saved
+
+    @pytest.mark.asyncio
+    async def test_demo_user_is_valid_for_response(self):
+        """Regression: demo user must pass pydantic EmailStr / bool validation so
+        authenticated endpoints don't 500 in DEBUG/demo mode."""
+        from fulfillment.api.deps import _demo_user
+        from fulfillment.api.auth import UserResponse
+
+        saved = settings.debug
+        settings.debug = True
+        try:
+            from fulfillment.api.deps import _demo_user
+
+            user = _demo_user()
+            # Mirror the real auth endpoint which builds UserResponse from the
+            # user's attributes (not via model_validate on the ORM instance).
+            response = UserResponse(
+                id=user.id,
+                email=user.email,
+                name=user.name,
+                role=user.role,
+                must_change_password=user.must_change_password,
+            )
+            assert response.email == "demo@fulfillment.io"
+            assert response.role.value == "admin"
+            assert response.must_change_password is False
+        finally:
+            settings.debug = saved
+
+    @pytest.mark.asyncio
+    async def test_rate_limit_middleware_returns_429_with_retry_after(self):
+        """Regression: every public endpoint is rate limited with a 429 + Retry-After.
+        Uses a minimal ASGI app so no DB is required."""
+        from fulfillment.rate_limit import RateLimitMiddleware
+
+        saved_debug, saved_enabled, saved_auth = (
+            settings.debug,
+            settings.rate_limit_enabled,
+            settings.rate_limit_auth,
+        )
+        settings.debug = False
+        settings.rate_limit_enabled = True
+        settings.rate_limit_auth = "3/minute"
+
+        async def fake_app(scope, receive, send):
+            if scope["type"] == "lifespan":
+                while True:
+                    msg = await receive()
+                    if msg["type"] == "lifespan.startup":
+                        await send({"type": "lifespan.startup.complete"})
+                    elif msg["type"] == "lifespan.shutdown":
+                        await send({"type": "lifespan.shutdown.complete"})
+                        return
+                return
+            await send({"type": "http.response.start", "status": 200, "headers": [(b"content-type", b"text/plain")]})
+            await send({"type": "http.response.body", "body": b"ok"})
+
+        wrapped = RateLimitMiddleware(fake_app)
+
+        try:
+            from starlette.testclient import TestClient as _TC
+
+            with _TC(wrapped) as c:
+                for _ in range(3):
+                    r = c.get("/api/auth/login")
+                    assert r.status_code == 200
+                r = c.get("/api/auth/login")
+                assert r.status_code == 429
+                assert "Retry-After" in r.headers
+        finally:
+            settings.debug = saved_debug
+            settings.rate_limit_enabled = saved_enabled
+            settings.rate_limit_auth = saved_auth
 
     def test_missing_environment_variables(self):
         """TEST 24: Configuration defaults for missing env vars."""
         from fulfillment.config import Settings
         test_settings = Settings()
-        assert test_settings.openai_api_key == ""
+        # OpenAI key is optional; when unset the model default applies
+        if not test_settings.openai_api_key:
+            assert test_settings.openai_model == "gpt-4o-mini"
         assert test_settings.twilio_account_sid == ""
 
     def test_database_connection_failure(self, mock_db):
         """TEST 25: Fallback recovery activates on DB failure."""
-        from fulfillment.database import get_db
         assert engine is not None
 
     # -----------------------------------------------------------------------
@@ -669,11 +737,16 @@ class TestSuite:
             pass
 
     def test_tool_permission_validation(self):
-        """TEST 44: Auth returns demo user in dev mode."""
+        """TEST 44: Missing auth rejected with 401 in production, no bypass."""
         import asyncio
-        result = asyncio.run(get_current_user(None))
-        assert result["user_id"] == "demo-user"
-        assert result["role"] == "admin"
+        saved = settings.debug
+        settings.debug = False
+        try:
+            with pytest.raises(HTTPException) as excinfo:
+                asyncio.run(get_current_user(None, MagicMock()))
+            assert excinfo.value.status_code == 401
+        finally:
+            settings.debug = saved
 
     def test_response_latency_monitoring(self):
         """TEST 45: Latency metrics collected and within acceptable range."""
@@ -681,7 +754,7 @@ class TestSuite:
         _ = [x for x in range(10000)]
         elapsed = time.perf_counter() - start
         assert elapsed < 1.0, f"Latency {elapsed:.3f}s exceeds 1s threshold"
-        metrics = {"operation": "list_comprehension", "latency_seconds": round(elapsed, 4), "items": 10000}
+        {"operation": "list_comprehension", "latency_seconds": round(elapsed, 4), "items": 10000}
 
     # -----------------------------------------------------------------------
     # TESTS 46-50: Cache, State, Queue, Workflow, Load

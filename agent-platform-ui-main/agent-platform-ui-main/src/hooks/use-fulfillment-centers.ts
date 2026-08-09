@@ -20,5 +20,5 @@ export interface FulfillmentCenter {
 }
 
 export function useFulfillmentCenters() {
-  return useApi(() => api.get<FulfillmentCenter[]>("/api/v1/fulfillment-centers/"), [])
+  return useApi(() => api.get<FulfillmentCenter[]>("/api/v1/fulfillment-centers"), [])
 }

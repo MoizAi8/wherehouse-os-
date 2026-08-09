@@ -29,17 +29,17 @@ if settings.qdrant_url:
 else:
     logger.warning("QDRANT_URL not set. Vector search features will return empty results.")
 
-if not settings.openai_api_key:
-    raise RuntimeError(
-        "OPENAI_API_KEY is not configured. The system requires OpenAI for embeddings and LLM responses."
-    )
-openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+openai_client: AsyncOpenAI | None = None
+if settings.openai_api_key:
+    openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+else:
+    logger.warning("OPENAI_API_KEY not set. Vector search features will return empty results.")
 
 COLLECTIONS: dict[str, int] = {
-    "shipment_events": 1536,
-    "product_catalog": 1536,
-    "customer_order_history": 1536,
-    "agent_decisions": 1536,
+    "shipment_events": settings.embedding_dimensions,
+    "product_catalog": settings.embedding_dimensions,
+    "customer_order_history": settings.embedding_dimensions,
+    "agent_decisions": settings.embedding_dimensions,
 }
 
 
@@ -60,8 +60,10 @@ async def init_collections() -> None:
 
 
 async def embed(text: str) -> list[float]:
+    if openai_client is None:
+        raise RuntimeError("OPENAI_API_KEY not configured — embeddings unavailable")
     resp = await openai_client.embeddings.create(
-        model="text-embedding-3-small",
+        model=settings.embedding_model,
         input=text,
     )
     return resp.data[0].embedding
@@ -105,9 +107,9 @@ async def search_similar_delays(
     if qdrant is None:
         return []
     vector = await embed(f"carrier:{carrier} status:{status}")
-    return await qdrant.search(
+    result = await qdrant.query_points(
         collection_name="shipment_events",
-        query_vector=vector,
+        query=vector,
         limit=limit,
         query_filter=Filter(
             must=[
@@ -115,6 +117,7 @@ async def search_similar_delays(
             ]
         ),
     )
+    return list(result.points)
 
 
 async def upsert_product(product: dict[str, Any]) -> None:
@@ -149,11 +152,12 @@ async def search_similar_products(query: str, limit: int = 5) -> list[Any]:
     if qdrant is None:
         return []
     vector = await embed(query)
-    return await qdrant.search(
+    result = await qdrant.query_points(
         collection_name="product_catalog",
-        query_vector=vector,
+        query=vector,
         limit=limit,
     )
+    return list(result.points)
 
 
 async def upsert_customer_history(customer: dict[str, Any]) -> None:
@@ -188,11 +192,12 @@ async def search_similar_customers(
     if qdrant is None:
         return []
     vector = await embed(f"sla:{sla_tier} value:{avg_value}")
-    return await qdrant.search(
+    result = await qdrant.query_points(
         collection_name="customer_order_history",
-        query_vector=vector,
+        query=vector,
         limit=limit,
     )
+    return list(result.points)
 
 
 async def upsert_agent_decision(decision: dict[str, Any]) -> None:
@@ -225,9 +230,9 @@ async def search_past_decisions(
     if qdrant is None:
         return []
     vector = await embed(f"agent:{agent_name} event:{event_type}")
-    return await qdrant.search(
+    result = await qdrant.query_points(
         collection_name="agent_decisions",
-        query_vector=vector,
+        query=vector,
         limit=limit,
         query_filter=Filter(
             must=[
@@ -237,6 +242,7 @@ async def search_past_decisions(
             ]
         ),
     )
+    return list(result.points)
 
 
 def format_decisions_for_agent(results: list[Any]) -> str:

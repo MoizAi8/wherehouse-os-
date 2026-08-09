@@ -51,11 +51,13 @@ class Order(Base):
         String(36),
         ForeignKey("fulfillment_centers.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     carrier_id: Mapped[str | None] = mapped_column(
         String(36),
         ForeignKey("carrier_rates.id", ondelete="SET NULL"),
         nullable=True,
+        index=True,
     )
     tracking_number: Mapped[str | None] = mapped_column(String(255), nullable=True)
     estimated_delivery: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

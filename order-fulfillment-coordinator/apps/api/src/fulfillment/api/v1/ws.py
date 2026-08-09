@@ -7,6 +7,9 @@ from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from fulfillment.config import settings
+from fulfillment.security import decode_access_token
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -41,8 +44,25 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+async def _authenticate(ws: WebSocket) -> bool:
+    """Validate JWT from query param and reject cross-origin requests."""
+    origin = ws.headers.get("origin") or "http://localhost:3000"
+    allowed = settings.cors_origins
+    if allowed and "*" not in allowed and origin.rstrip("/") not in {o.rstrip("/") for o in allowed}:
+        await ws.close(code=4403, reason="origin_not_allowed")
+        return False
+    token = ws.query_params.get("token")
+    payload = decode_access_token(token) if token else None
+    if payload is None:
+        await ws.close(code=4401, reason="unauthorized")
+        return False
+    return True
+
+
 @router.websocket("/shipments")
 async def websocket_shipments(ws: WebSocket) -> None:
+    if not await _authenticate(ws):
+        return
     await manager.connect(ws, channel="shipments")
     try:
         while True:
@@ -61,6 +81,8 @@ async def websocket_shipments(ws: WebSocket) -> None:
 
 @router.websocket("/shipments/stream")
 async def websocket_shipment_stream(ws: WebSocket) -> None:
+    if not await _authenticate(ws):
+        return
     await manager.connect(ws, channel="shipments")
     try:
         while True:

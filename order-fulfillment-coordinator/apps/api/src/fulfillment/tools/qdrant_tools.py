@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from typing import Any
+
 from agents import function_tool
 
 from fulfillment.vector_store import (
     search_past_decisions,
     upsert_agent_decision,
-    search_similar_products,
     search_similar_customers,
     search_similar_delays,
     upsert_shipment_event,

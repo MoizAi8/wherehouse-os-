@@ -9,7 +9,7 @@ async def check():
         types = [row[0] for row in r]
         print('Event types:', types)
         for t in types:
-            r2 = await conn.execute(text(f'SELECT COUNT(*) FROM agent_events WHERE event_type = :t'), dict(t=t))
+            r2 = await conn.execute(text('SELECT COUNT(*) FROM agent_events WHERE event_type = :t'), dict(t=t))
             cnt = r2.scalar()
             print(f'  {t}: {cnt}')
         r3 = await conn.execute(text('SELECT COUNT(*) FROM shipments WHERE is_delayed = 1'))

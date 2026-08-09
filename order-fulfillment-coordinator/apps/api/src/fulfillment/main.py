@@ -7,21 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from uuid import uuid4
-
-from sqlalchemy import select
-
-from fulfillment.config import settings
-from fulfillment.database import init_db, async_session_factory
-from fulfillment.models.integration import IntegrationConnection
-from fulfillment.vector_store import init_collections
 from fulfillment.api import auth, chat
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
-)
-logger = logging.getLogger("fulfillment")
 from fulfillment.api.v1 import (
     agents,
     analytics,
@@ -34,44 +20,22 @@ from fulfillment.api.v1 import (
     webhooks,
     ws,
 )
+from fulfillment.config import settings
+from fulfillment.database import init_db
+from fulfillment.rate_limit import RateLimitMiddleware
+from fulfillment.vector_store import init_collections
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
+)
+logger = logging.getLogger("fulfillment")
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await init_db()
     await init_collections()
-
-    if settings.odoo_url:
-        async with async_session_factory() as session:
-            result = await session.execute(
-                select(IntegrationConnection).where(
-                    IntegrationConnection.provider == "odoo",
-                    IntegrationConnection.base_url == settings.odoo_url.rstrip("/"),
-                )
-            )
-            existing = result.scalar_one_or_none()
-            if existing is None:
-                conn = IntegrationConnection(
-                    id=str(uuid4()),
-                    provider="odoo",
-                    label=f"Odoo — {settings.odoo_url}",
-                    base_url=settings.odoo_url.rstrip("/"),
-                    db_name=settings.odoo_db or "",
-                    username=settings.odoo_username or "",
-                    api_key=settings.odoo_password or "",
-                    is_connected=False,
-                    sync_status="configured",
-                )
-                session.add(conn)
-                await session.flush()
-                logger.info("Odoo connection created from env vars: %s", settings.odoo_url)
-            else:
-                existing.base_url = settings.odoo_url.rstrip("/")
-                existing.db_name = settings.odoo_db or existing.db_name or ""
-                existing.username = settings.odoo_username or existing.username or ""
-                existing.api_key = settings.odoo_password or existing.api_key or ""
-                await session.flush()
-
     yield
 
 
@@ -90,6 +54,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(RateLimitMiddleware)
+
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
@@ -105,5 +71,16 @@ app.include_router(ws.router, prefix="/api/v1/ws", tags=["websocket"])
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    return {"status": "ok", "version": settings.app_version}
+async def health() -> dict[str, str | bool]:
+    db_ok = False
+    try:
+        from sqlalchemy import text
+
+        from fulfillment.database import async_session_factory
+
+        async with async_session_factory() as session:
+            await session.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Health check DB probe failed: %s", exc)
+    return {"status": "ok", "version": settings.app_version, "postgres": db_ok}

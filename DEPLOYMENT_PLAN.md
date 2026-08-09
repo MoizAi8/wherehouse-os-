@@ -1,4 +1,4 @@
-# Deployment Plan — Order Fulfillment Coordinator
+# Deployment Plan — FulfillOS
 
 ## Architecture Overview
 

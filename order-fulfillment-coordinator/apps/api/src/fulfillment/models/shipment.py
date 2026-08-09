@@ -37,6 +37,7 @@ class Shipment(Base):
         String(36),
         ForeignKey("orders.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     carrier_name: Mapped[str] = mapped_column(String(100), nullable=False)
     tracking_number: Mapped[str] = mapped_column(String(255), nullable=False)

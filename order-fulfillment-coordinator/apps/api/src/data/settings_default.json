@@ -1,17 +1,17 @@
 {
   "theme": "dark",
-  "appName": "haris",
+  "appName": "Warehouse OS",
   "timezone": "UTC",
   "language": "English",
   "emailAlerts": true,
-  "smsAlerts": true,
-  "delayNotifications": false,
+  "smsAlerts": false,
+  "delayNotifications": true,
   "anomalyAlerts": true,
-  "twoFactor": true,
-  "sessionTimeout": 30,
-  "compactMode": true,
+  "twoFactor": false,
+  "sessionTimeout": 60,
+  "compactMode": false,
   "apiEndpoint": "http://localhost:8000",
   "webhookUrl": "",
-  "autoCleanupDays": 30,
-  "autoBackup": false
+  "autoCleanupDays": 90,
+  "autoBackup": true
 }

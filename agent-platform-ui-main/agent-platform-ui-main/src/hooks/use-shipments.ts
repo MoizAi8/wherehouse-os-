@@ -24,5 +24,5 @@ export interface Shipment {
 
 export function useShipments(params?: { status?: string }) {
   const query = params?.status ? `?status=${params.status}` : ""
-  return useApi(() => api.get<Shipment[]>(`/api/v1/shipments/${query}`), [params?.status])
+  return useApi(() => api.get<Shipment[]>(`/api/v1/shipments${query}`), [params?.status])
 }

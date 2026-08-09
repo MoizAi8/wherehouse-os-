@@ -1,4 +1,4 @@
-import asyncio, sys, os, signal
+import sys
 from fulfillment.main import app
 from fastapi.testclient import TestClient
 

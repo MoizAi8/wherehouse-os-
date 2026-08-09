@@ -1,20 +1,10 @@
+
+> warehouse-mas@0.1.0 dev
+> next dev
+
 ▲ Next.js 16.2.7 (Turbopack)
 - Local:         http://localhost:3000
-- Network:       http://192.168.176.1:3000
+- Network:       http://192.168.25.19:3000
 - Environments: .env.local
-✓ Ready in 1837ms
+✓ Ready in 2.7s
 
- GET / 200 in 1264ms (next.js: 508ms, application-code: 756ms)
- GET /dashboard 200 in 3.0s (next.js: 673ms, application-code: 2.4s)
- POST /api/ai/insight 200 in 721ms (next.js: 459ms, application-code: 262ms)
- POST /api/ai/insight 200 in 227ms (next.js: 161ms, application-code: 66ms)
- GET / 200 in 303ms (next.js: 11ms, application-code: 292ms)
- GET /dashboard 200 in 2.1s (next.js: 13ms, application-code: 2.1s)
- POST /api/ai/insight 200 in 24ms (next.js: 8ms, application-code: 15ms)
- GET / 200 in 231ms (next.js: 8ms, application-code: 223ms)
- GET /dashboard 200 in 627ms (next.js: 18ms, application-code: 609ms)
- POST /api/ai/insight 200 in 59ms (next.js: 9ms, application-code: 50ms)
- GET / 200 in 340ms (next.js: 14ms, application-code: 326ms)
- GET / 200 in 365ms (next.js: 10ms, application-code: 355ms)
- GET /dashboard 200 in 651ms (next.js: 12ms, application-code: 639ms)
- POST /api/ai/insight 200 in 27ms (next.js: 7ms, application-code: 20ms)

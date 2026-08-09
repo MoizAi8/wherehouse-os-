@@ -37,5 +37,5 @@ export function useOrders(params?: { status?: string; limit?: number }) {
   if (params?.limit) query.set("limit", String(params.limit))
   const qs = query.toString()
 
-  return useApi(() => api.get<OrderListResponse>(`/api/v1/orders/${qs ? `?${qs}` : ""}`), [params?.status, params?.limit])
+  return useApi(() => api.get<OrderListResponse>(`/api/v1/orders${qs ? `?${qs}` : ""}`), [params?.status, params?.limit])
 }

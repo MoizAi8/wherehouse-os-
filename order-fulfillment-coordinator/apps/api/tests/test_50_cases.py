@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone, timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import pytest
@@ -27,13 +27,11 @@ from fulfillment.agents.prediction import PredictionAgent
 from fulfillment.agents.cost_optimizer import CostOptimizer
 from fulfillment.guardrails.sla import sla_compliance
 from fulfillment.guardrails.cost import cost_cap
-from fulfillment.guardrails.failed_delivery import failed_delivery_threshold
 from fulfillment.guardrails.carrier_diversity import carrier_diversity
 from fulfillment.guardrails.address import validate_address
-from fulfillment.tools.carriers import get_carrier_rate, shop_rates
-from fulfillment.tools.fulfillment import list_fulfillment_centers, find_nearest_fc
+from fulfillment.tools.carriers import get_carrier_rate
 from fulfillment.tools.notifications import send_sms_notification
-from fulfillment.tools.analytics import compute_shipment_stats, compute_carrier_kpis
+from fulfillment.tools.analytics import compute_shipment_stats
 from fulfillment.models.agent_event import AgentEvent
 from fastapi import HTTPException
 from fulfillment.api.deps import get_current_user
@@ -209,7 +207,7 @@ class TestMemory:
             mock_db.add(event)
 
         assert mock_db.add.call_count == 100
-        _current_test["actual"] = f"100 events logged without error"
+        _current_test["actual"] = "100 events logged without error"
 
 
 # ============================================================
@@ -397,8 +395,12 @@ class TestConfigValidation:
         _current_test["expected"] = "Defaults used for empty strings"
 
         assert settings.jwt_secret is not None and len(settings.jwt_secret) > 0
-        assert settings.openai_api_key == ""
         assert settings.database_url is not None
+        # Rule #4: app boots with a default jwt secret even when unset
+        assert settings.jwt_expiration_minutes > 0
+        # OpenAI key is optional; defaults apply when it is empty
+        if not settings.openai_api_key:
+            assert settings.openai_model == "gpt-4o-mini"
         _current_test["actual"] = f"Defaults OK: jwt_secret={'set' if settings.jwt_secret else 'empty'}"
 
 
@@ -444,7 +446,7 @@ class TestMemoryRecovery:
         _current_test["input"] = "Corrupted memory state"
         _current_test["expected"] = "DB rollback on error (bypass read for import check)"
 
-        from fulfillment.database import get_db, engine
+        from fulfillment.database import engine
         assert engine is not None
         _current_test["actual"] = "Database engine configured for recovery"
 
@@ -532,12 +534,17 @@ class TestSecurity:
     @pytest.mark.asyncio
     async def test_26_unauthorized_access(self):
         _current_test["input"] = "Request without Authorization header"
-        _current_test["expected"] = "Returns demo user (no auth enforced in dev)"
+        _current_test["expected"] = "401 rejected in production (debug off); demo user in debug"
 
-        result = await get_current_user(None)
-        assert result["user_id"] == "demo-user"
-        assert result["role"] == "admin"
-        _current_test["actual"] = f"No auth → demo user: {result}"
+        saved = settings.debug
+        settings.debug = False
+        try:
+            with pytest.raises(HTTPException) as excinfo:
+                await get_current_user(None, MagicMock())
+            assert excinfo.value.status_code == 401
+        finally:
+            settings.debug = saved
+        _current_test["actual"] = f"No auth (prod) → HTTP 401: {excinfo.value.detail}"
 
 
 # ============================================================
@@ -711,12 +718,18 @@ class TestArchitecture:
 class TestReAuth:
     @pytest.mark.asyncio
     async def test_38_expired_auth_handling(self):
-        _current_test["input"] = "Expired JWT token"
-        _current_test["expected"] = "Returns demo user (no auth enforced in dev)"
+        _current_test["input"] = "Invalid JWT token"
+        _current_test["expected"] = "Rejected with 401 in production; demo fallback only in debug"
 
-        result = await get_current_user(None)
-        assert result["user_id"] == "demo-user"
-        _current_test["actual"] = f"No auth → demo user: {result}"
+        saved = settings.debug
+        settings.debug = False
+        try:
+            with pytest.raises(HTTPException) as excinfo:
+                await get_current_user("not-a-valid-token", MagicMock())
+            assert excinfo.value.status_code == 401
+        finally:
+            settings.debug = saved
+        _current_test["actual"] = f"Invalid token (prod) → HTTP 401: {excinfo.value.detail}"
 
 
 # ============================================================
@@ -885,7 +898,7 @@ class TestMemorySync:
         _current_test["input"] = "Memory sync delay between agents"
         _current_test["expected"] = "Latest state from DB is authoritative"
 
-        event = AgentEvent(
+        AgentEvent(
             id=str(uuid4()),
             agent_name="MonitorAgent",
             event_type="delay_detected",

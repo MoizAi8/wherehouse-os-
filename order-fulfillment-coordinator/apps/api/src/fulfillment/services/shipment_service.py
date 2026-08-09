@@ -16,6 +16,15 @@ from fulfillment.schemas.webhook import ShipmentEventWebhook
 logger = logging.getLogger(__name__)
 
 
+def _coerce_shipment_status(raw: str) -> ShipmentStatus:
+    try:
+        return ShipmentStatus(raw)
+    except ValueError:
+        raise ValueError(
+            f"Invalid shipment status '{raw}'. Valid: {[e.value for e in ShipmentStatus]}"
+        )
+
+
 class ShipmentService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -28,7 +37,7 @@ class ShipmentService:
     ) -> list[ShipmentRead]:
         query = select(Shipment).offset(skip).limit(limit).order_by(Shipment.created_at.desc())
         if status_filter:
-            query = query.where(Shipment.status == status_filter)
+            query = query.where(Shipment.status == _coerce_shipment_status(status_filter))
         result = await self.db.execute(query)
         shipments = list(result.scalars().all())
         return [ShipmentRead.model_validate(s) for s in shipments]

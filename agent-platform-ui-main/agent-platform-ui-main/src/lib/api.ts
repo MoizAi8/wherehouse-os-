@@ -6,6 +6,17 @@ export class ApiError extends Error {
 }
 
 async function getAuthHeaders(): Promise<Record<string, string>> {
+  if (typeof window === "undefined") return {}
+
+  try {
+    const { getSession } = await import("next-auth/react")
+    const session = await getSession()
+    if (session?.accessToken) {
+      return { Authorization: `Bearer ${session.accessToken}` }
+    }
+  } catch {
+    // No active session — requests proceed without auth (server rejects with 401).
+  }
   return {}
 }
 

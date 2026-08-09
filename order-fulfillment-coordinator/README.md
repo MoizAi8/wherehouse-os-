@@ -1,11 +1,11 @@
-# Order Fulfillment Coordinator
+# FulfillOS
 
 AI-powered multi-agent system that autonomously manages the complete post-purchase journey — from warehouse picking to doorstep delivery.
 
 ## System Architecture
 
 ```
-order-fulfillment-coordinator/
+fulfillos/
 ├── apps/
 │   └── api/          # Python FastAPI backend
 ├── packages/

@@ -5,7 +5,6 @@ import { AgentCard } from "./AgentCard"
 import { SkeletonCard } from "@/components/ui/SkeletonCard"
 import { ErrorDisplay } from "@/components/ui/ErrorDisplay"
 import { useAgentMonitor } from "@/hooks/use-agents"
-import { useOrders } from "@/hooks/use-orders"
 import { useSearch } from "@/contexts/SearchContext"
 
 export interface AgentInfo {
@@ -21,71 +20,61 @@ export interface AgentInfo {
 
 export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { name: string; role: string }) => void }) {
   const { data: monitorData, loading, error, refetch } = useAgentMonitor()
-  const { data: ordersData } = useOrders({ limit: 100 })
   const { query } = useSearch()
 
+  const delaysDetected = monitorData?.delays_detected ?? 0
   const agents: AgentInfo[] = loading
     ? []
     : [
         {
-          id: "1",
+          id: "routing",
           name: "RoutingAgent",
           role: "Order Router",
           status: "active",
           uptime: "--",
-          tasksCompleted: monitorData?.shipments_checked ?? 0,
-          workload: 72,
-          accuracy: 98,
+          tasksCompleted: 0,
+          workload: 0,
+          accuracy: 0,
         },
         {
-          id: "2",
+          id: "monitor",
           name: "MonitorAgent",
           role: "Shipment Monitor",
           status: "processing",
           uptime: "--",
-          tasksCompleted: ordersData?.total ?? 0,
-          workload: 88,
-          accuracy: 96,
+          tasksCompleted: monitorData?.shipments_checked ?? 0,
+          workload: 0,
+          accuracy: 0,
         },
         {
-          id: "3",
+          id: "prediction",
           name: "PredictionAgent",
           role: "Failure Predictor",
-          status: "active",
+          status: "processing",
           uptime: "--",
-          tasksCompleted: monitorData?.delays_detected ?? 0,
-          workload: 45,
-          accuracy: 94,
+          tasksCompleted: delaysDetected,
+          workload: 0,
+          accuracy: 0,
         },
         {
-          id: "4",
-          name: "CostOptimizer",
-          role: "Cost Analyst",
-          status: (monitorData?.anomalies_found ?? 0) > 0 ? "error" : "idle",
-          uptime: "--",
-          tasksCompleted: monitorData?.anomalies_found ?? 0,
-          workload: 15,
-          accuracy: 99,
-        },
-        {
-          id: "5",
+          id: "rerouting",
           name: "ReroutingAgent",
           role: "Reroute Handler",
-          status: "active",
+          status: delaysDetected > 0 ? "active" : "idle",
           uptime: "--",
           tasksCompleted: monitorData?.reroutes_initiated ?? 0,
-          workload: 63,
-          accuracy: 97,
+          workload: 0,
+          accuracy: 0,
         },
         {
-          id: "6",
+          id: "communication",
           name: "CommunicationAgent",
           role: "Notification Relay",
           status: "active",
           uptime: "--",
           tasksCompleted: monitorData?.notifications_sent ?? 0,
-          workload: 30,
-          accuracy: 88,
+          workload: 0,
+          accuracy: 0,
         },
       ]
 
