@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { NoiseOverlay } from "@/components/effects/NoiseOverlay"
 import { SettingsProvider } from "@/contexts/SettingsContext"
 import { SessionProvider } from "@/components/providers/SessionProvider"
-import { SessionTimer } from "@/components/providers/SessionTimer"
 import { ThemeToggle } from "@/components/ui/ThemeToggle"
 
 const sora = Sora({ variable: "--font-sora", subsets: ["latin"] })
@@ -28,11 +27,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <SmoothScrollProvider>
             <SettingsProvider>
               <SessionProvider>
-                <SessionTimer>
-                  <NoiseOverlay />
-                  <ThemeToggle />
-                  <main id="main-content">{children}</main>
-                </SessionTimer>
+                <NoiseOverlay />
+                <ThemeToggle />
+                <main id="main-content">{children}</main>
               </SessionProvider>
             </SettingsProvider>
           </SmoothScrollProvider>
