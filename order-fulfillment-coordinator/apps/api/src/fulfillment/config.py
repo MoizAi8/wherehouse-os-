@@ -74,5 +74,34 @@ class Settings(BaseSettings):
 
     integration_secret_key: str = ""
 
+    _INSECURE_SECRETS = frozenset({"", "change-me-in-production", "change-webhook-secret"})
+
+    def async_database_url(self) -> str:
+        """Normalize managed-Postgres URLs (postgres:// / postgresql://) for asyncpg."""
+        url = self.database_url
+        if url.startswith("postgres://"):
+            return "postgresql+asyncpg://" + url[len("postgres://"):]
+        if url.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + url[len("postgresql://"):]
+        return url
+
+    def validate_production(self) -> None:
+        """Fail closed at boot: production (DEBUG=false) must not run with
+        default/empty security secrets."""
+        if self.debug:
+            return
+        insecure = {
+            name: getattr(self, name)
+            for name in ("jwt_secret", "webhook_secret", "integration_secret_key")
+        }
+        insecure = {name: value for name, value in insecure.items() if value in self._INSECURE_SECRETS}
+        if insecure:
+            raise RuntimeError(
+                "Production boot guard refused to start: the following secrets are "
+                f"empty or use insecure defaults — {', '.join(sorted(insecure))}. "
+                "Set JWT_SECRET, WEBHOOK_SECRET and INTEGRATION_SECRET_KEY to strong values "
+                "(see .env.example)."
+            )
+
 
 settings = Settings()

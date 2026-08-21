@@ -23,9 +23,17 @@ log() {
 }
 
 # ── PostgreSQL backup ────────────────────────────────
-if docker ps --format '{{.Names}}' | grep -q 'fulfillment-postgres'; then
-    log "Starting PostgreSQL backup..."
-    if docker exec fulfillment-postgres-1 pg_dump \
+PG_CONTAINER=""
+for c in $(docker ps --format '{{.Names}}'); do
+    if [[ "$c" == *postgres* ]]; then
+        PG_CONTAINER="$c"
+        break
+    fi
+done
+
+if [ -n "$PG_CONTAINER" ]; then
+    log "Starting PostgreSQL backup from container: ${PG_CONTAINER}"
+    if docker exec "$PG_CONTAINER" pg_dump \
         -U "${POSTGRES_USER:-fulfillment}" \
         -d "${POSTGRES_DB:-fulfillment}" \
         --clean --if-exists > "${BACKUP_DIR}/${DB_FILE}" 2>> "$LOG_FILE"; then

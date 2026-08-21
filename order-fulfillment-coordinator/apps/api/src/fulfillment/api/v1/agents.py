@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fulfillment.api.deps import get_current_user, get_db
+from fulfillment.api.deps import get_db, require_operator_or_admin
 from fulfillment.schemas.agent import MonitorRequest, MonitorResponse
 from fulfillment.agents.orchestrator import FulfillmentOrchestrator
 
@@ -14,7 +14,7 @@ router = APIRouter()
 async def run_agent_monitor(
     payload: MonitorRequest | None = None,
     db: AsyncSession = Depends(get_db),
-    _user: dict[str, str] = Depends(get_current_user),
+    _user: dict[str, str] = Depends(require_operator_or_admin),
 ) -> MonitorResponse:
     orchestrator = FulfillmentOrchestrator(db)
     try:

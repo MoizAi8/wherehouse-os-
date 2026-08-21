@@ -83,6 +83,7 @@ class OrderService:
         self.db.add(order)
         await self.db.flush()
         await self.db.refresh(order)
+        await self._try_autonomous_routing(order.id)
         return OrderRead.model_validate(order)
 
     async def get_order(self, order_id: str) -> OrderRead | None:
@@ -216,6 +217,22 @@ class OrderService:
         rates = list(result.scalars().all())
         return [CarrierRateResponse.model_validate(r) for r in rates]
 
+    async def _try_autonomous_routing(self, order_id: str) -> None:
+        """Best-effort autonomous routing for a freshly created order.
+
+        The order pipeline (order → FC → carrier → shipment) should progress
+        without a manual kick. If no eligible fulfillment center or carrier
+        rate exists yet the order is left PENDING (fail-open) so order creation
+        never fails because of routing availability.
+        """
+        try:
+            await self.route_order(order_id)
+            logger.info("Autonomous routing completed for order %s", order_id)
+        except ValueError as exc:
+            logger.info("Autonomous routing deferred for order %s: %s", order_id, exc)
+        except Exception as exc:
+            logger.warning("Autonomous routing failed for order %s: %s", order_id, exc)
+
     async def create_order_from_webhook(self, payload: OrderPlacedWebhook) -> Order:
         existing = await self.db.execute(
             select(Order).where(Order.external_order_id == payload.external_order_id)
@@ -240,4 +257,5 @@ class OrderService:
         self.db.add(order)
         await self.db.flush()
         await self.db.refresh(order)
+        await self._try_autonomous_routing(order.id)
         return order

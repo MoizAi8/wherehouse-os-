@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fulfillment.api.deps import get_db, get_current_user
-from fulfillment.encryption import encrypt_secret, decrypt_secret
+from fulfillment.api.deps import get_db, get_current_user, require_operator_or_admin
+from fulfillment.encryption import encrypt_secret
 from fulfillment.models.integration import IntegrationConnection
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.schemas.integration import (
@@ -20,6 +20,7 @@ from fulfillment.schemas.integration import (
     SyncResult,
 )
 from fulfillment.services.odoo_client import OdooClient, OdooError
+from fulfillment.tools.integrations import _odoo_client
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ router = APIRouter()
 async def connect_integration(
     payload: IntegrationConnectRequest,
     db: AsyncSession = Depends(get_db),
-    _user: dict[str, str] = Depends(get_current_user),
+    _user: dict[str, str] = Depends(require_operator_or_admin),
 ) -> IntegrationConnectionRead:
     existing = await db.execute(
         select(IntegrationConnection).where(
@@ -137,7 +138,7 @@ async def get_connection(
 async def test_connection(
     connection_id: str,
     db: AsyncSession = Depends(get_db),
-    _user: dict[str, str] = Depends(get_current_user),
+    _user: dict[str, str] = Depends(require_operator_or_admin),
 ) -> IntegrationConnectionStatus:
     result = await db.execute(
         select(IntegrationConnection).where(IntegrationConnection.id == connection_id)
@@ -149,12 +150,7 @@ async def test_connection(
     if conn.provider != "odoo":
         raise HTTPException(status_code=400, detail="Only Odoo connections supported for now")
 
-    client = OdooClient(
-        url=conn.base_url,
-        db=conn.db_name or "",
-        username=conn.username or "",
-        password=decrypt_secret(conn.api_key) or "",
-    )
+    client = _odoo_client(conn)
     try:
         status_result = await client.check_connection()
         conn.is_connected = status_result["connected"]
@@ -177,7 +173,7 @@ async def test_connection(
 async def sync_from_odoo(
     connection_id: str,
     db: AsyncSession = Depends(get_db),
-    _user: dict[str, str] = Depends(get_current_user),
+    _user: dict[str, str] = Depends(require_operator_or_admin),
 ) -> SyncResult:
     result = await db.execute(
         select(IntegrationConnection).where(IntegrationConnection.id == connection_id)
@@ -188,12 +184,7 @@ async def sync_from_odoo(
     if conn.provider != "odoo":
         raise HTTPException(status_code=400, detail="Only Odoo sync supported")
 
-    client = OdooClient(
-        url=conn.base_url,
-        db=conn.db_name or "",
-        username=conn.username or "",
-        password=decrypt_secret(conn.api_key) or "",
-    )
+    client = _odoo_client(conn)
     orders_created = 0
     orders_updated = 0
     products_synced = 0
@@ -277,7 +268,7 @@ async def sync_from_odoo(
 async def delete_connection(
     connection_id: str,
     db: AsyncSession = Depends(get_db),
-    _user: dict[str, str] = Depends(get_current_user),
+    _user: dict[str, str] = Depends(require_operator_or_admin),
 ) -> None:
     result = await db.execute(
         select(IntegrationConnection).where(IntegrationConnection.id == connection_id)
@@ -293,7 +284,7 @@ async def delete_connection(
 async def odoo_search(
     payload: OdooSearchRequest,
     db: AsyncSession = Depends(get_db),
-    _user: dict[str, str] = Depends(get_current_user),
+    _user: dict[str, str] = Depends(require_operator_or_admin),
 ) -> OdooSearchResult:
     conn_result = await db.execute(
         select(IntegrationConnection).where(
@@ -305,12 +296,7 @@ async def odoo_search(
     if conn is None:
         raise HTTPException(status_code=400, detail="No active Odoo connection found")
 
-    client = OdooClient(
-        url=conn.base_url,
-        db=conn.db_name or "",
-        username=conn.username or "",
-        password=conn.api_key or "",
-    )
+    client = _odoo_client(conn)
     try:
         records = await client.search_read(
             model=payload.model,

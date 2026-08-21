@@ -1,13 +1,18 @@
 import { NextRequest } from "next/server"
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000"
+import { backendUrl, getAuthHeaders } from "@/lib/backend"
 
 export async function POST(req: NextRequest) {
+  const base = backendUrl()
+  if (!base) {
+    return Response.json({ error: "Backend not configured: BACKEND_URL is unset" }, { status: 503 })
+  }
+
   try {
-    const body = await req.json()
-    const backendRes = await fetch(`${BACKEND_URL}/api/chat/`, {
+    const authHeaders = await getAuthHeaders()
+    const backendRes = await fetch(`${base}/api/chat/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ message: "Give me optimization suggestions and recommendations." }),
       signal: AbortSignal.timeout(10000),
     })

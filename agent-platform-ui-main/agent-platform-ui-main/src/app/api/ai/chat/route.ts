@@ -1,9 +1,14 @@
 import { NextRequest } from "next/server"
 import { streamChat } from "@/lib/ai/client"
 
-const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8000"
+import { backendUrl, getAuthHeaders } from "@/lib/backend"
 
 export async function POST(req: NextRequest) {
+  const base = backendUrl()
+  if (!base) {
+    return new Response(JSON.stringify({ error: "Backend not configured: BACKEND_URL is unset" }), { status: 503 })
+  }
+
   try {
     const { messages } = (await req.json()) as { messages: Array<{ role: string; content: string }> }
 
@@ -14,9 +19,10 @@ export async function POST(req: NextRequest) {
 
     let reply: string | null = null
     try {
-      const backendRes = await fetch(`${BACKEND_URL}/api/chat/`, {
+      const authHeaders = await getAuthHeaders()
+      const backendRes = await fetch(`${base}/api/chat/`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ message: lastUserMsg.content }),
         signal: AbortSignal.timeout(10000),
       })

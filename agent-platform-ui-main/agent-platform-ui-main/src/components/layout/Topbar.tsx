@@ -1,7 +1,7 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import { Bell, Search, ChevronRight, Maximize2, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -22,10 +22,12 @@ const breadcrumbMap: Record<string, string> = {
   team: "Team",
   notifications: "Notifications",
   settings: "Settings",
+  profile: "Profile",
 }
 
 export function Topbar() {
   const pathname = usePathname()
+  const router = useRouter()
   const segments = pathname.split("/").filter(Boolean)
   const currentLabel = segments.length > 0 ? breadcrumbMap[segments[segments.length - 1]] || segments[segments.length - 1] : ""
 
@@ -92,7 +94,7 @@ export function Topbar() {
               <p className="text-xs text-muted-foreground">admin@warehouse.io</p>
             </div>
             <DropdownMenuSeparator className="bg-border/30" />
-            <DropdownMenuItem className="text-xs">Profile</DropdownMenuItem>
+            <DropdownMenuItem className="text-xs" onSelect={() => router.push("/dashboard/profile")}>Profile</DropdownMenuItem>
             <DropdownMenuItem className="text-xs">Preferences</DropdownMenuItem>
             <DropdownMenuItem className="text-xs">API Keys</DropdownMenuItem>
           </DropdownMenuContent>

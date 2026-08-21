@@ -120,6 +120,16 @@ INTENT_CONFIGS = {
 
 INTENT_NAMES = list(INTENT_CONFIGS.keys())
 
+STRONG_ACTION_INTENTS = {
+    "CREATE_ORDER",
+    "LIST_ORDERS",
+    "CHECK_STATUS",
+    "TRACK_SHIPMENT",
+    "FILTER_ORDERS",
+    "GET_METRICS",
+}
+_STRONG_ACTION_INTENTS = STRONG_ACTION_INTENTS
+
 SYSTEM_PROMPT = (
     "# Intent Analyzer Agent\n\n"
     "## Role\n\n"
@@ -174,7 +184,7 @@ KEYWORD_FALLBACKS: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"\b(risk|delay|late|predict|failure|fail|chance|probability|hoga|chance)\b", re.IGNORECASE), "PREDICT_RISK", "PredictionAgent"),
     (re.compile(r"\b(reroute|redirect|change\s*route|alter|alternative|doosra\s*raasta)\b", re.IGNORECASE), "REROUTE_SHIPMENT", "ReroutingAgent"),
     (re.compile(r"\b(agent|worker|monitor|health|perform)\b", re.IGNORECASE), "AGENT_INFO", "MonitorAgent"),
-    (re.compile(r"\b(metric|kpi|summary|total\s*order|count|kitne)\b", re.IGNORECASE), "GET_METRICS", "MonitorAgent"),
+    (re.compile(r"\b(metric|kpi|summary|total\s*order|count|kitne|how\s*many)\b", re.IGNORECASE), "GET_METRICS", "MonitorAgent"),
     (re.compile(r"\b(create|new\s*order|naya|order\s*laga|order\s*ban|place)\b", re.IGNORECASE), "CREATE_ORDER", "RoutingAgent"),
     (re.compile(r"\b(list|all\s*order|show|dikha|dikhao|dikhay|sab|sare|sarii|tamam|saare)\b", re.IGNORECASE), "LIST_ORDERS", "RoutingAgent"),
     (re.compile(r"\b(help|can you|kya\s*kar|options|commands|kya\s*ho|guide)\b", re.IGNORECASE), "HELP", "MonitorAgent"),
@@ -231,7 +241,7 @@ class IntentAnalyzer:
             "secondary_agents": [],
         })
 
-    async def analyze(self, text: str) -> IntentResult:
+    async def analyze(self, text: str, history: list[tuple[str, str]] | None = None) -> IntentResult:
         if not self.client:
             fallback = self._keyword_fallback(text)
             if fallback:
@@ -245,12 +255,27 @@ class IntentAnalyzer:
                 "secondary_agents": [],
             })
 
+        keyword = self._keyword_fallback(text)
+        if keyword is not None and keyword.intent in _STRONG_ACTION_INTENTS:
+            keyword.reason = f"{keyword.reason}; strong action keywords matched, executing tool directly"
+            return keyword
+
+        user_content = text
+        if history:
+            turns = "\n".join(f"{role}: {content}" for role, content in history)
+            user_content = (
+                f"Recent conversation with the user:\n{turns}\n\n"
+                f"Current message: {text}\n\n"
+                "Classify the intent of the CURRENT message, using the conversation context to "
+                "understand what the user is referring to."
+            )
+
         try:
             resp = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": text},
+                    {"role": "user", "content": user_content},
                 ],
                 temperature=0,
                 max_tokens=300,

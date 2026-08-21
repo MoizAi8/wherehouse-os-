@@ -33,7 +33,7 @@ const defaults: AppSettings = {
   twoFactor: false,
   sessionTimeout: 60,
   compactMode: false,
-  apiEndpoint: "http://localhost:8000",
+  apiEndpoint: "",
   webhookUrl: "",
   autoCleanupDays: 90,
   autoBackup: true,

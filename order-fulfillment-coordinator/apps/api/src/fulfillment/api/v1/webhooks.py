@@ -21,8 +21,13 @@ router = APIRouter()
 
 async def verify_signature(request: Request, x_webhook_signature: Annotated[str | None, Header()] = None) -> None:
     if not settings.webhook_secret or settings.webhook_secret == "change-webhook-secret":
-        logger.warning("Webhook signature verification disabled: WEBHOOK_SECRET unset/insecure")
-        return
+        if settings.debug:
+            logger.warning("Webhook signature verification skipped (DEBUG mode, WEBHOOK_SECRET unset/insecure)")
+            return
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Webhook verification is not configured (WEBHOOK_SECRET missing)",
+        )
     body = await request.body()
     expected = hmac.new(
         settings.webhook_secret.encode(),

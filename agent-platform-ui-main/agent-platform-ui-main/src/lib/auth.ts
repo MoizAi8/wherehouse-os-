@@ -14,8 +14,11 @@ export const authOptions: NextAuthOptions = {
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
 
+        const apiBase = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_API_URL
+        if (!apiBase) return null
+
         try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/auth/login`, {
+          const res = await fetch(`${apiBase}/api/auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email: credentials.email, password: credentials.password }),

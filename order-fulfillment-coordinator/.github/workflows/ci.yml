@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/api
+        working-directory: order-fulfillment-coordinator/apps/api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/api
+        working-directory: order-fulfillment-coordinator/apps/api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -56,7 +56,7 @@ jobs:
           - 6379:6379
     defaults:
       run:
-        working-directory: apps/api
+        working-directory: order-fulfillment-coordinator/apps/api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -76,49 +76,46 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/web
+        working-directory: agent-platform-ui-main/agent-platform-ui-main
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
-      - run: pnpm install
-      - run: pnpm lint
+          cache: npm
+          cache-dependency-path: agent-platform-ui-main/agent-platform-ui-main/package-lock.json
+      - run: npm ci
+      - run: npm run lint
 
   typecheck-frontend:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/web
+        working-directory: agent-platform-ui-main/agent-platform-ui-main
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
-      - run: pnpm install
-      - run: pnpm typecheck
+          cache: npm
+          cache-dependency-path: agent-platform-ui-main/agent-platform-ui-main/package-lock.json
+      - run: npm ci
+      - run: npx tsc --noEmit
 
   test-frontend:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: apps/web
+        working-directory: agent-platform-ui-main/agent-platform-ui-main
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
-      - run: pnpm install
-      - run: pnpm test
+          cache: npm
+          cache-dependency-path: agent-platform-ui-main/agent-platform-ui-main/package-lock.json
+      - run: npm ci
+      - run: npm test
 
   build:
     runs-on: ubuntu-latest
@@ -128,14 +125,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: latest
       - name: Build frontend
-        working-directory: apps/web
+        working-directory: agent-platform-ui-main/agent-platform-ui-main
         run: |
-          pnpm install
-          pnpm build
+          npm ci
+          npm run build
       - name: Build Docker images
         run: |
-          docker compose -f docker-compose.prod.yml build
+          docker compose -f order-fulfillment-coordinator/docker-compose.prod.yml build

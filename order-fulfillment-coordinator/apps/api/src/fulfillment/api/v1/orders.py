@@ -5,7 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fulfillment.api.deps import get_current_user, get_db
+from fulfillment.api.deps import get_current_user, get_db, require_operator_or_admin
 from fulfillment.models.user import User
 from fulfillment.schemas.order import (
     OrderCreate,
@@ -21,6 +21,7 @@ router = APIRouter()
 
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 UserDep = Annotated[User, Depends(get_current_user)]
+MutateDep = Annotated[User, Depends(require_operator_or_admin)]
 
 
 @router.get("", response_model=OrderListResponse)
@@ -41,7 +42,7 @@ async def list_orders(
 async def create_order(
     payload: OrderCreate,
     db: DbDep,
-    _user: UserDep,
+    _user: MutateDep,
 ) -> OrderRead:
     service = OrderService(db)
     return await service.create_order(payload)
@@ -65,7 +66,7 @@ async def update_order(
     order_id: str,
     payload: OrderUpdate,
     db: DbDep,
-    _user: UserDep,
+    _user: MutateDep,
 ) -> OrderRead:
     service = OrderService(db)
     order = await service.update_order(order_id, payload)
@@ -78,7 +79,7 @@ async def update_order(
 async def delete_order(
     order_id: str,
     db: DbDep,
-    _user: UserDep,
+    _user: MutateDep,
 ) -> None:
     service = OrderService(db)
     deleted = await service.delete_order(order_id)
@@ -90,7 +91,7 @@ async def delete_order(
 async def route_order(
     order_id: str,
     db: DbDep,
-    _user: UserDep,
+    _user: MutateDep,
     payload: OrderRouteRequest | None = None,
 ) -> OrderRouteResponse:
     service = OrderService(db)

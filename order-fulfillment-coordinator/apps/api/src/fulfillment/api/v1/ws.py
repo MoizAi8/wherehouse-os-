@@ -46,11 +46,18 @@ manager = ConnectionManager()
 
 async def _authenticate(ws: WebSocket) -> bool:
     """Validate JWT from query param and reject cross-origin requests."""
-    origin = ws.headers.get("origin") or "http://localhost:3000"
-    allowed = settings.cors_origins
-    if allowed and "*" not in allowed and origin.rstrip("/") not in {o.rstrip("/") for o in allowed}:
-        await ws.close(code=4403, reason="origin_not_allowed")
-        return False
+    origin = ws.headers.get("origin")
+    if origin is None:
+        # Browsers always send Origin; a missing header in production is
+        # rejected (fail closed). Non-browser clients are only allowed in debug.
+        if not settings.debug:
+            await ws.close(code=4403, reason="origin_missing")
+            return False
+    else:
+        allowed = settings.cors_origins
+        if allowed and "*" not in allowed and origin.rstrip("/") not in {o.rstrip("/") for o in allowed}:
+            await ws.close(code=4403, reason="origin_not_allowed")
+            return False
     token = ws.query_params.get("token")
     payload = decode_access_token(token) if token else None
     if payload is None:

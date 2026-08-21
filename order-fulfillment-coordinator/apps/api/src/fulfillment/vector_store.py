@@ -31,7 +31,10 @@ else:
 
 openai_client: AsyncOpenAI | None = None
 if settings.openai_api_key:
-    openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+    openai_client = AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url or None,
+    )
 else:
     logger.warning("OPENAI_API_KEY not set. Vector search features will return empty results.")
 
@@ -47,7 +50,11 @@ async def init_collections() -> None:
     if qdrant is None:
         logger.warning("Qdrant not available — skipping collection initialization.")
         return
-    existing = {c.name for c in (await qdrant.get_collections()).collections}
+    try:
+        existing = {c.name for c in (await qdrant.get_collections()).collections}
+    except Exception as exc:
+        logger.warning("Qdrant unreachable — skipping collection initialization. error='%s'", exc)
+        return
     for name, size in COLLECTIONS.items():
         if name not in existing:
             await qdrant.create_collection(
@@ -133,7 +140,7 @@ async def upsert_product(product: dict[str, Any]) -> None:
         collection_name="product_catalog",
         points=[
             PointStruct(
-                id=product["sku"],
+                id=str(uuid.uuid5(uuid.NAMESPACE_DNS, f"product:{product['sku']}")),
                 vector=vector,
                 payload={
                     "sku": product["sku"],

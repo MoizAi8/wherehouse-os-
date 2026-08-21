@@ -34,6 +34,7 @@ logger = logging.getLogger("fulfillment")
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    settings.validate_production()
     await init_db()
     await init_collections()
     yield
@@ -71,16 +72,60 @@ app.include_router(ws.router, prefix="/api/v1/ws", tags=["websocket"])
 
 
 @app.get("/health")
-async def health() -> dict[str, str | bool]:
+async def health() -> dict[str, object]:
     db_ok = False
+    db_type = "unknown"
     try:
         from sqlalchemy import text
 
-        from fulfillment.database import async_session_factory
+        from fulfillment.database import async_session_factory, engine
 
         async with async_session_factory() as session:
             await session.execute(text("SELECT 1"))
         db_ok = True
+        db_type = engine.dialect.name
     except Exception as exc:  # pragma: no cover
         logger.warning("Health check DB probe failed: %s", exc)
-    return {"status": "ok", "version": settings.app_version, "postgres": db_ok}
+
+    celery: dict[str, str | bool] = {"connected": False, "detail": "unavailable"}
+    try:
+        from fulfillment.tasks.health import async_celery_worker_health
+
+        celery = await async_celery_worker_health(timeout=2.0)
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Health check Celery probe failed: %s", exc)
+        celery = {"connected": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+    celery_connected = bool(celery.get("connected", False))
+
+    qdrant_ok = False
+    try:
+        from fulfillment.vector_store import qdrant
+
+        if qdrant is not None:
+            await qdrant.get_collections()
+            qdrant_ok = True
+    except Exception as exc:  # pragma: no cover
+        logger.warning("Health check Qdrant probe failed: %s", exc)
+
+    # Ladder (AGENTS.md): Step 1 API boots → Step 2 PostgreSQL → Step 3 Qdrant
+    # → Step 5 Celery. API/DB healthy = "ok"; missing optional backends report
+    # "degraded" so Caddy/monitors see it without crash-looping the container.
+    status = "ok" if db_ok else "degraded"
+    if db_ok and not (celery_connected and qdrant_ok):
+        status = "degraded"
+
+    return {
+        "status": status,
+        "version": settings.app_version,
+        "database": db_type,
+        "postgres": db_ok if db_type == "postgresql" else False,
+        "celery": celery_connected,
+        "qdrant": qdrant_ok,
+        "degraded": status == "degraded",
+        "backends": {
+            "postgres": db_ok if db_type == "postgresql" else False,
+            "celery": celery_connected,
+            "qdrant": qdrant_ok,
+        },
+    }

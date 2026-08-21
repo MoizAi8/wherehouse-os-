@@ -8,7 +8,7 @@ from sqlalchemy.orm import DeclarativeBase
 from fulfillment.config import settings
 
 engine = create_async_engine(
-    settings.database_url,
+    settings.async_database_url(),
     echo=False,
     pool_size=20,
     max_overflow=10,
@@ -45,9 +45,13 @@ async def init_db() -> None:
     create_all (idempotent — it only adds missing tables) so the app boots
     with only OPENAI_API_KEY set (rule #4).
     """
-    from sqlalchemy import inspect
+    from sqlalchemy import inspect, text
 
     async with engine.begin() as conn:
         tables = await conn.run_sync(lambda sync_conn: set(inspect(sync_conn).get_table_names()))
-        if "alembic_version" not in tables:
+        migrations_applied = False
+        if "alembic_version" in tables:
+            rows = await conn.execute(text("SELECT version_num FROM alembic_version"))
+            migrations_applied = rows.scalar() is not None
+        if not migrations_applied:
             await conn.run_sync(Base.metadata.create_all)

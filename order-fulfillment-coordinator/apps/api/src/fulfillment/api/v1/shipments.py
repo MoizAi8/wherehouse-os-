@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fulfillment.api.deps import get_current_user, get_db
+from fulfillment.api.deps import get_current_user, get_db, require_operator_or_admin
 from fulfillment.schemas.shipment import ShipmentRead, ShipmentRerouteRequest, ShipmentRerouteResponse
 from fulfillment.services.shipment_service import ShipmentService
 
@@ -40,7 +40,7 @@ async def reroute_shipment(
     shipment_id: str,
     payload: ShipmentRerouteRequest,
     db: AsyncSession = Depends(get_db),
-    _user: dict[str, str] = Depends(get_current_user),
+    _user: dict[str, str] = Depends(require_operator_or_admin),
 ) -> ShipmentRerouteResponse:
     service = ShipmentService(db)
     return await service.reroute_shipment(shipment_id, payload)

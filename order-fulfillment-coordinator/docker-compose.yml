@@ -25,6 +25,20 @@ services:
       timeout: 5s
       retries: 5
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+      - qdrant_storage:/qdrant/snapshots
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333; echo -e 'GET / HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3; cat <&3 | grep -q 'HTTP/1.1 200'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: ./apps/api
@@ -34,6 +48,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://fulfillment:fulfillment_dev@postgres:5432/fulfillment
       REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
       JWT_SECRET: dev-jwt-secret-change-in-prod
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     env_file:
@@ -43,6 +58,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_started
     volumes:
       - ./apps/api/src:/app/src
 
@@ -87,3 +104,4 @@ services:
 
 volumes:
   pgdata:
+  qdrant_storage:

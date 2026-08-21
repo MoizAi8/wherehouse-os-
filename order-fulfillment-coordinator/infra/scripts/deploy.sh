@@ -32,12 +32,21 @@ set -a; source .env; set +a
 
 echo "→ Building and starting services..."
 docker compose -f docker-compose.prod.yml build --pull
+
+echo "→ Applying database migrations..."
+docker compose -f docker-compose.prod.yml run --rm --no-deps api alembic upgrade head
+
+echo "→ Seeding default fulfillment data (idempotent)..."
+docker compose -f docker-compose.prod.yml run --rm --no-deps api python -m fulfillment.seed_data
+
 docker compose -f docker-compose.prod.yml up -d --force-recreate
 
 echo "→ Waiting for health checks..."
 sleep 10
+HEALTH_URL="${DOMAIN:+https://${DOMAIN}}/health"
+HEALTH_URL="${HEALTH_URL:-http://localhost/health}"
 for i in $(seq 1 12); do
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
+    if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
         echo "✅ API is healthy"
         break
     fi

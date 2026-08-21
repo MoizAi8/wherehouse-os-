@@ -5,10 +5,12 @@ from fulfillment.models.shipment import Shipment
 from fulfillment.models.fulfillment_center import FulfillmentCenter
 from fulfillment.models.carrier_rate import CarrierRate
 from fulfillment.models.agent_event import AgentEvent
+from fulfillment.models.app_settings import AppSettingsStore
 from fulfillment.models.integration import IntegrationConnection
 from fulfillment.models.notification import Notification
 from fulfillment.models.user import User, UserRole
 from fulfillment.models.refresh_token import RefreshToken
+from fulfillment.models.chat_message import ChatMessageRecord
 
 __all__ = [
     "Order",
@@ -16,9 +18,11 @@ __all__ = [
     "FulfillmentCenter",
     "CarrierRate",
     "AgentEvent",
+    "AppSettingsStore",
     "IntegrationConnection",
     "Notification",
     "User",
     "UserRole",
     "RefreshToken",
+    "ChatMessageRecord",
 ]

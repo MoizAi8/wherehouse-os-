@@ -15,7 +15,7 @@ class AppSettings(BaseModel):
     twoFactor: bool = False
     sessionTimeout: int = 60
     compactMode: bool = False
-    apiEndpoint: str = "http://localhost:8000"
+    apiEndpoint: str = ""
     webhookUrl: str = ""
     autoCleanupDays: int = 90
     autoBackup: bool = True

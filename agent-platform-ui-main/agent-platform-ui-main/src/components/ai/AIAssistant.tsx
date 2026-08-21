@@ -7,6 +7,18 @@ import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Message } from "@/lib/ai/client"
 
+const SESSION_KEY = "fulfillos_chat_session"
+
+function loadSessionId(): string {
+  if (typeof window === "undefined") return ""
+  let sid = window.localStorage.getItem(SESSION_KEY)
+  if (!sid) {
+    sid = `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    window.localStorage.setItem(SESSION_KEY, sid)
+  }
+  return sid
+}
+
 const suggestions = [
   "How many agents are active?",
   "Summarize agent health",
@@ -20,9 +32,8 @@ const suggestions = [
 
 export function AIAssistant({ initialContext }: { initialContext?: { name: string; role: string } | null }) {
   const [input, setInput] = useState("")
-  const [messages, setMessages] = useState<Message[]>([
-    { id: "0", role: "assistant", content: "👋 Welcome to Warehouse OS! Send a message to get started." },
-  ])
+  const [sessionId, setSessionId] = useState<string>(loadSessionId)
+  const [messages, setMessages] = useState<Message[]>([])
   const [streaming, setStreaming] = useState(false)
   const [streamContent, setStreamContent] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -40,9 +51,37 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     }
   }, [messages, streamContent])
 
+  useEffect(() => {
+    let cancelled = false
+    async function loadHistory() {
+      try {
+        const res = await fetch(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`)
+        if (!res.ok) return
+        const data = await res.json()
+        if (cancelled || !data?.messages?.length) return
+        const loaded: Message[] = data.messages.map((m: { id: number | string; role: string; content: string }) => ({
+          id: String(m.id),
+          role: (m.role === "user" || m.role === "assistant" ? m.role : "assistant") as "user" | "assistant",
+          content: m.content,
+        }))
+        idCounter.current = loaded.length
+        setMessages(loaded)
+      } catch {
+        // history is best-effort; the chat still works without it
+      }
+    }
+    loadHistory()
+    return () => {
+      cancelled = true
+    }
+  }, [sessionId])
+
   const clearChat = () => {
+    const fresh = `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    window.localStorage.setItem(SESSION_KEY, fresh)
+    setSessionId(fresh)
     setMessages([{ id: "0", role: "assistant", content: "👋 Chat cleared. Send a message to start a new conversation." }])
-    idCounter.current = 0
+    idCounter.current = 1
   }
 
   const handleSend = useCallback(async (text: string) => {
@@ -59,12 +98,16 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, sessionId }),
       })
 
       if (!res.ok) throw new Error("Failed")
 
       const data = await res.json()
+      if (data.sessionId) {
+        window.localStorage.setItem(SESSION_KEY, data.sessionId)
+        setSessionId(data.sessionId)
+      }
       idCounter.current += 1
       setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: data.reply }])
     } catch (err) {
@@ -74,7 +117,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     } finally {
       setStreaming(false)
     }
-  }, [messages, streaming])
+  }, [messages, streaming, sessionId])
 
   return (
     <div className="flex flex-col h-full bg-card/95 backdrop-blur-2xl">
@@ -101,6 +144,13 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
 
       <ScrollArea className="flex-1 p-5" ref={scrollRef}>
         <div className="space-y-4">
+          {messages.length === 0 && (
+            <div className="flex justify-start">
+              <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-muted/50 px-4 py-2.5 text-sm text-foreground border border-border/20">
+                👋 Welcome to Warehouse OS! Send a message to get started.
+              </div>
+            </div>
+          )}
           {messages.map((msg) => (
             <div key={msg.id} className={cn("flex", msg.role === "user" ? "justify-end" : "justify-start")}>
               <div className={cn(

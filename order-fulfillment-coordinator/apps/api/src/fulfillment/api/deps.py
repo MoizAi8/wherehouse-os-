@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fulfillment.database import async_session_factory
+from fulfillment.database import get_db as get_db
 from fulfillment.config import settings
 from fulfillment.models.user import User, UserRole
 from fulfillment.security import decode_access_token
@@ -26,18 +25,6 @@ def _demo_user() -> User:
         is_active=True,
         must_change_password=False,
     )
-
-
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-        finally:
-            await session.close()
 
 
 async def get_current_user(

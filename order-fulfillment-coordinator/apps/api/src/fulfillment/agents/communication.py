@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.config import settings
 from fulfillment.models.notification import Notification
+from fulfillment.models.order import Order
 from fulfillment.models.shipment import Shipment
 
 logger = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ class CommunicationAgent:
             order: Order | None = shipment.order
         except Exception:
             from sqlalchemy import select as sel
-            from fulfillment.models.order import Order
+
             result = await self.db.execute(sel(Order).where(Order.id == shipment.order_id))
             order = result.scalar_one_or_none()
             if order is None:

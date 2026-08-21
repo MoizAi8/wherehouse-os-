@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fulfillment.encryption import decrypt_secret
 from fulfillment.models.integration import IntegrationConnection
 from fulfillment.services.odoo_client import OdooClient
 
@@ -22,16 +23,28 @@ async def get_active_odoo_connection(db: AsyncSession) -> IntegrationConnection 
     return result.scalar_one_or_none()
 
 
+def _odoo_client(conn: IntegrationConnection) -> OdooClient:
+    """Build an OdooClient, decrypting the stored secret before use.
+
+    ``IntegrationConnection.api_key`` holds a Fernet-encrypted ciphertext when
+    ``INTEGRATION_SECRET_KEY`` is configured (see encryption.py). Passing the raw
+    ciphertext as the Odoo password would always fail authentication, so the
+    secret is decrypted here and never logged.
+    """
+    password = decrypt_secret(conn.api_key) or ""
+    return OdooClient(
+        url=conn.base_url,
+        db=conn.db_name or "",
+        username=conn.username or "",
+        password=password,
+    )
+
+
 async def check_odoo_connection(db: AsyncSession) -> dict[str, Any]:
     conn = await get_active_odoo_connection(db)
     if conn is None:
         return {"connected": False, "error": "No active Odoo connection"}
-    client = OdooClient(
-        url=conn.base_url,
-        db=conn.db_name or "",
-        username=conn.username or "",
-        password=conn.api_key or "",
-    )
+    client = _odoo_client(conn)
     try:
         return await client.check_connection()
     finally:
@@ -46,12 +59,7 @@ async def fetch_odoo_sale_orders(
     conn = await get_active_odoo_connection(db)
     if conn is None:
         return []
-    client = OdooClient(
-        url=conn.base_url,
-        db=conn.db_name or "",
-        username=conn.username or "",
-        password=conn.api_key or "",
-    )
+    client = _odoo_client(conn)
     try:
         domain = [("state", "=", state)] if state else []
         return await client.get_sale_orders(domain=domain, limit=limit)
@@ -67,12 +75,7 @@ async def fetch_odoo_products(
     conn = await get_active_odoo_connection(db)
     if conn is None:
         return []
-    client = OdooClient(
-        url=conn.base_url,
-        db=conn.db_name or "",
-        username=conn.username or "",
-        password=conn.api_key or "",
-    )
+    client = _odoo_client(conn)
     try:
         domain = [("categ_id.name", "=", category)] if category else []
         return await client.get_product_product(domain=domain, limit=limit)
@@ -88,12 +91,7 @@ async def create_odoo_sale_order(
     conn = await get_active_odoo_connection(db)
     if conn is None:
         return {"success": False, "error": "No active Odoo connection"}
-    client = OdooClient(
-        url=conn.base_url,
-        db=conn.db_name or "",
-        username=conn.username or "",
-        password=conn.api_key or "",
-    )
+    client = _odoo_client(conn)
     try:
         order_vals = {
             "partner_id": partner_id,

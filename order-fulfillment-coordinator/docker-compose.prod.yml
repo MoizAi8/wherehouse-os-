@@ -27,6 +27,20 @@ services:
       timeout: 3s
       retries: 5
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+      - qdrant_storage:/qdrant/snapshots
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:6333/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: ./apps/api
@@ -42,10 +56,15 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-fulfillment}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fulfillment}
       DATABASE_SYNC_URL: postgresql://${POSTGRES_USER:-fulfillment}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-fulfillment}
       REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: "${QDRANT_URL:-http://qdrant:6333}"
+      QDRANT_API_KEY: "${QDRANT_API_KEY:-}"
       JWT_SECRET: ${JWT_SECRET}
       JWT_ALGORITHM: HS256
       JWT_EXPIRATION_MINUTES: "${JWT_EXPIRATION_MINUTES:-60}"
       CORS_ORIGINS: "${FRONTEND_URL:-http://localhost:3000}"
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      INTEGRATION_SECRET_KEY: "${INTEGRATION_SECRET_KEY:-}"
+      RESET_EMAIL_REDIRECT_URL: "${RESET_EMAIL_REDIRECT_URL:-${FRONTEND_URL:-http://localhost:3000}}"
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_BASE_URL: "${OPENAI_BASE_URL:-}"
       OPENAI_MODEL: "${OPENAI_MODEL:-gpt-4o-mini}"
@@ -68,6 +87,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_started
 
   celery-worker:
     build:
@@ -83,6 +104,12 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A fulfillment.tasks inspect ping -d celery@$$HOSTNAME --timeout=5 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,6 +129,12 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A fulfillment.tasks inspect ping --timeout=5 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,13 +147,14 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: "${FRONTEND_URL:-http://localhost:3000}"
+        BACKEND_URL: "${BACKEND_URL:-http://api:8000}"
     restart: unless-stopped
     expose:
       - "3000"
     environment:
       NEXTAUTH_SECRET: ${JWT_SECRET}
       NEXTAUTH_URL: "${FRONTEND_URL:-http://localhost:3000}"
-      BACKEND_URL: "http://api:8000"
+      BACKEND_URL: "${BACKEND_URL:-http://api:8000}"
     depends_on:
       - api
 
@@ -143,3 +177,4 @@ volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  qdrant_storage:

@@ -14,6 +14,7 @@ from sqlalchemy import select, func as sqlfunc
 from fulfillment.api.deps import get_current_user, get_db
 from fulfillment.agents.intent_analyzer import IntentAnalyzer
 from fulfillment.config import settings
+from fulfillment.models.chat_message import ChatMessageRecord
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment
 from fulfillment.schemas.order import OrderCreate, OrderRead
@@ -26,12 +27,25 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 class ChatMessage(BaseModel):
     message: str
+    session_id: str | None = None
 
 
 class ChatResponse(BaseModel):
     reply: str
     action: str | None = None
     data: dict | None = None
+    session_id: str | None = None
+
+
+class ChatHistoryMessage(BaseModel):
+    id: int
+    role: str
+    content: str
+
+
+class ChatHistoryResponse(BaseModel):
+    session_id: str
+    messages: list[ChatHistoryMessage]
 
 
 _openai_client: AsyncOpenAI | None = None
@@ -39,7 +53,7 @@ if settings.openai_api_key:
     _openai_client = AsyncOpenAI(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url or None,
-        timeout=8.0,
+        timeout=25.0,
         max_retries=0,
     )
 
@@ -75,13 +89,85 @@ INTENT_MAP = {
     "CREATE_ORDER": "create_order",
 }
 
-async def detect_intent(text: str) -> str:
-    result = await _intent_analyzer.analyze(text)
+async def detect_intent(text: str, history: list[tuple[str, str]] | None = None) -> str:
+    result = await _intent_analyzer.analyze(text, history=history)
     logger.info(
         "Intent analyzed | intent=%s agent=%s confidence=%.2f reason='%s' missing=%s",
         result.intent, result.required_agent, result.confidence, result.reason, result.missing_information,
     )
     return INTENT_MAP.get(result.intent, "help")
+
+
+async def _handle_create_order(
+    db: AsyncSession, message: str, system_prompt: str
+) -> tuple[str, str, dict | None]:
+    """Extract order fields, execute the Create Order tool, and build the reply."""
+    email = _extract_email(message)
+    zip_code = _extract_zip(message)
+    city = _extract_city(message)
+    state = _extract_state(message) or _infer_state_from_city(city)
+    phone = _extract_phone(message)
+    weight = _extract_weight(message)
+    notes = _extract_notes(message)
+    address = _extract_address(message) or (city or "")
+
+    missing = []
+    if not email:
+        missing.append("email")
+    if not city:
+        missing.append("city")
+
+    if missing:
+        logger.info("create_order missing fields: %s", missing)
+        reply = await _generate_llm_reply(
+            system_prompt,
+            f"The user wants to create an order but is missing required information: {', '.join(missing)}. "
+            f"Please provide the {', '.join(missing)} so the order can be created. "
+            f"Never use markdown or ** bold formatting.",
+            max_tokens=150,
+            fallback=f"I need the following information to create an order: {', '.join(missing)}. Please provide them.",
+        )
+        return reply, "create_order_missing_fields", None
+
+    assert email is not None
+
+    payload = OrderCreate(
+        customer_email=email,
+        customer_phone=phone,
+        shipping_address=address,
+        shipping_zip=zip_code or "",
+        shipping_city=city or "",
+        shipping_state=state or "",
+        shipping_country="PK",
+        total_weight_kg=weight or 1.0,
+        notes=notes,
+    )
+
+    service = OrderService(db)
+    order = await service.create_order(payload)
+
+    context = (
+        f"Order created successfully:\n"
+        f"Order ID: #{order.id[:8]}\n"
+        f"Customer: {order.customer_email}\n"
+        f"Address: {order.shipping_city}, {order.shipping_state}\n"
+        f"Weight: {order.total_weight_kg} kg"
+    )
+    logger.info("LLM request sent | intent=create_order | order=%s", order.id[:8])
+    reply = await _generate_llm_reply(
+        system_prompt,
+        f"A new order was created. Details:\n{context}\n\n"
+        f"The order was already created. Confirm to the user that their order was created and will be routed. "
+        f"Report the real Order ID and details above. Never explain how to create an order, "
+        f"never use markdown or ** bold formatting.",
+        max_tokens=200,
+        fallback=(
+            f"Your order was created successfully. Order ID: #{order.id[:8]}, "
+            f"customer {order.customer_email}, destination {order.shipping_city}, {order.shipping_state}. "
+            f"It will be routed shortly."
+        ),
+    )
+    return reply, "create_order_created", OrderRead.model_validate(order).model_dump(mode="json")
 
 
 async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: int = 500, fallback: str | None = None) -> str:
@@ -100,6 +186,13 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
         )
         content = resp.choices[0].message.content
         reply = content.strip() if content else ""
+        reply = _sanitize_reply(reply)
+        if not reply and fallback:
+            logger.info("LLM response empty, using fallback")
+            return fallback
+        if not reply:
+            logger.info("LLM response empty, no fallback available")
+            return "I found the information you asked about but couldn't summarize it. Please try rephrasing your question."
         logger.info("LLM response generation received | length=%d", len(reply))
         return reply
     except Exception as e:
@@ -107,7 +200,68 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
         return fallback or "I'm having trouble processing your request right now. Please try again."
 
 
-_CHAT_SYSTEM_PROMPT = (
+_SAFETY_VERDICT_RE = re.compile(
+    r"^\s*(?:user|assistant|system)\s*safety\s*:\s*\S+",
+    re.IGNORECASE,
+)
+
+
+_MARKDOWN_RE = re.compile(r"(\*\*|__|`|~~)")
+
+
+def _strip_markdown(reply: str) -> str:
+    """Remove markdown artifacts so user-facing replies are always plain text."""
+    if not reply:
+        return reply
+    reply = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", reply)
+    reply = _MARKDOWN_RE.sub("", reply)
+    reply = re.sub(r"(?m)^\s{0,3}#{1,6}\s*", "", reply)
+    reply = re.sub(r"\n{3,}", "\n\n", reply)
+    return reply.strip()
+
+
+def _sanitize_reply(reply: str) -> str:
+    """Strip model-injected safety-verdict lines (e.g. "User Safety: safe")."""
+    if not reply:
+        return reply
+    kept = [line for line in reply.splitlines() if not _SAFETY_VERDICT_RE.match(line.strip())]
+    cleaned = _strip_markdown("\n".join(kept))
+    if not cleaned:
+        logger.info("LLM reply contained only safety verdicts, returning empty")
+    return cleaned
+
+
+async def _load_chat_history(db: AsyncSession, session_id: str, limit: int = 12) -> list[tuple[str, str]]:
+    """Return recent (role, content) turns for a session, oldest first."""
+    result = await db.execute(
+        select(ChatMessageRecord)
+        .where(ChatMessageRecord.session_id == session_id)
+        .order_by(ChatMessageRecord.id.desc())
+        .limit(limit)
+    )
+    rows = list(result.scalars().all())
+    rows.reverse()
+    return [(r.role, r.content) for r in rows]
+
+
+async def _save_chat_message(db: AsyncSession, session_id: str, role: str, content: str) -> None:
+    db.add(ChatMessageRecord(session_id=session_id, role=role, content=content))
+
+
+def _history_section(history: list[tuple[str, str]]) -> str:
+    if not history:
+        return ""
+    lines = "\n".join(f"{role}: {content}" for role, content in history)
+    return (
+        "\n\n## Conversation Memory\n"
+        "The following is the conversation history with this user. Use it to stay "
+        "consistent, refer back to earlier facts (like an order they already created), "
+        "and never contradict it.\n"
+        f"{lines}"
+    )
+
+
+_BASE_SYSTEM_PROMPT = (
     "# Enterprise AI Multi-Agent System Prompt\n\n"
     "You are an advanced enterprise-grade AI agent operating within a Multi-Agent AI System.\n\n"
     "Your primary objective is to provide accurate, context-aware, logical, and reliable responses. "
@@ -173,12 +327,16 @@ _CHAT_SYSTEM_PROMPT = (
     "Write naturally, like a professional software engineer talking to a client. "
     "Keep sentences short and direct. Answer exactly what was asked and avoid repetition.\n\n"
     "### Formatting Rules\n\n"
+    "- NEVER use Markdown. Never use **bold**, *italic*, `code`, or any markdown formatting. Plain text only.\n"
     "- Never use decorative symbols such as ###, ##, ***, ---, @@@, !!!, >>> or ===.\n"
     "- Never use emojis, ASCII art, or fancy ornaments.\n"
+    "- Never output phrases like 'User Safety: safe', 'Assistant Safety:', or any safety verdict label. Respond directly to the user.\n"
     "- Do not use large markdown headings. If you need to label a section, write the label as plain text followed by a colon, e.g. \"Status:\".\n"
     "- If you list items, use a simple hyphen list. No decorative bullets.\n"
     "- When explaining code, explain simply and show code only when it adds value.\n"
     "- Match the user's language where reasonable (for example, reply in Roman Urdu or mixed English if the user writes that way).\n"
+    "- When the system has already performed an action and provided you the real result, REPORT that result directly. Never explain how the action could be performed, never describe what tools exist, and never give instructions the user should do themselves.\n"
+    "- When the user asks you to perform an action, the action has already been executed. State what was actually done and the actual outcome. Do not say 'you can use the X tool' or 'try the X command'.\n"
     "## Goal\n\n"
     "Your goal is not merely to answer prompts.\n\n"
     "Your goal is to understand problems, reason intelligently, use available knowledge, collaborate with other agents when necessary, and provide the most accurate response possible."
@@ -194,7 +352,16 @@ async def chat(
     message = body.message.strip()
     logger.info("User request received | message='%s'", message[:80])
 
-    intent = await detect_intent(message)
+    session_id = body.session_id or str(uuid4())
+    history = await _load_chat_history(db, session_id)
+    system_prompt = _BASE_SYSTEM_PROMPT + _history_section(history)
+    await _save_chat_message(db, session_id, "user", message)
+
+    async def _respond(reply: str, action: str | None = None, data: dict | None = None) -> ChatResponse:
+        await _save_chat_message(db, session_id, "assistant", reply)
+        return ChatResponse(reply=reply, action=action, data=data, session_id=session_id)
+
+    intent = await detect_intent(message, history)
     logger.info("Intent detected | intent='%s'", intent)
 
     service = OrderService(db)
@@ -204,13 +371,13 @@ async def chat(
         reply = "Hello! I'm your warehouse operations assistant. How can I help you today?"
         if _openai_client:
             r = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 f"The user said: \"{message}\"\n\nRespond with a friendly greeting and ask how you can help them with their warehouse.",
                 max_tokens=100,
             )
             if "trouble" not in r and "not configured" not in r:
                 reply = r
-        return ChatResponse(reply=reply, action="greeting")
+        return await _respond(reply, action="greeting")
 
     if intent == "help":
         system_data = (
@@ -230,23 +397,23 @@ async def chat(
         )
         logger.info("LLM request sent | intent=help")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user needs help. Here is what the system can do:\n{system_data}\n\nUser said: \"{message}\"\n\nExplain how they can interact with the system.",
             max_tokens=300,
             fallback="I can help you with: creating orders, listing orders, checking shipment status, agent info, system metrics, and more. What would you like to do?",
         )
-        return ChatResponse(reply=reply, action="help")
+        return await _respond(reply=reply, action="help")
 
     if intent == "proceed_delivery":
         pending = await service.list_orders(skip=0, limit=50, status_filter="pending")
         if not pending:
             logger.info("No pending orders to process")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants to proceed with delivery but there are no pending orders. Let them know politely.",
                 max_tokens=80,
             )
-            return ChatResponse(reply=reply, action="proceed_delivery")
+            return await _respond(reply=reply, action="proceed_delivery")
         routed = []
         failed = []
         for o in pending:
@@ -270,11 +437,11 @@ async def chat(
             )
         logger.info("LLM request sent | intent=proceed_delivery | routed=%d failed=%d", len(routed), len(failed))
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user requested to process all pending deliveries. Here are the results:\n{data_summary}\n\nSummarize the results for the user in a friendly way.",
             max_tokens=300,
         )
-        return ChatResponse(
+        return await _respond(
             reply=reply,
             action="proceed_delivery",
             data={"routed": len(routed), "failed": len(failed)},
@@ -286,11 +453,11 @@ async def chat(
         if not orders:
             logger.info("No orders found")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants to see orders but there are none. Suggest they create one.",
                 max_tokens=80,
             )
-            return ChatResponse(
+            return await _respond(
                 reply=reply,
                 action="list_orders",
                 data={"orders": [], "total": 0},
@@ -301,37 +468,93 @@ async def chat(
         )
         logger.info("LLM request sent | intent=list_orders | total=%d", total)
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
-            f"The user wants to see all orders. Total orders: {total}.\n\nOrders:\n{order_lines}\n\nPresent the orders in a clean readable format.",
+            system_prompt,
+            f"The user wants to see all orders. Total orders: {total}.\n\nOrders:\n{order_lines}\n\nPresent the orders in a clean readable format. Never use markdown or ** bold formatting.",
             max_tokens=400,
+            fallback=f"You have {total} orders total:\n{order_lines}",
         )
-        return ChatResponse(
+        return await _respond(
             reply=reply,
             action="list_orders",
             data={"total": total, "orders": [OrderRead.model_validate(o).model_dump(mode="json") for o in orders[:10]]},
         )
 
     if intent == "check_status":
+        ref = _extract_order_ref(message)
+        if ref:
+            looked = await service.get_order(ref)
+            if looked is None:
+                order_result = await db.execute(
+                    select(Order).where(Order.tracking_number == ref).limit(1)
+                )
+                looked_row = order_result.scalar_one_or_none()
+                if looked_row:
+                    looked = OrderRead.model_validate(looked_row)
+            if looked is None and re.fullmatch(r"[0-9a-f]{8}", ref):
+                prefix_result = await db.execute(
+                    select(Order).where(Order.id.startswith(ref)).limit(1)
+                )
+                prefix_row = prefix_result.scalar_one_or_none()
+                if prefix_row:
+                    looked = OrderRead.model_validate(prefix_row)
+            if looked:
+                order_lines = (
+                    f"# {looked.id}\n"
+                    f"Status: {looked.status}\n"
+                    f"Customer: {looked.customer_email}\n"
+                    f"Tracking: {looked.tracking_number or 'not assigned yet'}\n"
+                    f"Destination: {looked.shipping_city}, {looked.shipping_state}"
+                )
+                logger.info("LLM request sent | intent=check_status | ref=%s found", ref)
+                reply = await _generate_llm_reply(
+                    system_prompt,
+                    f"The user wants the status of order {ref}. The actual order data is:\n{order_lines}\n\n"
+                    f"Report the real status of this order from the data above. "
+                    f"Never use markdown or ** bold formatting, never invent additional details.",
+                    max_tokens=200,
+                    fallback=(
+                        f"Order status:\n"
+                        f"Status: {looked.status}\n"
+                        f"Tracking: {looked.tracking_number or 'not assigned yet'}"
+                    ),
+                )
+                return await _respond(
+                    reply=reply,
+                    action="check_status",
+                    data=OrderRead.model_validate(looked).model_dump(mode="json"),
+                )
+            logger.info("check_status | ref=%s not found", ref)
+            reply = await _generate_llm_reply(
+                system_prompt,
+                f"The user asked for the status of '{ref}' but no order or tracking number matched. "
+                f"Tell them honestly that no order was found for that reference. "
+                f"Never invent an order, never use markdown or ** bold formatting.",
+                max_tokens=120,
+                fallback=f"I couldn't find any order matching '{ref}'. Please double-check the order ID or tracking number.",
+            )
+            return await _respond(reply=reply, action="check_status_not_found", data={"ref": ref})
+
         orders = await service.list_orders(skip=0, limit=10)
         if not orders:
             logger.info("No orders for status check")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants to check order status but there are no orders. Let them know.",
                 max_tokens=80,
             )
-            return ChatResponse(reply=reply, action="check_status")
+            return await _respond(reply=reply, action="check_status")
         order_lines = "\n".join(
             f"- #{o.id[:8]} | {o.customer_email} -> {o.status}"
             for o in orders[:10]
         )
         logger.info("LLM request sent | intent=check_status")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
-            f"The user wants to check order status. Recent orders:\n{order_lines}\n\nPresent the status information clearly.",
+            system_prompt,
+            f"The user wants to check order status. Recent orders:\n{order_lines}\n\nPresent the status information clearly. Never use markdown or ** bold formatting.",
             max_tokens=300,
+            fallback=f"Recent orders:\n{order_lines}",
         )
-        return ChatResponse(reply=reply, action="check_status")
+        return await _respond(reply=reply, action="check_status")
 
     if intent == "agent_count":
         from fulfillment.agents.monitor import MonitorAgent
@@ -360,11 +583,11 @@ async def chat(
         )
         logger.info("LLM request sent | intent=agent_count")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants to know about agents and their status.\n\nCurrent system state:\n{context}\n\nPresent the agent information in a clear organized way.",
             max_tokens=400,
         )
-        return ChatResponse(reply=reply, action="agent_count")
+        return await _respond(reply=reply, action="agent_count")
 
     if intent == "agent_perf":
         from fulfillment.agents.monitor import MonitorAgent
@@ -399,16 +622,19 @@ async def chat(
         )
         logger.info("LLM request sent | intent=agent_perf")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants agent performance data.\n\nCurrent performance:\n{context}\n\nPresent the performance data in a clear readable format.",
             max_tokens=400,
         )
-        return ChatResponse(reply=reply, action="agent_perf")
+        return await _respond(reply=reply, action="agent_perf")
 
     if intent == "metrics":
         total = await service.count_orders()
         pending_count = await service.count_orders(status_filter="pending")
-        delayed_count = await service.count_orders(status_filter="delayed")
+        delayed_count_result = await db.execute(
+            select(sqlfunc.count()).select_from(Shipment).where(Shipment.is_delayed.is_(True))
+        )
+        delayed_count = delayed_count_result.scalar_one()
         processing_count = await service.count_orders(status_filter="processing")
 
         context = (
@@ -420,11 +646,12 @@ async def chat(
         )
         logger.info("LLM request sent | intent=metrics")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
-            f"The user wants system metrics and summary.\n\nData:\n{context}\n\nPresent the metrics clearly and suggest what they might want to check next.",
+            system_prompt,
+            f"The user wants system metrics and summary.\n\nData:\n{context}\n\nPresent the metrics clearly and suggest what they might want to check next. Never use markdown or ** bold formatting.",
             max_tokens=300,
+            fallback=f"Current system metrics: {total} orders total, {pending_count} pending, {processing_count} processing, {delayed_count} delayed, 7 agents online.",
         )
-        return ChatResponse(reply=reply, action="metrics")
+        return await _respond(reply=reply, action="metrics")
 
     if intent == "insight":
         total_orders = await service.count_orders()
@@ -437,25 +664,41 @@ async def chat(
         )
         logger.info("LLM request sent | intent=insight")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants insights and recommendations.\n\nSystem state:\n{context}\n\nProvide actionable insights and recommendations based on this data.",
             max_tokens=300,
         )
-        return ChatResponse(reply=reply, action="insight")
+        return await _respond(reply=reply, action="insight")
 
     if intent == "filter_orders":
         lower = message.lower()
-        filter_status = "delayed" if re.search(r"\b(?:delayed|delay)\b", lower) else "pending"
-        orders = await service.list_orders(skip=0, limit=10, status_filter=filter_status)
-        total = await service.count_orders(status_filter=filter_status)
+        if re.search(r"\b(?:delayed|delay)\b", lower):
+            filter_status = "delayed"
+            delayed_ids_result = await db.execute(
+                select(Shipment.order_id).where(Shipment.is_delayed.is_(True)).limit(10)
+            )
+            delayed_ids = list(delayed_ids_result.scalars().all())
+            orders = []
+            total = len(delayed_ids)
+            if delayed_ids:
+                orders_result = await db.execute(
+                    select(Order).where(Order.id.in_(delayed_ids)).order_by(Order.created_at.desc())
+                )
+                orders = [
+                    OrderRead.model_validate(o) for o in orders_result.scalars().all()
+                ]
+        else:
+            filter_status = "pending"
+            orders = await service.list_orders(skip=0, limit=10, status_filter=filter_status)
+            total = await service.count_orders(status_filter=filter_status)
         if not orders:
             logger.info("No %s orders found", filter_status)
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 f"The user wants to see {filter_status} orders but there are none. Let them know.",
                 max_tokens=80,
             )
-            return ChatResponse(
+            return await _respond(
                 reply=reply,
                 action="filter_orders",
                 data={"orders": [], "total": 0},
@@ -466,81 +709,19 @@ async def chat(
         )
         logger.info("LLM request sent | intent=filter_orders | status=%s count=%d", filter_status, total)
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants to see {filter_status} orders. Found {total} {filter_status} orders.\n\nOrders:\n{order_lines}\n\nPresent these {filter_status} orders clearly.",
             max_tokens=300,
         )
-        return ChatResponse(
+        return await _respond(
             reply=reply,
             action="filter_orders",
             data={"total": total, "orders": [OrderRead.model_validate(o).model_dump(mode="json") for o in orders[:8]]},
         )
 
     if intent == "create_order":
-        email = _extract_email(message)
-        if not email:
-            name_patterns = [
-                r"(?:customer name[:\s]+)(\w+(?:\s+\w+)?)",
-                r"(?:name[:\s]+)(\w+(?:\s+\w+)?)",
-                r"(?:for\s+)(\w+(?:\.?\s+\w+)?)",
-            ]
-            customer_name = "customer"
-            for p in name_patterns:
-                m = re.search(p, message, re.IGNORECASE)
-                if m:
-                    customer_name = m.group(1).strip()
-                    break
-            email = f"{customer_name.lower().replace(' ', '.')}@email.com"
-
-        zip_code = _extract_zip(message)
-        city = _extract_city(message)
-        state = _extract_state(message)
-        phone = _extract_phone(message)
-        weight = _extract_weight(message)
-        notes = _extract_notes(message)
-        address = _extract_address(message) or f"Main Street, {city or 'Karachi'}, {state or 'Sindh'} {zip_code or '74000'}"
-
-        if not city:
-            city = "Karachi"
-        if not state:
-            state = "Sindh"
-        if not zip_code:
-            zip_code = "74000"
-        if not address:
-            address = f"Main Street, {city}, {state} {zip_code}"
-
-        payload = OrderCreate(
-            customer_email=email,
-            customer_phone=phone,
-            shipping_address=address,
-            shipping_zip=zip_code,
-            shipping_city=city,
-            shipping_state=state,
-            shipping_country="PK",
-            total_weight_kg=weight or 1.0,
-            notes=notes,
-        )
-
-        order = await service.create_order(payload)
-
-        context = (
-            f"Order created successfully:\n"
-            f"Order ID: #{order.id[:8]}\n"
-            f"Customer: {order.customer_email}\n"
-            f"Address: {order.shipping_city}, {order.shipping_state}\n"
-            f"Weight: {order.total_weight_kg} kg"
-        )
-        logger.info("LLM request sent | intent=create_order | order=%s", order.id[:8])
-        reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
-            f"A new order was created. Details:\n{context}\n\nConfirm to the user that the order was created and will be routed.",
-            max_tokens=200,
-        )
-        return ChatResponse(
-            reply=reply,
-            action="create_order_created",
-            data=OrderRead.model_validate(order).model_dump(mode="json"),
-        )
+        reply, action, data = await _handle_create_order(db, message, system_prompt)
+        return await _respond(reply=reply, action=action, data=data)
 
     if intent == "fulfillment_centers":
         svc = OrderService(db)
@@ -573,11 +754,11 @@ async def chat(
         ) if fc_lines else f"Orders total: {total} | Processing: {processing} | Pending: {pending_count}\nNo fulfillment centers found."
         logger.info("LLM request sent | intent=fulfillment_centers")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants fulfillment center and carrier info.\n\nData:\n{context}\n\nPresent the fulfillment center and carrier information clearly.",
             max_tokens=400,
         )
-        return ChatResponse(reply=reply, action="fulfillment_centers")
+        return await _respond(reply=reply, action="fulfillment_centers")
 
     if intent == "oldest_pending":
         oldest_result = await db.execute(
@@ -587,11 +768,11 @@ async def chat(
         if not oldest:
             logger.info("No pending orders for oldest query")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants the oldest pending order but there are none. Let them know.",
                 max_tokens=80,
             )
-            return ChatResponse(reply=reply, action="oldest_pending")
+            return await _respond(reply=reply, action="oldest_pending")
         created = oldest.created_at
         if created is not None and created.tzinfo is None:
             created = created.replace(tzinfo=timezone.utc)
@@ -607,11 +788,11 @@ async def chat(
         )
         logger.info("LLM request sent | intent=oldest_pending")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants the oldest pending order.\n\nDetails:\n{context}\n\nPresent this information to the user.",
             max_tokens=200,
         )
-        return ChatResponse(reply=reply, action="oldest_pending")
+        return await _respond(reply=reply, action="oldest_pending")
 
     if intent == "carrier_usage":
         usage_result = await db.execute(
@@ -625,22 +806,22 @@ async def chat(
         if not rows:
             logger.info("No carrier usage data")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants carrier usage info but no carriers are being used. Let them know.",
                 max_tokens=80,
             )
-            return ChatResponse(reply=reply, action="carrier_usage")
+            return await _respond(reply=reply, action="carrier_usage")
         lines = "\n".join(
             f"{r.carrier_name}: {r.count} shipments, ${float(r.total_cost or 0):.2f} total"
             for r in rows
         )
         logger.info("LLM request sent | intent=carrier_usage")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants carrier usage data.\n\nCarrier usage:\n{lines}\n\nPresent carrier usage info clearly.",
             max_tokens=300,
         )
-        return ChatResponse(reply=reply, action="carrier_usage")
+        return await _respond(reply=reply, action="carrier_usage")
 
     if intent == "active_shipments":
         from fulfillment.agents.monitor import MonitorAgent
@@ -655,11 +836,11 @@ async def chat(
         context = f"Active Shipments: {count}\n{lines}{more}"
         logger.info("LLM request sent | intent=active_shipments")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants active shipments.\n\nData:\n{context}\n\nPresent the active shipments in a clear format.",
             max_tokens=300,
         )
-        return ChatResponse(reply=reply, action="active_shipments")
+        return await _respond(reply=reply, action="active_shipments")
 
     if intent == "delayed_shipments":
         from fulfillment.agents.monitor import MonitorAgent
@@ -669,11 +850,11 @@ async def chat(
         if not delayed:
             logger.info("No delayed shipments")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants delayed shipments but all are on time. Let them know the good news.",
                 max_tokens=80,
             )
-            return ChatResponse(reply=reply, action="delayed_shipments")
+            return await _respond(reply=reply, action="delayed_shipments")
         lines = "\n".join(
             f"#{s.id[:8]} — {s.carrier_name}\n  Reason: {getattr(s, 'delay_reason', 'unknown') or 'unknown'}"
             for s in delayed[:8]
@@ -682,11 +863,11 @@ async def chat(
         context = f"Delayed Shipments: {len(delayed)}\n{lines}{more}"
         logger.info("LLM request sent | intent=delayed_shipments")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants delayed shipments.\n\nData:\n{context}\n\nPresent the delayed shipments with reasons.",
             max_tokens=300,
         )
-        return ChatResponse(reply=reply, action="delayed_shipments")
+        return await _respond(reply=reply, action="delayed_shipments")
 
     if intent == "on_time_shipments":
         from fulfillment.agents.monitor import MonitorAgent
@@ -698,11 +879,11 @@ async def chat(
         context = f"On-Time: {on_time} | Delayed: {len(delayed_ships)} | Rate: {pct}%"
         logger.info("LLM request sent | intent=on_time_shipments")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants on-time shipment stats.\n\nData:\n{context}\n\nPresent the on-time shipment performance.",
             max_tokens=150,
         )
-        return ChatResponse(reply=reply, action="on_time_shipments")
+        return await _respond(reply=reply, action="on_time_shipments")
 
     if intent == "high_risk_shipments":
         from fulfillment.agents.monitor import MonitorAgent
@@ -718,11 +899,11 @@ async def chat(
         if not high_risk:
             logger.info("No high-risk shipments")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants high-risk shipments but there are none. Let them know.",
                 max_tokens=80,
             )
-            return ChatResponse(reply=reply, action="high_risk_shipments")
+            return await _respond(reply=reply, action="high_risk_shipments")
         high_risk.sort(key=lambda x: x["failure_probability"], reverse=True)
         lines = "\n".join(
             f"#{p['shipment_id'][:8]} — Risk: {p['failure_probability']:.0%} ({p['tracking_number']})"
@@ -732,11 +913,11 @@ async def chat(
         context = f"High-Risk Shipments: {len(high_risk)}\n{lines}"
         logger.info("LLM request sent | intent=high_risk_shipments")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants high-risk shipments.\n\nData:\n{context}\n\nPresent the high-risk shipments with risk factors.",
             max_tokens=300,
         )
-        return ChatResponse(reply=reply, action="high_risk_shipments")
+        return await _respond(reply=reply, action="high_risk_shipments")
 
     if intent == "reroute_list":
         from fulfillment.models.agent_event import AgentEvent
@@ -747,11 +928,11 @@ async def chat(
         if not reroute_events:
             logger.info("No reroutes found")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants reroute history but none have happened. Let them know.",
                 max_tokens=80,
             )
-            return ChatResponse(reply=reply, action="reroute_list")
+            return await _respond(reply=reply, action="reroute_list")
         from fulfillment.models.shipment import Shipment as Shp
         reroute_lines: list[str] = []
         for ev in reroute_events[:8]:
@@ -762,11 +943,11 @@ async def chat(
         context = f"Rerouted Shipments: {len(reroute_events)}\n" + "\n".join(reroute_lines)
         logger.info("LLM request sent | intent=reroute_list")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants reroute history.\n\nData:\n{context}\n\nPresent the rerouted shipments information.",
             max_tokens=300,
         )
-        return ChatResponse(reply=reply, action="reroute_list")
+        return await _respond(reply=reply, action="reroute_list")
 
     if intent == "cost_analysis":
         from fulfillment.agents.cost_optimizer import CostOptimizer
@@ -775,11 +956,11 @@ async def chat(
         if analysis.get("analysis") == "No shipments to analyze":
             logger.info("No cost analysis data available")
             reply = await _generate_llm_reply(
-                _CHAT_SYSTEM_PROMPT,
+                system_prompt,
                 "The user wants cost analysis but no shipment data is available. Let them know.",
                 max_tokens=80,
             )
-            return ChatResponse(reply=reply, action="cost_analysis")
+            return await _respond(reply=reply, action="cost_analysis")
         a = analysis["analysis"]
         cheapest = await db.execute(select(Shipment).order_by(Shipment.shipping_cost.asc()).limit(1))
         cheapest_s = cheapest.scalar_one_or_none()
@@ -798,11 +979,11 @@ async def chat(
             context += "\nRecommendations:\n" + "\n".join(f"- {r['suggestion']}" for r in analysis["recommendations"])
         logger.info("LLM request sent | intent=cost_analysis")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants shipping cost analysis.\n\nData:\n{context}\n\nPresent the cost analysis with recommendations.",
             max_tokens=400,
         )
-        return ChatResponse(reply=reply, action="cost_analysis")
+        return await _respond(reply=reply, action="cost_analysis")
 
     if intent == "notification_stats":
         from fulfillment.models.notification import Notification
@@ -822,11 +1003,11 @@ async def chat(
         )
         logger.info("LLM request sent | intent=notification_stats")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants notification statistics.\n\nData:\n{context}\n\nPresent the notification stats clearly.",
             max_tokens=200,
         )
-        return ChatResponse(reply=reply, action="notification_stats")
+        return await _respond(reply=reply, action="notification_stats")
 
     if intent == "cycle_stats":
         from fulfillment.agents.monitor import MonitorAgent
@@ -853,24 +1034,50 @@ async def chat(
             context += "No recent events"
         logger.info("LLM request sent | intent=cycle_stats")
         reply = await _generate_llm_reply(
-            _CHAT_SYSTEM_PROMPT,
+            system_prompt,
             f"The user wants monitor cycle stats.\n\nData ({now.strftime('%b %d, %H:%M')} UTC):\n{context}\n\nPresent the cycle status clearly.",
             max_tokens=300,
         )
-        return ChatResponse(reply=reply, action="cycle_stats")
+        return await _respond(reply=reply, action="cycle_stats")
+
+    email = _extract_email(message)
+    if email:
+        logger.info("LLM request sent | intent=fallback (create_order via email) | email='%s'", email)
+        return await _handle_create_order(db, message, system_prompt)
 
     logger.info("LLM request sent | intent=fallback (no intent matched)")
     reply = await _generate_llm_reply(
-        _CHAT_SYSTEM_PROMPT,
+        system_prompt,
         f"The user said: \"{message}\"\n\n"
-        f"If they provided an email, create an order. Otherwise, help them understand what they can ask about. "
+        f"Help them understand what they can ask about. "
         f"Available topics: create order, list orders, check status, agents, metrics, "
         f"proceed delivery, filter orders, fulfillment centers, carriers, shipments, "
-        f"cost analysis, notifications, cycle stats. Keep it helpful and concise.",
+        f"cost analysis, notifications, cycle stats. Keep it helpful and concise. "
+        f"Never use markdown or ** bold formatting.",
         max_tokens=300,
         fallback="I can help you with: creating orders, listing orders, checking shipment status, agent info, system metrics, delivery routing, and more. What would you like to do?",
     )
-    return ChatResponse(reply=reply, action="help")
+    return await _respond(reply=reply, action="help")
+
+
+@router.get("/history", response_model=ChatHistoryResponse)
+async def chat_history(
+    session_id: str,
+    db: AsyncSession = Depends(get_db),
+    _user: dict[str, str] = Depends(get_current_user),
+) -> ChatHistoryResponse:
+    result = await db.execute(
+        select(ChatMessageRecord)
+        .where(ChatMessageRecord.session_id == session_id)
+        .order_by(ChatMessageRecord.id.asc())
+        .limit(200)
+    )
+    rows = list(result.scalars().all())
+    messages = [
+        ChatHistoryMessage(id=r.id, role=r.role, content=r.content)
+        for r in rows
+    ]
+    return ChatHistoryResponse(session_id=session_id, messages=messages)
 
 
 # ---------------------------------------------------------------------------
@@ -880,6 +1087,55 @@ async def chat(
 def _extract_email(text: str) -> str | None:
     match = re.search(r"[\w.+-]+@[\w-]+\.[\w.]+", text)
     return match.group(0) if match else None
+
+
+def _infer_state_from_city(city: str | None) -> str | None:
+    """Map a known city to its state/province. Falls back to the state extractor's map."""
+    if not city:
+        return None
+    lower = city.lower()
+    city_state = {
+        "karachi": "Sindh", "hyderabad": "Sindh", "sukkur": "Sindh", "larkana": "Sindh",
+        "lahore": "Punjab", "faisalabad": "Punjab", "multan": "Punjab", "gujranwala": "Punjab",
+        "rawalpindi": "Punjab", "sialkot": "Punjab", "bahawalpur": "Punjab", "sargodha": "Punjab",
+        "sheikhupura": "Punjab", "gujrat": "Punjab", "sahiwal": "Punjab", "mardan": "KPK",
+        "peshawar": "KPK", "quetta": "Balochistan", "islamabad": "Islamabad",
+        "mirpur": "AJK", "muzaffarabad": "AJK",
+        "new york": "NY", "los angeles": "CA", "chicago": "IL", "houston": "TX",
+        "phoenix": "AZ", "san antonio": "TX", "san diego": "CA", "dallas": "TX",
+        "san jose": "CA", "austin": "TX", "jacksonville": "FL", "fort worth": "TX",
+        "columbus": "OH", "charlotte": "NC", "indianapolis": "IN", "san francisco": "CA",
+        "seattle": "WA", "denver": "CO", "nashville": "TN", "oklahoma city": "OK",
+        "el paso": "TX", "washington": "DC", "boston": "MA", "las vegas": "NV",
+        "portland": "OR", "memphis": "TN", "louisville": "KY", "baltimore": "MD",
+        "milwaukee": "WI", "albuquerque": "NM", "tucson": "AZ", "fresno": "CA",
+        "sacramento": "CA", "mesa": "AZ", "kansas city": "MO", "atlanta": "GA",
+        "omaha": "NE", "colorado springs": "CO", "raleigh": "NC", "long beach": "CA",
+        "virginia beach": "VA", "miami": "FL", "oakland": "CA", "minneapolis": "MN",
+        "tampa": "FL", "tulsa": "OK", "arlington": "TX", "new orleans": "LA",
+    }
+    return city_state.get(lower)
+
+
+def _extract_order_ref(text: str) -> str | None:
+    """Extract an order ID or tracking number reference from the message."""
+    match = re.search(r"\bTRK-[A-Z0-9]+\b", text, re.IGNORECASE)
+    if match:
+        return match.group(0).upper()
+    match = re.search(
+        r"\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b",
+        text,
+        re.IGNORECASE,
+    )
+    if match:
+        return match.group(0)
+    match = re.search(r"\bORD[-_][A-Za-z0-9]+\b", text, re.IGNORECASE)
+    if match:
+        return match.group(0)
+    match = re.search(r"\border\s+(?:id|no\.?|#)?\s*([0-9a-f]{8})\b", text, re.IGNORECASE)
+    if match:
+        return match.group(1)
+    return None
 
 
 def _extract_phone(text: str) -> str | None:
@@ -942,6 +1198,7 @@ def _extract_address(text: str, city: str | None = None) -> str | None:
     patterns = [
         r"(?:address|located at|at|ship to|deliver to|send to)[:\s]+(.+?)(?:\.|,|\n|$)",
         r"\d+\s+(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|court|ct|way|place|pl|circle|cir)\s*(?:#?\s*\d+[a-z]*)?",
+        r"\b\d{1,5}\s+[A-Za-z0-9.\-]+(?:\s+[A-Za-z0-9.\-]+)*?\s+(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|court|ct|way|place|pl|circle|cir|highway|hwy)\b",
         r"(?:house\s*\d+|h\s*#\s*\d+|plot\s*\d+|house\s*no\.?\s*\d+)[^.!?\n]*",
         r"(?:ship to|deliver to|send to)\s+(.+?)(?:,|\n|$)",
     ]

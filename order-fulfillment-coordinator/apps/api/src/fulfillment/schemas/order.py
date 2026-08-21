@@ -11,7 +11,7 @@ class OrderCreate(BaseModel):
     customer_email: EmailStr
     customer_phone: str | None = None
     shipping_address: str
-    shipping_zip: str
+    shipping_zip: str = ""
     shipping_city: str
     shipping_state: str
     shipping_country: str = "US"
@@ -23,7 +23,7 @@ class OrderCreate(BaseModel):
     @classmethod
     def validate_zip(cls, v: str) -> str:
         stripped = v.strip()
-        if len(stripped) < 5:
+        if stripped and len(stripped) < 5:
             raise ValueError("shipping_zip must be at least 5 characters")
         return stripped
 

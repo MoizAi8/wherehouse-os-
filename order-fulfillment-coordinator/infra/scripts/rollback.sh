@@ -18,11 +18,14 @@ docker compose -f docker-compose.prod.yml stop "$SERVICE"
 docker compose -f docker-compose.prod.yml rm -f "$SERVICE"
 docker compose -f docker-compose.prod.yml create "$SERVICE"
 
-# Get the previous image ID
-PREV_IMAGE=$(docker images --format "{{.ID}}" "fulfillment-${SERVICE}" | sed -n '2p')
+# Get the previous image ID (compose project name may be the dir name, e.g.
+# order-fulfillment-coordinator-api). Match any image for this service.
+PREV_IMAGE=$(docker images --format "{{.Repository}}:{{.Tag}} {{.ID}}" | awk -v svc="$SERVICE" '$1 ~ ("-"svc"$") {print $2}' | sed -n '2p')
 if [ -n "$PREV_IMAGE" ]; then
-    docker tag "$PREV_IMAGE" "fulfillment-${SERVICE}:latest"
+    docker tag "$PREV_IMAGE" "order-fulfillment-coordinator-${SERVICE}:rollback"
+    docker compose -f docker-compose.prod.yml up -d "$SERVICE"
+    echo "✅ Rollback complete using image ${PREV_IMAGE}. Verify at /health"
+else
+    echo "⚠️  No previous image found for ${SERVICE}; restarting current image only."
+    docker compose -f docker-compose.prod.yml up -d "$SERVICE"
 fi
-
-docker compose -f docker-compose.prod.yml up -d "$SERVICE"
-echo "✅ Rollback complete. Verify at /health"

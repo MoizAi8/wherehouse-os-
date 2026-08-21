@@ -33,7 +33,7 @@ from fulfillment.config import settings
 logger = logging.getLogger("fulfillment.rate_limit")
 
 _AUTH_PATH = re.compile(r"^/api/auth/(login|register|forgot-password|reset-password|refresh)$")
-_CHAT_PATH = re.compile(r"^/api/chat$")
+_CHAT_PATH = re.compile(r"^/api/chat($|/history)")
 
 
 def _parse_limit(value: str) -> tuple[int, int]:
@@ -69,34 +69,62 @@ class _Bucket:
             return True
         return False
 
+    def retry_after(self, now: float) -> int:
+        """Seconds until the next token is available."""
+        if self.tokens >= 1.0:
+            return 0
+        if self.count <= 0:
+            return int(self.window)
+        refill_per_sec = self.count / self.window
+        return max(1, int((1.0 - self.tokens) / refill_per_sec) + 1)
+
+    def is_stale(self, now: float, max_window: int) -> bool:
+        """Bucket is reusable (fully refilled and idle for one window)."""
+        return now - self.timestamp > self.window and self.tokens >= self.count
+
 
 class RateLimitMiddleware:
-    """Per-IP rate limiter returning ``429`` with ``Retry-After`` on breach."""
+    """Per-IP rate limiter returning ``429`` with ``Retry-After`` on breach.
+
+    Also covers WebSocket handshakes with a ``1008`` close. Buckets are pruned
+    when idle so the in-memory dict cannot grow without bound (memory DoS).
+    """
 
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
         self._enabled = settings.rate_limit_enabled and not settings.debug
         self._buckets: dict[str, _Bucket] = {}
+        self._max_window = 60
 
     def _make_bucket(self, limit_str: str) -> _Bucket:
         return _Bucket(*_parse_limit(limit_str))
 
+    def _client_ip(self, scope: Scope) -> str:
+        headers = scope.get("headers") or []
+        client = scope.get("client")
+        if client:
+            ip = client[0]
+            if ip:
+                return str(ip)
+        forwarded = next(
+            (v.decode() for k, v in headers if k == b"x-forwarded-for"), ""
+        )
+        return forwarded.split(",")[0].strip() or "anonymous"
+
+    def _prune(self, now: float) -> None:
+        stale = [k for k, b in self._buckets.items() if b.is_stale(now, self._max_window)]
+        for key in stale:
+            del self._buckets[key]
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http" or not self._enabled:
+        if scope["type"] not in ("http", "websocket") or not self._enabled:
             await self.app(scope, receive, send)
             return
 
         path = scope.get("path", "")
-        headers = scope.get("headers") or []
-        client_ip = ""
-        if scope.get("client"):
-            client_ip = scope["client"][0]
-        if not client_ip:
-            client_ip = next(
-                (v.decode() for k, v in headers if k == b"x-forwarded-for"), ""
-            ).split(",")[0].strip() or "anonymous"
-
+        client_ip = self._client_ip(scope)
         now = time.monotonic()
+        self._prune(now)
 
         if _AUTH_PATH.match(path):
             key = f"auth:{client_ip}"
@@ -111,12 +139,16 @@ class RateLimitMiddleware:
         bucket = self._buckets.get(key)
         if bucket is None:
             bucket = self._make_bucket(limit_str)
+            self._max_window = max(self._max_window, bucket.window)
             self._buckets[key] = bucket
 
         if not bucket.take(now):
-            retry_after = max(bucket.window, 1)
+            retry_after = bucket.retry_after(now)
             logger.warning("Rate limit exceeded | ip=%s path=%s retry_after=%ds", client_ip, path, retry_after)
-            await self._send_429(send, retry_after)
+            if scope["type"] == "websocket":
+                await self._close_websocket(send, retry_after)
+            else:
+                await self._send_429(send, retry_after)
             return
 
         await self.app(scope, receive, send)
@@ -136,3 +168,13 @@ class RateLimitMiddleware:
             }
         )
         await send({"type": "http.response.body", "body": body})
+
+    @staticmethod
+    async def _close_websocket(send: Send, retry_after: int) -> None:
+        await send(
+            {
+                "type": "websocket.close",
+                "code": 1008,
+                "reason": f"Rate limit exceeded. Retry after {retry_after}s",
+            }
+        )
