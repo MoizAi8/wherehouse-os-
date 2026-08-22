@@ -175,15 +175,25 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
         return fallback or "AI service is not configured."
     logger.info("LLM response generation request sent")
     try:
-        resp = await _openai_client.chat.completions.create(
-            model=settings.openai_model or "gpt-4o-mini",
-            messages=[
+        base_kwargs = {
+            "model": settings.openai_model or "gpt-4o-mini",
+            "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            temperature=0.7,
-            max_tokens=max_tokens,
-        )
+            "temperature": 0.7,
+        }
+        # Thinking models (e.g. gemini flash) spend the completion budget on
+        # hidden reasoning; dropping max_tokens and lowering reasoning effort
+        # keeps the visible answer intact.
+        try:
+            resp = await _openai_client.chat.completions.create(reasoning_effort="low", **base_kwargs)
+        except Exception as inner:
+            hint = str(inner).lower()
+            if any(marker in hint for marker in ("reasoning", "invalid argument", "unsupported", "unexpected")):
+                resp = await _openai_client.chat.completions.create(**base_kwargs)
+            else:
+                raise
         content = resp.choices[0].message.content
         reply = content.strip() if content else ""
         reply = _sanitize_reply(reply)

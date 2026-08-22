@@ -271,16 +271,25 @@ class IntentAnalyzer:
             )
 
         try:
-            resp = await self.client.chat.completions.create(
-                model=self.model,
-                messages=[
+            base_kwargs = {
+                "model": self.model,
+                "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": user_content},
                 ],
-                temperature=0,
-                max_tokens=300,
-                timeout=6,
-            )
+                "temperature": 0,
+                "timeout": 6,
+            }
+            # Thinking models spend completion budget on hidden reasoning;
+            # lowering the effort keeps the small JSON answer intact.
+            try:
+                resp = await self.client.chat.completions.create(reasoning_effort="low", **base_kwargs)
+            except Exception as inner:
+                hint = str(inner).lower()
+                if any(marker in hint for marker in ("reasoning", "invalid argument", "unsupported", "unexpected")):
+                    resp = await self.client.chat.completions.create(**base_kwargs)
+                else:
+                    raise
             content = resp.choices[0].message.content
             if not content:
                 return IntentResult({
