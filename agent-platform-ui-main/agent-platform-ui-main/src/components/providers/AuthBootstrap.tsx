@@ -1,10 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { getSession, signIn } from "next-auth/react"
-
-const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_EMAIL || "demo@fulfillos.com"
-const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Demo1234!"
+import { ensureValidSession } from "@/lib/session"
 
 export function AuthBootstrap({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false)
@@ -12,23 +9,16 @@ export function AuthBootstrap({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false
 
-    async function ensureSession() {
+    async function bootstrap() {
       try {
-        const session = await getSession()
-        if (!session?.accessToken) {
-          await signIn("credentials", {
-            email: DEMO_EMAIL,
-            password: DEMO_PASSWORD,
-            redirect: false,
-          })
-        }
+        await ensureValidSession()
       } catch {
         // Proceed without session — API calls surface errors as before.
       }
       if (!cancelled) setReady(true)
     }
 
-    ensureSession()
+    bootstrap()
     return () => {
       cancelled = true
     }

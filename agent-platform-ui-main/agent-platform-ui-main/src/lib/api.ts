@@ -20,7 +20,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
   return {}
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, options?: RequestInit, retried = false): Promise<T> {
   const authHeaders = await getAuthHeaders()
 
   const res = await fetch(path, {
@@ -31,6 +31,13 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       ...options?.headers,
     },
   })
+
+  if (res.status === 401 && !retried && typeof window !== "undefined") {
+    const { refreshSession } = await import("@/lib/session")
+    if (await refreshSession()) {
+      return request<T>(path, options, true)
+    }
+  }
 
   if (!res.ok) {
     const body = await res.text().catch(() => "")
