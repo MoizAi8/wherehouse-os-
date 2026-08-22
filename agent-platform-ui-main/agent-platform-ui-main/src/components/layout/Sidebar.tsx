@@ -59,7 +59,7 @@ export function Sidebar() {
               className="flex items-center gap-2 overflow-hidden"
             >
               <span className="text-sm font-semibold tracking-tight text-foreground whitespace-nowrap">
-                PromptBase
+                FulfillOS
               </span>
               <span className="rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent whitespace-nowrap">
                 v2.0
