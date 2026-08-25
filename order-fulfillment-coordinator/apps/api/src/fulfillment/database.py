@@ -25,7 +25,13 @@ engine = create_async_engine(
 
 # Use NullPool for serverless environments
 if settings.debug:
-    engine.pool = NullPool()
+    from sqlalchemy.pool import NullPool
+    from sqlalchemy import create_engine
+    
+    # For debug mode with SQLite, use NullPool with a simple creator
+    if "sqlite" in settings.async_database_url():
+        sync_url = settings.async_database_url().replace("postgresql+asyncpg://", "postgresql://").replace("sqlite+aiosqlite://", "sqlite://")
+        engine.pool = NullPool(creator=lambda: create_engine(sync_url).connect())  # type: ignore[arg-type]
 
 @event.listens_for(engine.sync_engine, "before_cursor_execute")
 def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):

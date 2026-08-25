@@ -33,7 +33,7 @@ def get_qdrant() -> AsyncQdrantClient | None:
         _qdrant_client = AsyncQdrantClient(
             url=settings.qdrant_url,
             api_key=settings.qdrant_api_key if settings.qdrant_api_key else None,
-            timeout=10.0,
+            timeout=10,
         )
     return _qdrant_client
 
@@ -97,7 +97,8 @@ async def _embed_with_retry(text: str) -> list[float]:
         base_delay=0.5,
         retry_exceptions=(Exception,),
     )
-    return resp.data[0].embedding
+    embedding = resp.data[0].embedding
+    return list(embedding) if embedding is not None else []
 
 
 async def _qdrant_upsert(collection_name: str, points: list[PointStruct]) -> None:

@@ -118,6 +118,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
   }
 
   // Separate async function for retry logic (not a useCallback to avoid circular reference)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const sendWithRetry = async (text: string, retries = MAX_RETRIES): Promise<{ reply: string; sessionId?: string }> => {
     try {
       const res = await fetch("/api/chat", {
@@ -173,7 +174,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
       setStreamContent("")
       setRetryAttempt(0)
     }
-  }, [streaming, sessionId, sendWithRetry])
+  }, [streaming, sendWithRetry])
 
   return (
     <div className="flex flex-col h-full bg-card/95 backdrop-blur-2xl">

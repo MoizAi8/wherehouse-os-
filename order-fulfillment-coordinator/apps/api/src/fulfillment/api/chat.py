@@ -1014,7 +1014,8 @@ async def chat(
     email = _extract_email(message)
     if email:
         logger.info("LLM request sent | intent=fallback (create_order via email) | email='%s'", email)
-        return await _handle_create_order(db, message, system_prompt)
+        reply, action, data = await _handle_create_order(db, message, system_prompt)
+        return await _respond(reply=reply, action=action, data=data)
 
     logger.info("LLM request sent | intent=fallback (no intent matched)")
     reply = await _generate_llm_reply(

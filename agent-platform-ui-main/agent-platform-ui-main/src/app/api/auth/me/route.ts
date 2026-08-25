@@ -1,8 +1,6 @@
-import { NextRequest } from "next/server"
-
 import { backendUrl, getAuthHeaders } from "@/lib/backend"
 
-export async function GET(_req: NextRequest) {
+export async function GET() {
   const base = backendUrl()
   if (!base) {
     return new Response(
