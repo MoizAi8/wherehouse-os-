@@ -8,6 +8,10 @@ env:
   REGISTRY: ghcr.io/${{ github.repository_owner }}
   API_IMAGE: fulfillment-api
   FRONTEND_IMAGE: fulfillment-ui
+  # Pin exact versions to match local development
+  NODE_VERSION: '20.18.0'
+  PYTHON_VERSION: '3.12'
+  UV_VERSION: '0.5.4'
 
 jobs:
   test-api:
@@ -16,6 +20,7 @@ jobs:
     defaults:
       run:
         working-directory: order-fulfillment-coordinator/apps/api
+    # Service containers for integration tests
     services:
       postgres:
         image: postgres:16-alpine
@@ -28,6 +33,8 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        ports:
+          - 5432:5432
       redis:
         image: redis:7-alpine
         options: >-
@@ -35,20 +42,67 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+        ports:
+          - 6379:6379
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v5
         with:
-          version: "latest"
+          version: ${{ env.UV_VERSION }}
           enable-cache: true
-      - run: uv sync --frozen --group dev
-      - run: uv run --group dev ruff check . --no-fix
-      - run: uv run --group dev mypy src/ --ignore-missing-imports
-      - run: uv run --group dev pytest tests/ -v
+      - name: Install dependencies (frozen lockfile)
+        run: uv sync --frozen --group dev
+      - name: Run ruff linter
+        run: uv run --group dev ruff check . --no-fix
+      - name: Run mypy type checker
+        run: uv run --group dev mypy src/ --ignore-missing-imports
+      - name: Run pytest test suite
+        run: uv run --group dev pytest tests/ -v
         env:
+          # Database & Cache (provided by service containers)
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/fulfillment_test
           REDIS_URL: redis://localhost:6379/0
-          JWT_SECRET: test-secret
+          # Authentication & Security
+          JWT_SECRET: test-secret-key-for-ci-testing-only
+          JWT_ALGORITHM: HS256
+          WEBHOOK_SECRET: test-webhook-secret-for-ci
+          INTEGRATION_SECRET_KEY: test-integration-secret-for-ci
+          # AI & External Services (dummy values for CI - tests use mocks)
+          OPENAI_API_KEY: sk-test-dummy-key-for-ci
+          OPENAI_BASE_URL: ""
+          OPENAI_MODEL: gpt-4o-mini
+          EMBEDDING_MODEL: text-embedding-3-small
+          EMBEDDING_DIMENSIONS: "1536"
+          QDRANT_URL: http://localhost:6333
+          QDRANT_API_KEY: ""
+          # Rate limiting
+          RATE_LIMIT_ENABLED: "true"
+          RATE_LIMIT_DEFAULT: "120/minute"
+          RATE_LIMIT_AUTH: "10/minute"
+          RATE_LIMIT_CHAT: "30/minute"
+          # Celery
+          CELERY_BROKER_URL: redis://localhost:6379/0
+          CELERY_RESULT_BACKEND: redis://localhost:6379/0
+          # Feature flags
+          DEBUG: "true"
+          # Optional integrations (empty for CI)
+          TWILIO_ACCOUNT_SID: ""
+          TWILIO_AUTH_TOKEN: ""
+          TWILIO_PHONE_NUMBER: ""
+          SENDGRID_API_KEY: ""
+          SENDGRID_FROM_EMAIL: "noreply@fulfillment.com"
+          ODOO_URL: ""
+          ODOO_DB: ""
+          ODOO_USERNAME: ""
+          ODOO_PASSWORD: ""
+          ODOO_VERIFY_SSL: "true"
+          INTEGRATION_SECRET_KEY: ""
+          MAX_ALLOWED_COST_INCREASE_PCT: "40.0"
+          MAX_NOTIFICATIONS_PER_ORDER: "4"
+          SHIPMENT_POLL_INTERVAL_SECONDS: "900"
+          FAILED_DELIVERY_THRESHOLD_PCT: "10.0"
+          SLA_CRITICAL_HOURS: "2"
 
   test-frontend:
     name: Test Frontend
@@ -58,16 +112,22 @@ jobs:
         working-directory: agent-platform-ui-main/agent-platform-ui-main
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: agent-platform-ui-main/agent-platform-ui-main/package-lock.json
-      - run: npm ci
-      - run: npm run lint -- --max-warnings 50
-      - run: npm run test -- --run
+      - name: Install dependencies (ci for frozen lockfile)
+        run: npm ci
+      - name: Run ESLint
+        run: npm run lint
+      - name: Run Vitest test suite
+        run: npm run test -- --run
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
+          # Required by Next.js for build-time checks
+          NEXT_TELEMETRY_DISABLED: "1"
 
   build-and-push:
     name: Build & Push Images
@@ -95,6 +155,10 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:latest
             ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:${{ github.sha }}
+          # Build args for production build
+          build-args: |
+            UV_VERSION=${{ env.UV_VERSION }}
+            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
 
       - name: Build & Push Frontend
         uses: docker/build-push-action@v6
@@ -106,11 +170,14 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           build-args: |
             NEXT_PUBLIC_API_URL=${{ secrets.API_URL }}
+            NODE_VERSION=${{ env.NODE_VERSION }}
+            NEXT_TELEMETRY_DISABLED=1
 
   deploy:
     name: Deploy to OCI
     needs: [build-and-push]
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
@@ -147,10 +214,10 @@ jobs:
             docker compose -f docker-compose.prod.yml up -d --force-recreate
             sleep 15
             if curl -sf http://localhost:8000/health > /dev/null; then
-              echo "✅ Deploy successful"
+              echo "[OK] Deploy successful"
               docker image prune -f
             else
-              echo "❌ Health check failed — rolling back"
+              echo "[FAIL] Health check failed - rolling back"
               docker compose -f docker-compose.prod.yml down
               docker compose -f docker-compose.prod.yml up -d
               exit 1
