@@ -40,10 +40,11 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           version: "latest"
-      - run: uv sync --frozen
-      - run: uv run ruff check . --no-fix
-      - run: uv run mypy src/ --ignore-missing-imports
-      - run: uv run pytest tests/ -v
+          enable-cache: true
+      - run: uv sync --frozen --group dev
+      - run: uv run --group dev ruff check . --no-fix
+      - run: uv run --group dev mypy src/ --ignore-missing-imports
+      - run: uv run --group dev pytest tests/ -v
         env:
           DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/fulfillment_test
           REDIS_URL: redis://localhost:6379/0
@@ -61,6 +62,7 @@ jobs:
         with:
           node-version: 20
           cache: npm
+          cache-dependency-path: agent-platform-ui-main/agent-platform-ui-main/package-lock.json
       - run: npm ci
       - run: npm run lint -- --max-warnings 50
       - run: npm run test -- --run
