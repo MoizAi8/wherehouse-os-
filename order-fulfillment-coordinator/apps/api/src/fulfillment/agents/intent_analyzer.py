@@ -283,11 +283,11 @@ class IntentAnalyzer:
             # Thinking models spend completion budget on hidden reasoning;
             # lowering the effort keeps the small JSON answer intact.
             try:
-                resp = await self.client.chat.completions.create(reasoning_effort="low", **base_kwargs)
+                resp = await self.client.chat.completions.create(reasoning_effort="low", **base_kwargs)  # type: ignore[call-overload]
             except Exception as inner:
                 hint = str(inner).lower()
                 if any(marker in hint for marker in ("reasoning", "invalid argument", "unsupported", "unexpected")):
-                    resp = await self.client.chat.completions.create(**base_kwargs)
+                    resp = await self.client.chat.completions.create(**base_kwargs)  # type: ignore[call-overload]
                 else:
                     raise
             content = resp.choices[0].message.content

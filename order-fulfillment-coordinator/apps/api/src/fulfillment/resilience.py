@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from enum import Enum
-from typing import Any, Callable, TypeVar
+from typing import Any, Callable, TypeVar, cast
 from functools import wraps
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ class CircuitBreaker:
                 result = func(*args, **kwargs)
 
             await self._on_success()
-            return result
+            return cast(T, result)
 
         except self.excluded_exceptions:
             raise
@@ -145,12 +145,12 @@ async def with_retry(
     for attempt in range(max_retries + 1):
         try:
             if asyncio.iscoroutinefunction(func):
-                return await func(*args, **kwargs)
+                return await func(*args, **kwargs)  # type: ignore
             else:
                 result = func(*args, **kwargs)
                 if asyncio.iscoroutine(result):
-                    return await result
-                return result
+                    return await result  # type: ignore
+                return result  # type: ignore[return-value]
         except retry_exceptions as e:
             last_exception = e
             if attempt < max_retries:
@@ -171,7 +171,8 @@ async def with_retry(
                     max_retries, func.__name__, last_exception
                 )
 
-    raise last_exception
+    # last_exception is guaranteed to be set here since we only reach this point after exhausting retries
+    raise cast(Exception, last_exception)
 
 
 def retry_with_backoff(
@@ -210,8 +211,8 @@ def retry_with_backoff(
             ))
 
         if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        return sync_wrapper
+            return cast(Callable[..., T], async_wrapper)
+        return cast(Callable[..., T], sync_wrapper)
     return decorator
 
 
@@ -240,12 +241,16 @@ class Bulkhead:
     async def execute(self, func: Callable[..., T], *args: Any, **kwargs: Any) -> T:
         async with self.semaphore:
             if asyncio.iscoroutinefunction(func):
-                return await func(*args, **kwargs)
-            return func(*args, **kwargs)
+                return await func(*args, **kwargs)  # type: ignore
+            return _run_sync_func(func, args, kwargs)
 
 
 class TimeoutError(Exception):
     pass
+
+
+def _run_sync_func[T](func: Callable[..., T], args: tuple[Any, ...], kwargs: dict[str, Any]) -> T:
+    return func(*args, **kwargs)
 
 
 async def with_timeout(
@@ -260,8 +265,8 @@ async def with_timeout(
         else:
             loop = asyncio.get_running_loop()
             return await asyncio.wait_for(
-                loop.run_in_executor(None, lambda: func(*args, **kwargs)),
+                loop.run_in_executor(None, _run_sync_func, func, args, kwargs),
                 timeout=timeout
             )
-    except asyncio.TimeoutError:
-        raise TimeoutError(f"Operation timed out after {timeout}s")
+    except asyncio.TimeoutError as e:
+        raise TimeoutError(f"Operation timed out after {timeout}s") from e

@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react"
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect } from "vitest"
 import { Dock } from "@/components/navigation/Dock"
 import { TopBar } from "@/components/navigation/TopBar"
 

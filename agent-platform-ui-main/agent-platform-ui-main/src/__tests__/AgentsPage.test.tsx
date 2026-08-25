@@ -5,7 +5,7 @@ import AgentsPage from "@/app/dashboard/agents/page"
 const mockMonitor = vi.fn()
 
 vi.mock("@/hooks/use-agents", () => ({
-  useAgentMonitor: (...args: any[]) => mockMonitor(...args),
+  useAgentMonitor: (...args: unknown[]) => mockMonitor(...args),
 }))
 
 describe("Category 3: Agents Page", () => {

@@ -52,11 +52,11 @@ class StructuredFormatter(logging.Formatter):
             "exc_text", "stack_info", "asctime"
         }}
         if extra:
-            base["extra"] = extra
+            base["extra"] = json.dumps(extra, default=str)
 
         request_ctx = _request_context.get()
         if request_ctx:
-            base["request"] = request_ctx
+            base["request"] = json.dumps(request_ctx, default=str)
 
         return json.dumps(base, default=str)
 
@@ -110,7 +110,7 @@ def log_agent_event(
         "details": details or {},
     }
     if risk_score is not None:
-        extra["risk_score"] = risk_score
+        extra["risk_score"] = str(risk_score)
     logger.log(level, f"{agent_name} | {event_type} | entity={entity_id}", extra=extra)
 
 

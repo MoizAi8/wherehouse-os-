@@ -10,7 +10,7 @@ const mockOrders = [
 const mockUseOrders = vi.fn()
 
 vi.mock("@/hooks/use-orders", () => ({
-  useOrders: (...args: any[]) => mockUseOrders(...args),
+  useOrders: (...args: unknown[]) => mockUseOrders(...args),
 }))
 
 describe("Category 2: Orders Page", () => {

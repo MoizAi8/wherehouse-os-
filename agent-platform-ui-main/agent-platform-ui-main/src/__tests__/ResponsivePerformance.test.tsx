@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest"
+import { describe, it, expect } from "vitest"
 
 describe("Category 8: Responsive & Performance", () => {
   it("Test 47: Mobile responsive - viewport meta tag", () => {
