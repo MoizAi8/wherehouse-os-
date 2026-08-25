@@ -74,9 +74,10 @@ export function TaskQueuePanel() {
   const { data: shipments, loading } = useShipments()
   const { query } = useSearch()
 
-  const tasks: Task[] = loading
-    ? []
-    : (shipments ?? []).slice(0, 6).map(getTaskFromShipment)
+  const tasks = useMemo<Task[]>(() => {
+    if (loading) return []
+    return (shipments ?? []).slice(0, 6).map(getTaskFromShipment)
+  }, [loading, shipments])
 
   const filtered = useMemo(() => {
     if (!query.trim()) return tasks

@@ -1,6 +1,6 @@
 "use client"
 
-import { useOrders, type Order } from "@/hooks/use-orders"
+import { useOrders } from "@/hooks/use-orders"
 import { motion } from "framer-motion"
 import { Package, Truck, CheckCircle2, Clock, XCircle } from "lucide-react"
 

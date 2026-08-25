@@ -3,7 +3,7 @@
 import React from "react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { Bot, CheckCircle, AlertTriangle, PauseCircle, Loader2 } from "lucide-react"
+import { CheckCircle, AlertTriangle, PauseCircle, Loader2 } from "lucide-react"
 
 interface Agent {
   id: string; name: string; role: string; status: "active" | "idle" | "error" | "processing"

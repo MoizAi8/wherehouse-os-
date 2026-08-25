@@ -29,7 +29,6 @@ export function Topbar() {
   const pathname = usePathname()
   const router = useRouter()
   const segments = pathname.split("/").filter(Boolean)
-  const currentLabel = segments.length > 0 ? breadcrumbMap[segments[segments.length - 1]] || segments[segments.length - 1] : ""
 
   return (
     <motion.header

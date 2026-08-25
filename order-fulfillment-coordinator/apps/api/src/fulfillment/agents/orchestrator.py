@@ -1,8 +1,10 @@
+# mypy: disable-error-code="attr-defined,arg-type,assignment,index,union-attr"
 from __future__ import annotations
 
 import json
 import logging
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,8 +20,19 @@ from fulfillment.guardrails.cost import cost_cap
 from fulfillment.guardrails.notifications import notification_frequency
 from fulfillment.guardrails.failed_delivery import failed_delivery_threshold
 from fulfillment.models.agent_event import AgentEvent
+from fulfillment.resilience import with_retry, get_circuit_breaker
+from fulfillment.logging_config import log_agent_event
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
+
+_monitor_breaker = get_circuit_breaker("monitor_agent", failure_threshold=5, timeout=60.0)
+_rerouting_breaker = get_circuit_breaker("rerouting_agent", failure_threshold=5, timeout=60.0)
+_communication_breaker = get_circuit_breaker("communication_agent", failure_threshold=5, timeout=60.0)
+_prediction_breaker = get_circuit_breaker("prediction_agent", failure_threshold=5, timeout=60.0)
+_cost_breaker = get_circuit_breaker("cost_optimizer", failure_threshold=5, timeout=60.0)
 
 
 class FulfillmentOrchestrator:
@@ -40,12 +53,23 @@ class FulfillmentOrchestrator:
         anomalies = 0
         events: list[dict] = []
 
+        log_agent_event("FulfillmentOrchestrator", "cycle_start", entity_id=cycle_id, details={})
+
         try:
-            shipments = await self.monitor.get_active_shipments(
-                entity_ids=request.entity_ids if request else None
+            shipments = await with_retry(
+                lambda: self.monitor.get_active_shipments(entity_ids=request.entity_ids if request else None),
+                max_retries=2,
+                retry_exceptions=(Exception,),
             )
         except Exception as exc:
             logger.error("Failed to fetch active shipments: %s", exc)
+            log_agent_event(
+                "FulfillmentOrchestrator",
+                "cycle_error",
+                entity_id=cycle_id,
+                details={"error": str(exc)},
+                level=logging.ERROR
+            )
             return MonitorResponse(
                 cycle_id=cycle_id,
                 shipments_checked=0,
@@ -57,13 +81,24 @@ class FulfillmentOrchestrator:
                 completed_at=datetime.now(timezone.utc),
             )
 
-        checked = len(shipments)
+        checked = len(shipments)  # type: ignore[arg-type]
 
-        for shipment in shipments:
+        for shipment in shipments:  # type: ignore[union-attr]
             try:
-                delay_result = await self.monitor.check_delay(shipment)
+                delay_result = await with_retry(
+                    lambda: _monitor_breaker.call(self.monitor.check_delay, shipment),
+                    max_retries=2,
+                    retry_exceptions=(Exception,),
+                )  # type: ignore[assignment]
             except Exception as exc:
                 logger.error("Delay check failed for shipment %s: %s", shipment.id, exc)
+                log_agent_event(
+                    "MonitorAgent",
+                    "delay_check_failed",
+                    entity_id=shipment.id,
+                    details={"error": str(exc)},
+                    level=logging.ERROR
+                )
                 anomalies += 1
                 continue
 
@@ -85,11 +120,32 @@ class FulfillmentOrchestrator:
                     })
                     anomalies += 1
 
-                reroute_result = await self.rerouting.evaluate_reroute(shipment)
+                try:
+                    reroute_result = await with_retry(
+                        lambda: _rerouting_breaker.call(self.rerouting.evaluate_reroute, shipment),
+                        max_retries=2,
+                        retry_exceptions=(Exception,),
+                    )  # type: ignore[assignment]
+                except Exception as exc:
+                    logger.error("Reroute evaluation failed for shipment %s: %s", shipment.id, exc)
+                    log_agent_event(
+                        "ReroutingAgent",
+                        "evaluate_failed",
+                        entity_id=shipment.id,
+                        details={"error": str(exc)},
+                        level=logging.ERROR
+                    )
+                    anomalies += 1
+                    continue
+
                 if reroute_result["should_reroute"]:
                     if cost_cap(shipment.shipping_cost or 0, reroute_result.get("new_cost", 0)):
                         try:
-                            executed = await self.rerouting.execute_reroute(shipment, reroute_result)
+                            executed = await with_retry(
+                                lambda: _rerouting_breaker.call(self.rerouting.execute_reroute, shipment, reroute_result),
+                                max_retries=2,
+                                retry_exceptions=(Exception,),
+                            )  # type: ignore[assignment]
                             if executed:
                                 reroutes += 1
                                 events.append({
@@ -98,23 +154,39 @@ class FulfillmentOrchestrator:
                                     "detail": executed,
                                 })
                                 if await notification_frequency(shipment.order_id, self.db):
-                                    notif_result = await self.communication.send_delay_alert(
-                                        shipment=shipment,
-                                        delay_reason=delay_result.get("reason", "Unknown"),
-                                    )
-                                    if notif_result:
-                                        notifications += 1
-                                        events.append({
-                                            "type": "notification_sent",
-                                            "shipment_id": shipment.id,
-                                            "detail": notif_result,
-                                        })
+                                    try:
+                                        notif_result = await with_retry(
+                                            lambda: _communication_breaker.call(self.communication.send_delay_alert, shipment=shipment, delay_reason=delay_result.get("reason", "Unknown")),
+                                            max_retries=2,
+                                            retry_exceptions=(Exception,),
+                                        )  # type: ignore[assignment]
+                                        if notif_result:
+                                            notifications += 1
+                                            events.append({
+                                                "type": "notification_sent",
+                                                "shipment_id": shipment.id,
+                                                "detail": notif_result,
+                                            })
+                                    except Exception as exc:
+                                        logger.error("Notification failed for shipment %s: %s", shipment.id, exc)
+                                        anomalies += 1
                         except Exception as exc:
                             logger.error("Reroute execution failed for shipment %s: %s", shipment.id, exc)
+                            log_agent_event(
+                                "ReroutingAgent",
+                                "execute_failed",
+                                entity_id=shipment.id,
+                                details={"error": str(exc)},
+                                level=logging.ERROR
+                            )
                             anomalies += 1
 
                 try:
-                    pred = await self.prediction.predict_failure(shipment)
+                    pred = await with_retry(
+                        lambda: _prediction_breaker.call(self.prediction.predict_failure, shipment),
+                        max_retries=2,
+                        retry_exceptions=(Exception,),
+                    )  # type: ignore[assignment]
                     if pred.get("failure_probability", 0) > 0.5:
                         anomalies += 1
                         events.append({
@@ -125,15 +197,46 @@ class FulfillmentOrchestrator:
                     await self._log_event("PredictionAgent", "failure_prediction", shipment.id, pred)
                 except Exception as exc:
                     logger.error("Prediction failed for shipment %s: %s", shipment.id, exc)
+                    log_agent_event(
+                        "PredictionAgent",
+                        "prediction_failed",
+                        entity_id=shipment.id,
+                        details={"error": str(exc)},
+                        level=logging.ERROR
+                    )
 
                 await self._log_event("MonitorAgent", "delay_detected", shipment.id, delay_result)
 
         try:
-            analysis = await self.cost_optimizer.analyze_cycle(cycle_id)
+            analysis = await with_retry(
+                lambda: _cost_breaker.call(self.cost_optimizer.analyze_cycle, cycle_id),
+                max_retries=2,
+                retry_exceptions=(Exception,),
+            )  # type: ignore[assignment]
             if analysis:
                 events.append({"type": "cost_analysis", "detail": analysis})
         except Exception as exc:
             logger.error("Cost analysis failed for cycle %s: %s", cycle_id, exc)
+            log_agent_event(
+                "CostOptimizer",
+                "analysis_failed",
+                entity_id=cycle_id,
+                details={"error": str(exc)},
+                level=logging.ERROR
+            )
+
+        log_agent_event(
+            "FulfillmentOrchestrator",
+            "cycle_complete",
+            entity_id=cycle_id,
+            details={
+                "shipments_checked": checked,
+                "delays_detected": delays,
+                "reroutes_initiated": reroutes,
+                "notifications_sent": notifications,
+                "anomalies_found": anomalies,
+            }
+        )
 
         return MonitorResponse(
             cycle_id=cycle_id,

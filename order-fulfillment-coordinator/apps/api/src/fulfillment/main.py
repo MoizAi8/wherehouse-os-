@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from fulfillment.api import auth, chat
 from fulfillment.api.v1 import (
@@ -21,15 +23,35 @@ from fulfillment.api.v1 import (
     ws,
 )
 from fulfillment.config import settings
-from fulfillment.database import init_db
+from fulfillment.database import init_db, check_db_connection
 from fulfillment.rate_limit import RateLimitMiddleware
-from fulfillment.vector_store import init_collections
+from fulfillment.vector_store import init_collections, check_qdrant_connection
+from fulfillment.logging_config import setup_logging, log_api_request, get_correlation_id, set_correlation_id
+from fulfillment.tasks.health import async_celery_worker_health
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(name)s | %(levelname)s | %(message)s",
-)
+setup_logging()
+
 logger = logging.getLogger("fulfillment")
+
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        correlation_id = request.headers.get("x-correlation-id") or get_correlation_id()
+        set_correlation_id(correlation_id)
+
+        start_time = time.perf_counter()
+        response: Response = await call_next(request)
+        duration_ms = (time.perf_counter() - start_time) * 1000
+
+        log_api_request(
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=duration_ms,
+        )
+
+        response.headers["x-correlation-id"] = correlation_id
+        return response
 
 
 @asynccontextmanager
@@ -56,6 +78,7 @@ app.add_middleware(
 )
 
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(auth.router)
 app.include_router(chat.router)
@@ -76,41 +99,28 @@ async def health() -> dict[str, object]:
     db_ok = False
     db_type = "unknown"
     try:
-        from sqlalchemy import text
+        db_ok = await check_db_connection()
+        if db_ok:
+            from sqlalchemy import text
+            from fulfillment.database import engine
 
-        from fulfillment.database import async_session_factory, engine
-
-        async with async_session_factory() as session:
-            await session.execute(text("SELECT 1"))
-        db_ok = True
-        db_type = engine.dialect.name
-    except Exception as exc:  # pragma: no cover
+            async with engine.connect() as conn:
+                await conn.execute(text("SELECT 1"))
+            db_type = engine.dialect.name
+    except Exception as exc:
         logger.warning("Health check DB probe failed: %s", exc)
 
-    celery: dict[str, str | bool] = {"connected": False, "detail": "unavailable"}
+    celery_health = {"connected": False, "detail": "unavailable"}
     try:
-        from fulfillment.tasks.health import async_celery_worker_health
-
-        celery = await async_celery_worker_health(timeout=2.0)
-    except Exception as exc:  # pragma: no cover
+        celery_health = await async_celery_worker_health(timeout=2.0)
+    except Exception as exc:
         logger.warning("Health check Celery probe failed: %s", exc)
-        celery = {"connected": False, "detail": f"{type(exc).__name__}: {exc}"}
+        celery_health = {"connected": False, "detail": f"{type(exc).__name__}: {exc}"}
 
-    celery_connected = bool(celery.get("connected", False))
+    celery_connected = bool(celery_health.get("connected", False))
 
-    qdrant_ok = False
-    try:
-        from fulfillment.vector_store import qdrant
+    qdrant_ok = await check_qdrant_connection()
 
-        if qdrant is not None:
-            await qdrant.get_collections()
-            qdrant_ok = True
-    except Exception as exc:  # pragma: no cover
-        logger.warning("Health check Qdrant probe failed: %s", exc)
-
-    # Ladder (AGENTS.md): Step 1 API boots → Step 2 PostgreSQL → Step 3 Qdrant
-    # → Step 5 Celery. API/DB healthy = "ok"; missing optional backends report
-    # "degraded" so Caddy/monitors see it without crash-looping the container.
     status = "ok" if db_ok else "degraded"
     if db_ok and not (celery_connected and qdrant_ok):
         status = "degraded"

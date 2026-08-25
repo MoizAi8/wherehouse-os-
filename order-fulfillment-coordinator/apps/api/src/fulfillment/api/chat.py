@@ -5,9 +5,9 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from openai import AsyncOpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sqlfunc
 
@@ -19,14 +19,18 @@ from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment
 from fulfillment.schemas.order import OrderCreate, OrderRead
 from fulfillment.services.order_service import OrderService
+from fulfillment.resilience import with_retry, get_circuit_breaker
+from fulfillment.logging_config import log_agent_event, get_correlation_id
 
 logger = logging.getLogger("fulfillment.chat")
+
+_openai_breaker = get_circuit_breaker("openai_chat", failure_threshold=3, timeout=30.0)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 
 class ChatMessage(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=5000)
     session_id: str | None = None
 
 
@@ -173,27 +177,29 @@ async def _handle_create_order(
 async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: int = 500, fallback: str | None = None) -> str:
     if not _openai_client:
         return fallback or "AI service is not configured."
-    logger.info("LLM response generation request sent")
-    try:
+
+    async def _call_openai():
         base_kwargs = {
             "model": settings.openai_model or "gpt-4o-mini",
             "messages": [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.7,
+            "temperature": 0.3,
+            "max_tokens": max_tokens,
         }
-        # Thinking models (e.g. gemini flash) spend the completion budget on
-        # hidden reasoning; dropping max_tokens and lowering reasoning effort
-        # keeps the visible answer intact.
-        try:
-            resp = await _openai_client.chat.completions.create(reasoning_effort="low", **base_kwargs)
-        except Exception as inner:
-            hint = str(inner).lower()
-            if any(marker in hint for marker in ("reasoning", "invalid argument", "unsupported", "unexpected")):
-                resp = await _openai_client.chat.completions.create(**base_kwargs)
-            else:
-                raise
+        return await _openai_breaker.call(
+            _openai_client.chat.completions.create,
+            **base_kwargs
+        )
+
+    try:
+        resp = await with_retry(
+            _call_openai,
+            max_retries=2,
+            base_delay=0.5,
+            retry_exceptions=(Exception,),
+        )
         content = resp.choices[0].message.content
         reply = content.strip() if content else ""
         reply = _sanitize_reply(reply)
@@ -272,95 +278,54 @@ def _history_section(history: list[tuple[str, str]]) -> str:
 
 
 _BASE_SYSTEM_PROMPT = (
-    "# Enterprise AI Multi-Agent System Prompt\n\n"
-    "You are an advanced enterprise-grade AI agent operating within a Multi-Agent AI System.\n\n"
-    "Your primary objective is to provide accurate, context-aware, logical, and reliable responses. "
-    "Never rely only on predefined prompts or hardcoded examples. Instead, understand the user's intent and reason step by step before producing an answer.\n\n"
-    "## Core Responsibilities\n\n"
-    "- Understand the real intent behind every user question.\n"
-    "- Analyze all available context before answering.\n"
-    "- If additional context is available from memory, knowledge base, vector database, APIs, tools, or previous conversation, use it.\n"
-    "- If information is missing, clearly state what is missing instead of making assumptions.\n"
-    "- Never hallucinate facts.\n"
-    "- Always prefer factual, verifiable information.\n\n"
-    "## Reasoning Process\n\n"
-    "For every request:\n\n"
-    "1. Understand the user's goal.\n"
-    "2. Identify the domain.\n"
-    "3. Gather relevant context.\n"
-    "4. Decide whether tools or memory are required.\n"
-    "5. Validate retrieved information.\n"
-    "6. Produce a complete and well-structured response.\n"
-    "7. Explain uncertainty when confidence is low.\n\n"
-    "## Context Priority\n\n"
-    "Always use information in the following order:\n\n"
-    "1. User Input\n"
-    "2. Conversation History\n"
-    "3. Long-Term Memory\n"
-    "4. Knowledge Base / RAG\n"
-    "5. External Tools / APIs\n"
-    "6. General LLM Knowledge\n\n"
-    "Never ignore higher-priority context.\n\n"
-    "## Response Quality\n\n"
-    "Every answer should be:\n\n"
-    "- Accurate\n"
-    "- Context-aware\n"
-    "- Logical\n"
-    "- Complete\n"
-    "- Consistent\n"
-    "- Actionable\n"
-    "- Professional\n\n"
-    "Avoid vague or generic responses.\n\n"
-    "## Handling Unknown Questions\n\n"
-    "If the answer cannot be determined:\n\n"
-    "- Say that the available information is insufficient.\n"
-    "- Explain what additional information is needed.\n"
-    "- Never invent data.\n\n"
-    "## Multi-Agent Collaboration\n\n"
-    "If another specialized agent is better suited for the task:\n\n"
-    "- Route the task appropriately.\n"
-    "- Share all required context.\n"
-    "- Return the integrated final answer.\n\n"
-    "## Error Prevention\n\n"
-    "Never:\n\n"
-    "- Guess missing information.\n"
-    "- Contradict previous context.\n"
-    "- Ignore user instructions.\n"
-    "- Produce fabricated citations.\n"
-    "- Repeat predefined template answers.\n\n"
-    "## Output Style\n\n"
-    "Always produce responses that are:\n\n"
-    "- Clear and concise\n"
-    "- Easy to read\n"
-    "- Technically accurate\n"
-    "- Relevant to the user's actual question\n\n"
-    "Write naturally, like a professional software engineer talking to a client. "
-    "Keep sentences short and direct. Answer exactly what was asked and avoid repetition.\n\n"
-    "### Formatting Rules\n\n"
-    "- NEVER use Markdown. Never use **bold**, *italic*, `code`, or any markdown formatting. Plain text only.\n"
-    "- Never use decorative symbols such as ###, ##, ***, ---, @@@, !!!, >>> or ===.\n"
-    "- Never use emojis, ASCII art, or fancy ornaments.\n"
-    "- Never output phrases like 'User Safety: safe', 'Assistant Safety:', or any safety verdict label. Respond directly to the user.\n"
-    "- Do not use large markdown headings. If you need to label a section, write the label as plain text followed by a colon, e.g. \"Status:\".\n"
-    "- If you list items, use a simple hyphen list. No decorative bullets.\n"
-    "- When explaining code, explain simply and show code only when it adds value.\n"
-    "- Match the user's language where reasonable (for example, reply in Roman Urdu or mixed English if the user writes that way).\n"
-    "- When the system has already performed an action and provided you the real result, REPORT that result directly. Never explain how the action could be performed, never describe what tools exist, and never give instructions the user should do themselves.\n"
-    "- When the user asks you to perform an action, the action has already been executed. State what was actually done and the actual outcome. Do not say 'you can use the X tool' or 'try the X command'.\n"
+    "You are the Warehouse OS AI — an intelligent, professional, and helpful warehouse management assistant.\n\n"
+    "You help operators manage autonomous agents, interpret metrics, and optimize fulfillment workflows. "
+    "You can engage in natural conversation, answer questions about system status, and assist with order fulfillment tasks.\n\n"
+    "## Core Behaviors\n\n"
+    "- Always respond in clear, professional English.\n"
+    "- Be conversational and solution-oriented — never robotic or template-driven.\n"
+    "- Understand the user's real intent before responding.\n"
+    "- Use available context (conversation history, system data, tools) to give accurate, specific answers.\n"
+    "- If information is missing, ask clarifying questions rather than guessing.\n"
+    "- Never hallucinate facts or invent data.\n\n"
+    "## Response Style\n\n"
+    "- Plain text only — no markdown, bold, italics, code formatting, or decorative symbols.\n"
+    "- No emojis, ASCII art, or fancy ornaments.\n"
+    "- Keep sentences short and direct. Answer exactly what was asked.\n"
+    "- When the system has already performed an action, report the actual result directly.\n"
+    "- Never expose internal command syntax, tool names, or raw API details to the user.\n\n"
+    "## Available Capabilities (Internal Knowledge)\n\n"
+    "You have access to real-time warehouse data through backend functions:\n"
+    "- Order management: create, list, check status, filter orders\n"
+    "- Shipment tracking: active, delayed, on-time, high-risk shipments\n"
+    "- Agent monitoring: 7 specialized agents (Routing, Monitor, Prediction, CostOptimizer, Rerouting, Communication, Orchestrator)\n"
+    "- Metrics & analytics: system KPIs, carrier usage, cost analysis, cycle stats\n"
+    "- Notifications: SMS/email alerts and statistics\n"
+    "- Fulfillment centers: capacity and carrier assignments\n\n"
+    "When users ask about these topics, the system automatically fetches relevant data and provides it to you. "
+    "Simply report the data naturally in your response.\n\n"
     "## Goal\n\n"
-    "Your goal is not merely to answer prompts.\n\n"
-    "Your goal is to understand problems, reason intelligently, use available knowledge, collaborate with other agents when necessary, and provide the most accurate response possible."
+    "Help users operate their warehouse efficiently through natural conversation. "
+    "Be the knowledgeable colleague they can rely on for insights, actions, and answers."
 )
 
 
 @router.post("", response_model=ChatResponse)
 async def chat(
+    request: Request,
     body: ChatMessage,
     db: AsyncSession = Depends(get_db),
     _user: dict[str, str] = Depends(get_current_user),
 ) -> ChatResponse:
     message = body.message.strip()
-    logger.info("User request received | message='%s'", message[:80])
+    correlation_id = get_correlation_id()
+    user_id = _user.get("sub") if _user else None
+
+    log_agent_event("ChatAPI", "request_received", entity_id=correlation_id, details={
+        "message_length": len(message),
+        "user_id": user_id,
+        "session_id": body.session_id,
+    })
 
     session_id = body.session_id or str(uuid4())
     history = await _load_chat_history(db, session_id)
@@ -372,45 +337,41 @@ async def chat(
         return ChatResponse(reply=reply, action=action, data=data, session_id=session_id)
 
     intent = await detect_intent(message, history)
-    logger.info("Intent detected | intent='%s'", intent)
+    log_agent_event("ChatAPI", "intent_detected", entity_id=session_id, details={
+        "intent": intent,
+        "message_preview": message[:80],
+    })
 
     service = OrderService(db)
 
     if intent == "greeting":
         logger.info("LLM request sent | intent=greeting")
-        reply = "Hello! I'm your warehouse operations assistant. How can I help you today?"
         if _openai_client:
             r = await _generate_llm_reply(
                 system_prompt,
-                f"The user said: \"{message}\"\n\nRespond with a friendly greeting and ask how you can help them with their warehouse.",
+                f"The user said: \"{message}\"\n\nRespond with a warm, professional greeting. Ask how you can help with their warehouse operations today.",
                 max_tokens=100,
             )
             if "trouble" not in r and "not configured" not in r:
-                reply = r
-        return await _respond(reply, action="greeting")
+                return await _respond(reply=r, action="greeting")
+        return await _respond(
+            reply="Hello! I'm your Warehouse OS assistant. How can I help you with your warehouse operations today?",
+            action="greeting"
+        )
 
     if intent == "help":
-        system_data = (
-            "Available commands:\n"
-            "- Create order: provide email, address, city, weight\n"
-            "- List orders: show all orders\n"
-            "- Check status: track order\n"
-            "- Agent info: list agents, agent health, performance\n"
-            "- Metrics: system summary, KPIs\n"
-            "- Proceed delivery: route pending orders\n"
-            "- Filter: pending/delayed orders\n"
-            "- Fulfillment centers: FC assignments\n"
-            "- Carriers: usage and costs\n"
-            "- Shipments: active, delayed, on-time, high-risk\n"
-            "- Analytics: cost analysis, reroute list, cycle stats\n"
-            "- Notifications: stats\n"
-        )
         logger.info("LLM request sent | intent=help")
         reply = await _generate_llm_reply(
             system_prompt,
-            f"The user needs help. Here is what the system can do:\n{system_data}\n\nUser said: \"{message}\"\n\nExplain how they can interact with the system.",
-            max_tokens=300,
-            fallback="I can help you with: creating orders, listing orders, checking shipment status, agent info, system metrics, and more. What would you like to do?",
+            f"The user is asking for help or guidance. They said: \"{message}\"\n\n"
+            f"Give a helpful, conversational overview of what you can assist with — orders, shipments, agents, metrics, analytics. "
+            f"Keep it natural and inviting. Don't list commands or syntax. Just explain capabilities in plain language.",
+            max_tokens=250,
+            fallback=(
+                "I can help you with your warehouse operations — creating and tracking orders, checking shipment status, "
+                "viewing agent performance, system metrics, cost analysis, and more. Just ask me naturally, like "
+                "'Show me pending orders' or 'What's our on-time delivery rate?' What would you like to know?"
+            ),
         )
         return await _respond(reply=reply, action="help")
 
@@ -1059,13 +1020,16 @@ async def chat(
     reply = await _generate_llm_reply(
         system_prompt,
         f"The user said: \"{message}\"\n\n"
-        f"Help them understand what they can ask about. "
-        f"Available topics: create order, list orders, check status, agents, metrics, "
-        f"proceed delivery, filter orders, fulfillment centers, carriers, shipments, "
-        f"cost analysis, notifications, cycle stats. Keep it helpful and concise. "
-        f"Never use markdown or ** bold formatting.",
-        max_tokens=300,
-        fallback="I can help you with: creating orders, listing orders, checking shipment status, agent info, system metrics, delivery routing, and more. What would you like to do?",
+        f"They may be asking something outside the predefined intents, or just chatting naturally. "
+        f"Respond helpfully and conversationally. If it seems like a warehouse-related question, "
+        f"guide them toward what you can help with (orders, shipments, agents, metrics, analytics). "
+        f"Keep it natural and concise. Never use markdown or ** bold formatting.",
+        max_tokens=250,
+        fallback=(
+            "I'm here to help with your warehouse operations. You can ask me about orders, "
+            "shipments, agent performance, metrics, or anything else fulfillment-related. "
+            "What would you like to know?"
+        ),
     )
     return await _respond(reply=reply, action="help")
 

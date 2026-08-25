@@ -28,63 +28,62 @@ export function ActivityLog() {
   const { data: monitorData, loading } = useAgentMonitor()
   const { query } = useSearch()
 
-  const logs: LogEntry[] = loading
-    ? []
-    : monitorData
-      ? [
-          {
-            id: "1",
-            type: "success" as const,
-            agent: "System",
-            message: `Monitor cycle completed — ${monitorData.shipments_checked} shipments checked`,
-            time: new Date(monitorData.completed_at).toLocaleTimeString(),
-          },
-          ...(monitorData.delays_detected > 0
-            ? [
-                {
-                  id: "2",
-                  type: "warning" as const,
-                  agent: "MonitorAgent",
-                  message: `${monitorData.delays_detected} delays detected — rerouting initiated`,
-                  time: new Date(monitorData.completed_at).toLocaleTimeString(),
-                },
-              ]
-            : []),
-          ...(monitorData.reroutes_initiated > 0
-            ? [
-                {
-                  id: "3",
-                  type: "info" as const,
-                  agent: "ReroutingAgent",
-                  message: `${monitorData.reroutes_initiated} reroutes initiated`,
-                  time: new Date(monitorData.completed_at).toLocaleTimeString(),
-                },
-              ]
-            : []),
-          ...(monitorData.notifications_sent > 0
-            ? [
-                {
-                  id: "4",
-                  type: "info" as const,
-                  agent: "CommunicationAgent",
-                  message: `${monitorData.notifications_sent} notifications sent`,
-                  time: new Date(monitorData.completed_at).toLocaleTimeString(),
-                },
-              ]
-            : []),
-          ...(monitorData.anomalies_found > 0
-            ? [
-                {
-                  id: "5",
-                  type: "error" as const,
-                  agent: "CostOptimizer",
-                  message: `${monitorData.anomalies_found} anomalies found in current cycle`,
-                  time: new Date(monitorData.completed_at).toLocaleTimeString(),
-                },
-              ]
-            : []),
-        ]
-      : []
+  const logs = useMemo<LogEntry[]>(() => {
+    if (loading || !monitorData) return []
+    return [
+      {
+        id: "1",
+        type: "success" as const,
+        agent: "System",
+        message: `Monitor cycle completed — ${monitorData.shipments_checked} shipments checked`,
+        time: new Date(monitorData.completed_at).toLocaleTimeString(),
+      },
+      ...(monitorData.delays_detected > 0
+        ? [
+            {
+              id: "2",
+              type: "warning" as const,
+              agent: "MonitorAgent",
+              message: `${monitorData.delays_detected} delays detected — rerouting initiated`,
+              time: new Date(monitorData.completed_at).toLocaleTimeString(),
+            },
+          ]
+        : []),
+      ...(monitorData.reroutes_initiated > 0
+        ? [
+            {
+              id: "3",
+              type: "info" as const,
+              agent: "ReroutingAgent",
+              message: `${monitorData.reroutes_initiated} reroutes initiated`,
+              time: new Date(monitorData.completed_at).toLocaleTimeString(),
+            },
+          ]
+        : []),
+      ...(monitorData.notifications_sent > 0
+        ? [
+            {
+              id: "4",
+              type: "info" as const,
+              agent: "CommunicationAgent",
+              message: `${monitorData.notifications_sent} notifications sent`,
+              time: new Date(monitorData.completed_at).toLocaleTimeString(),
+            },
+          ]
+        : []),
+      ...(monitorData.anomalies_found > 0
+        ? [
+            {
+              id: "5",
+              type: "error" as const,
+              agent: "CostOptimizer",
+              message: `${monitorData.anomalies_found} anomalies found in current cycle`,
+              time: new Date(monitorData.completed_at).toLocaleTimeString(),
+            },
+          ]
+        : []),
+    ]
+  }, [loading, monitorData])
 
   const filtered = useMemo(() => {
     if (!query.trim()) return logs

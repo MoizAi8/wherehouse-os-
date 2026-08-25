@@ -22,61 +22,62 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
   const { data: monitorData, loading, error, refetch } = useAgentMonitor()
   const { query } = useSearch()
 
-  const delaysDetected = monitorData?.delays_detected ?? 0
-  const agents: AgentInfo[] = loading
-    ? []
-    : [
-        {
-          id: "routing",
-          name: "RoutingAgent",
-          role: "Order Router",
-          status: "active",
-          uptime: "--",
-          tasksCompleted: 0,
-          workload: 0,
-          accuracy: 0,
-        },
-        {
-          id: "monitor",
-          name: "MonitorAgent",
-          role: "Shipment Monitor",
-          status: "processing",
-          uptime: "--",
-          tasksCompleted: monitorData?.shipments_checked ?? 0,
-          workload: 0,
-          accuracy: 0,
-        },
-        {
-          id: "prediction",
-          name: "PredictionAgent",
-          role: "Failure Predictor",
-          status: "processing",
-          uptime: "--",
-          tasksCompleted: delaysDetected,
-          workload: 0,
-          accuracy: 0,
-        },
-        {
-          id: "rerouting",
-          name: "ReroutingAgent",
-          role: "Reroute Handler",
-          status: delaysDetected > 0 ? "active" : "idle",
-          uptime: "--",
-          tasksCompleted: monitorData?.reroutes_initiated ?? 0,
-          workload: 0,
-          accuracy: 0,
-        },
-        {
-          id: "communication",
-          name: "CommunicationAgent",
-          role: "Notification Relay",
-          status: "active",
-          uptime: "--",
-          tasksCompleted: monitorData?.notifications_sent ?? 0,
-          workload: 0,
-          accuracy: 0,
-        },
-      ]
+  const agents = useMemo<AgentInfo[]>(() => {
+    const delaysDetected = monitorData?.delays_detected ?? 0
+    if (loading) return []
+    return [
+      {
+        id: "routing",
+        name: "RoutingAgent",
+        role: "Order Router",
+        status: "active",
+        uptime: "--",
+        tasksCompleted: 0,
+        workload: 0,
+        accuracy: 0,
+      },
+      {
+        id: "monitor",
+        name: "MonitorAgent",
+        role: "Shipment Monitor",
+        status: "processing",
+        uptime: "--",
+        tasksCompleted: monitorData?.shipments_checked ?? 0,
+        workload: 0,
+        accuracy: 0,
+      },
+      {
+        id: "prediction",
+        name: "PredictionAgent",
+        role: "Failure Predictor",
+        status: "processing",
+        uptime: "--",
+        tasksCompleted: delaysDetected,
+        workload: 0,
+        accuracy: 0,
+      },
+      {
+        id: "rerouting",
+        name: "ReroutingAgent",
+        role: "Reroute Handler",
+        status: delaysDetected > 0 ? "active" : "idle",
+        uptime: "--",
+        tasksCompleted: monitorData?.reroutes_initiated ?? 0,
+        workload: 0,
+        accuracy: 0,
+      },
+      {
+        id: "communication",
+        name: "CommunicationAgent",
+        role: "Notification Relay",
+        status: "active",
+        uptime: "--",
+        tasksCompleted: monitorData?.notifications_sent ?? 0,
+        workload: 0,
+        accuracy: 0,
+      },
+    ]
+  }, [loading, monitorData])
 
   const filtered = useMemo(() => {
     if (!query.trim()) return agents

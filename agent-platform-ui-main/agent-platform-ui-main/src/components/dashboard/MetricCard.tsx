@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { TrendingUp, TrendingDown } from "lucide-react"
@@ -12,29 +12,40 @@ interface MetricCardProps {
 
 function AnimatedValue({ value }: { value: string }) {
   const num = parseFloat(value.replace(/[$,%]/g, ""))
-  const suffix = value.includes("%") ? "%" : value.includes("$") ? "" : ""
+  const suffix = value.includes("%") ? "%" : ""
   const prefix = value.startsWith("$") ? "$" : ""
-  const [display, setDisplay] = useState(0)
+  const isValidNum = !isNaN(num)
+  const [display, setDisplay] = useState(isValidNum ? 0 : num)
+  const frameRef = useRef<number>()
+  const startRef = useRef<number>()
+  const targetRef = useRef(num)
 
   useEffect(() => {
-    if (isNaN(num)) { setDisplay(0); return }
-    const duration = 1200
-    const steps = 30
-    const increment = num / steps
-    let current = 0
-    const interval = setInterval(() => {
-      current += increment
-      if (current >= num) {
-        setDisplay(num)
-        clearInterval(interval)
-      } else {
-        setDisplay(current)
-      }
-    }, duration / steps)
-    return () => clearInterval(interval)
-  }, [num])
+    if (!isValidNum) return
 
-  if (isNaN(num)) return <span className="text-2xl font-bold tracking-tight text-foreground">{value}</span>
+    targetRef.current = num
+    startRef.current = performance.now()
+    const duration = 1200
+
+    const animate = (now: number) => {
+      const elapsed = now - (startRef.current || now)
+      const progress = Math.min(elapsed / duration, 1)
+      const eased = 1 - Math.pow(1 - progress, 3)
+      setDisplay(num * eased)
+      if (progress < 1) {
+        frameRef.current = requestAnimationFrame(animate)
+      } else {
+        setDisplay(num)
+      }
+    }
+
+    frameRef.current = requestAnimationFrame(animate)
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current)
+    }
+  }, [num, isValidNum])
+
+  if (!isValidNum) return <span className="text-2xl font-bold tracking-tight text-foreground">{value}</span>
 
   return (
     <span className="text-2xl font-bold tracking-tight text-foreground">

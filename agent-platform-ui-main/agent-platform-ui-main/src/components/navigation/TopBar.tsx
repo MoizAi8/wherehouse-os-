@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { Bell, Search, ChevronDown, Settings, X, CheckCircle2, AlertTriangle, Info, Bot } from "lucide-react"
+import { Bell, Search, ChevronDown, Settings, X, CheckCircle2, AlertTriangle, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {

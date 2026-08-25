@@ -23,28 +23,33 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const load = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const res = await fetch("/api/auth/me")
-      const body = await res.json()
-      if (!res.ok) {
-        setError(body?.error || `Request failed (${res.status})`)
-        setProfile(null)
-        return
-      }
-      setProfile(body)
-    } catch {
-      setError("Could not load your profile. Please try again.")
-      setProfile(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    void load()
+    let cancelled = false
+    async function load() {
+      setLoading(true)
+      setError(null)
+      try {
+        const res = await fetch("/api/auth/me")
+        const body = await res.json()
+        if (cancelled) return
+        if (!res.ok) {
+          setError(body?.error || `Request failed (${res.status})`)
+          setProfile(null)
+          return
+        }
+        setProfile(body)
+      } catch {
+        if (cancelled) return
+        setError("Could not load your profile. Please try again.")
+        setProfile(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   return (

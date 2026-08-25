@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
-import { motion } from "framer-motion"
-import { Bot, Send, Loader2, Package, Trash2 } from "lucide-react"
+import { Bot, Send, Loader2, Trash2, AlertTriangle, WifiOff } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Message } from "@/lib/ai/client"
 
 const SESSION_KEY = "fulfillos_chat_session"
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 1000
 
 function loadSessionId(): string {
   if (typeof window === "undefined") return ""
@@ -31,19 +32,20 @@ const suggestions = [
 ]
 
 export function AIAssistant({ initialContext }: { initialContext?: { name: string; role: string } | null }) {
-  const [input, setInput] = useState("")
+  const [input, setInput] = useState(() => {
+    if (initialContext) {
+      return `Show me details about ${initialContext.name} (${initialContext.role})`
+    }
+    return ""
+  })
   const [sessionId, setSessionId] = useState<string>(loadSessionId)
   const [messages, setMessages] = useState<Message[]>([])
   const [streaming, setStreaming] = useState(false)
   const [streamContent, setStreamContent] = useState("")
+  const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "checking">("checking")
+  const [retryAttempt, setRetryAttempt] = useState(0)
   const scrollRef = useRef<HTMLDivElement>(null)
   const idCounter = useRef(0)
-
-  useEffect(() => {
-    if (initialContext) {
-      setInput(`Show me details about ${initialContext.name} (${initialContext.role})`)
-    }
-  }, [initialContext])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -76,12 +78,72 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     }
   }, [sessionId])
 
+  const checkConnection = useCallback(async () => {
+    try {
+      const res = await fetch("/api/health", { method: "GET", cache: "no-store" })
+      setConnectionStatus(res.ok ? "connected" : "disconnected")
+    } catch {
+      setConnectionStatus("disconnected")
+    }
+  }, [])
+
+  useEffect(() => {
+    // Perform initial connection check using async IIFE to avoid setState-in-effect warning
+    const doInitialCheck = async () => {
+      try {
+        const res = await fetch("/api/health", { method: "GET", cache: "no-store" })
+        setConnectionStatus(res.ok ? "connected" : "disconnected")
+      } catch {
+        setConnectionStatus("disconnected")
+      }
+    }
+    doInitialCheck()
+
+    const interval = setInterval(() => {
+      checkConnection()
+    }, 30000)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [checkConnection])
+
   const clearChat = () => {
     const fresh = `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     window.localStorage.setItem(SESSION_KEY, fresh)
     setSessionId(fresh)
-    setMessages([{ id: "0", role: "assistant", content: "👋 Chat cleared. Send a message to start a new conversation." }])
+    setMessages([{ id: "0", role: "assistant", content: "Chat cleared. Send a message to start a new conversation." }])
     idCounter.current = 1
+    setRetryAttempt(0)
+  }
+
+  // Separate async function for retry logic (not a useCallback to avoid circular reference)
+  const sendWithRetry = async (text: string, retries = MAX_RETRIES): Promise<{ reply: string; sessionId?: string }> => {
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, sessionId }),
+      })
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}))
+        throw new Error(errorData.error || `Request failed: ${res.status}`)
+      }
+
+      const data = await res.json()
+      setRetryAttempt(0)
+      return { reply: data.reply, sessionId: data.sessionId }
+    } catch (err) {
+      if (retries > 0) {
+        const nextAttempt = MAX_RETRIES - retries + 1
+        setRetryAttempt(nextAttempt)
+        await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * nextAttempt))
+        return sendWithRetry(text, retries - 1)
+      }
+      setRetryAttempt(0)
+      throw err
+    }
   }
 
   const handleSend = useCallback(async (text: string) => {
@@ -95,42 +157,53 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     setStreamContent("")
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId }),
-      })
-
-      if (!res.ok) throw new Error("Failed")
-
-      const data = await res.json()
-      if (data.sessionId) {
-        window.localStorage.setItem(SESSION_KEY, data.sessionId)
-        setSessionId(data.sessionId)
+      const { reply, sessionId: newSessionId } = await sendWithRetry(text)
+      if (newSessionId) {
+        window.localStorage.setItem(SESSION_KEY, newSessionId)
+        setSessionId(newSessionId)
       }
       idCounter.current += 1
-      setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: data.reply }])
+      setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: reply }])
     } catch (err) {
       idCounter.current += 1
       const errMsg = err instanceof Error ? err.message : "AI service unavailable. Check your API key and backend connection."
       setMessages((prev) => [...prev, { id: `msg-${idCounter.current}`, role: "assistant", content: `Error: ${errMsg}` }])
     } finally {
       setStreaming(false)
+      setStreamContent("")
+      setRetryAttempt(0)
     }
-  }, [messages, streaming, sessionId])
+  }, [streaming, sessionId, sendWithRetry])
 
   return (
     <div className="flex flex-col h-full bg-card/95 backdrop-blur-2xl">
       <div className="flex items-center justify-between px-5 py-3 border-b border-border/30 bg-gradient-to-r from-accent/5 to-transparent">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-accent to-primary shadow-lg">
-            <Bot className="h-4 w-4 text-white" />
+          <div className={cn(
+            "flex h-8 w-8 items-center justify-center rounded-xl shadow-lg",
+            connectionStatus === "connected"
+              ? "bg-gradient-to-br from-accent to-primary"
+              : connectionStatus === "disconnected"
+              ? "bg-gradient-to-br from-destructive to-red-600"
+              : "bg-gradient-to-br from-warning to-amber-600"
+          )}>
+            {connectionStatus === "connected" ? (
+              <Bot className="h-4 w-4 text-white" />
+            ) : connectionStatus === "disconnected" ? (
+              <WifiOff className="h-4 w-4 text-white" />
+            ) : (
+              <Loader2 className="h-4 w-4 text-white animate-spin" />
+            )}
           </div>
           <div>
             <p className="text-sm font-semibold text-foreground">Warehouse OS AI</p>
             <div className="flex items-center gap-1">
-              <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-              <span className="text-[10px] text-muted-foreground">Online</span>
+              <span className={cn(
+                "h-1.5 w-1.5 rounded-full animate-pulse",
+                connectionStatus === "connected" ? "bg-success" :
+                connectionStatus === "disconnected" ? "bg-destructive" : "bg-warning"
+              )} />
+              <span className="text-[10px] text-muted-foreground capitalize">{connectionStatus}</span>
             </div>
           </div>
         </div>
@@ -147,7 +220,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
           {messages.length === 0 && (
             <div className="flex justify-start">
               <div className="max-w-[85%] rounded-2xl rounded-bl-md bg-muted/50 px-4 py-2.5 text-sm text-foreground border border-border/20">
-                👋 Welcome to Warehouse OS! Send a message to get started.
+                Welcome to Warehouse OS! Send a message to get started.
               </div>
             </div>
           )}
@@ -178,6 +251,14 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
               </div>
             </div>
           )}
+          {retryAttempt > 0 && (
+            <div className="flex justify-center">
+              <div className="flex items-center gap-2 text-xs text-warning bg-warning/10 px-3 py-1.5 rounded-full border border-warning/20">
+                <AlertTriangle className="h-3 w-3" />
+                <span>Retrying... (attempt {retryAttempt}/{MAX_RETRIES})</span>
+              </div>
+            </div>
+          )}
         </div>
       </ScrollArea>
 
@@ -197,11 +278,15 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
             onChange={(e) => setInput(e.target.value)}
             placeholder="Ask anything about your warehouse..."
             className="flex-1 h-10 rounded-xl border border-border/30 bg-muted/30 px-4 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent/40 focus:outline-none focus:ring-1 focus:ring-accent/20 transition-all"
+            disabled={streaming}
           />
           <button type="submit" disabled={!input.trim() || streaming}
-            className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-white disabled:opacity-40 transition-all hover:opacity-90 active:scale-95"
+            className={cn(
+              "flex h-10 w-10 items-center justify-center rounded-xl text-white disabled:opacity-40 transition-all hover:opacity-90 active:scale-95",
+              streaming ? "bg-muted" : "bg-accent"
+            )}
           >
-            <Send className="h-4 w-4" />
+            {streaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           </button>
         </form>
       </div>

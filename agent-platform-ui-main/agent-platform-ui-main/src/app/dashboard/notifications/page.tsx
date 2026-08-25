@@ -4,7 +4,7 @@ import { useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Bell, X, Thermometer, CheckCircle2, AlertTriangle, Info, Bot } from "lucide-react"
+import { Thermometer, CheckCircle2, AlertTriangle, Info, Bot } from "lucide-react"
 
 interface NotificationItem {
   id: string
@@ -34,6 +34,7 @@ const typeConfig = {
 }
 
 export default function NotificationsPage() {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [dismissed, setDismissed] = useState<string[]>([])
 
   const visible = allNotifications.filter((n) => !dismissed.includes(n.id))

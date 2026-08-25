@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 
 import { backendUrl, getAuthHeaders } from "@/lib/backend"
 
-export async function POST(req: NextRequest) {
+export async function POST(_req: NextRequest) {
   const base = backendUrl()
   if (!base) {
     return Response.json({ error: "Backend not configured: BACKEND_URL is unset" }, { status: 503 })

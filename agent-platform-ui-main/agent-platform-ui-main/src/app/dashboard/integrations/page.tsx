@@ -4,7 +4,7 @@ import { useState, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   Plug, Puzzle, Plus, TestTube, RefreshCw, Trash2, CheckCircle2,
-  XCircle, Loader2, AlertTriangle, X, ExternalLink, Database,
+  XCircle, Loader2, AlertTriangle, X,
 } from "lucide-react"
 import { api } from "@/lib/api"
 import { useIntegrations, type IntegrationConnection, type SyncResult } from "@/hooks/use-integrations"
