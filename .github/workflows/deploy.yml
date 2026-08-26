@@ -9,6 +9,8 @@ env:
   NODE_VERSION: '20.18.0'
   PYTHON_VERSION: '3.12'
   UV_VERSION: '0.5.4'
+  API_IMAGE: fulfillment-api
+  FRONTEND_IMAGE: fulfillment-ui
 
 jobs:
   test-api:
