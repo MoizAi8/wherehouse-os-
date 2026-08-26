@@ -7,6 +7,11 @@ export default defineConfig({
     setupFiles: ["./src/__tests__/setup.tsx"],
     globals: true,
     css: true,
+    server: {
+      deps: {
+        inline: [/@exodus\/bytes/, /html-encoding-sniffer/]
+      }
+    }
   },
   resolve: {
     alias: {
