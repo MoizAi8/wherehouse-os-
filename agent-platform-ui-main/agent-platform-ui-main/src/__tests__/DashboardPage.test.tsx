@@ -46,7 +46,8 @@ describe("Category 1: Dashboard Overview", () => {
 
   it("Test 4: Live indicator renders", () => {
     render(<DashboardPage />)
-    expect(screen.getByText("Online")).toBeInTheDocument()
+    expect(screen.getByText("Warehouse OS")).toBeInTheDocument()
+    expect(screen.getByText("Monitor agents and manage operations")).toBeInTheDocument()
   })
 
   it("Test 5: Agent session summary renders", () => {
