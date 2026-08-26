@@ -5,9 +5,6 @@ on:
   workflow_dispatch:
 
 env:
-  REGISTRY: ghcr.io/${{ github.repository_owner }}
-  API_IMAGE: fulfillment-api
-  FRONTEND_IMAGE: fulfillment-ui
   # Pin exact versions to match local development [ARCHITECT-LOCK: DO NOT OVERWRITE]
   NODE_VERSION: '20.18.0'
   PYTHON_VERSION: '3.12'
@@ -141,6 +138,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: "Sanitize Repository Owner to Lowercase [ARCHITECT-LOCK: DO NOT OVERWRITE]"
+        run: |
+          echo "REPO_OWNER_LOWERCASE=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -190,8 +191,8 @@ jobs:
           target: production
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:latest
-            ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:${{ github.sha }}
+            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.API_IMAGE }}:latest
+            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.API_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
@@ -204,8 +205,8 @@ jobs:
           context: agent-platform-ui-main/agent-platform-ui-main
           push: true
           tags: |
-            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
-            ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.FRONTEND_IMAGE }}:latest
+            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
