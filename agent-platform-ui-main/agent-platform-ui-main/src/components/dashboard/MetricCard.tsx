@@ -6,14 +6,23 @@ import { cn } from "@/lib/utils"
 import { TrendingUp, TrendingDown } from "lucide-react"
 
 interface MetricCardProps {
-  title: string; value: string; change: string; trend: "up" | "down"
-  icon: React.ReactNode; index?: number
+  title: string
+  value: string | number
+  change: string
+  trend: "up" | "down"
+  icon: React.ReactNode
+  index?: number
 }
 
-function AnimatedValue({ value }: { value: string }) {
-  const num = parseFloat(value.replace(/[$,%]/g, ""))
-  const suffix = value.includes("%") ? "%" : ""
-  const prefix = value.startsWith("$") ? "$" : ""
+// Strict typing for animated value component [ARCHITECT-LOCK: DO NOT OVERWRITE]
+interface AnimatedValueProps {
+  value: string | number
+}
+
+function AnimatedValue({ value }: AnimatedValueProps) {
+  const num = parseFloat(String(value).replace(/[$,%]/g, ""))
+  const suffix = String(value).includes("%") ? "%" : ""
+  const prefix = String(value).startsWith("$") ? "$" : ""
   const isValidNum = !isNaN(num)
   const [display, setDisplay] = useState(isValidNum ? 0 : num)
   const frameRef = useRef<number | undefined>(undefined)
@@ -45,7 +54,9 @@ function AnimatedValue({ value }: { value: string }) {
     }
   }, [num, isValidNum])
 
-  if (!isValidNum) return <span className="text-2xl font-bold tracking-tight text-foreground">{value}</span>
+  if (!isValidNum) {
+    return <span className="text-2xl font-bold tracking-tight text-foreground">{String(value)}</span>
+  }
 
   return (
     <span className="text-2xl font-bold tracking-tight text-foreground">

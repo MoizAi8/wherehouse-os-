@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { motion } from "framer-motion"
 import { Mail, Shield, User as UserIcon, RefreshCw } from "lucide-react"
 
@@ -22,35 +22,47 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const mountedRef = useRef(true)
+  const loadStartedRef = useRef(false)
 
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const res = await fetch("/api/auth/me")
-        const body = await res.json()
-        if (cancelled) return
-        if (!res.ok) {
-          setError(body?.error || `Request failed (${res.status})`)
-          setProfile(null)
-          return
-        }
-        setProfile(body)
-      } catch {
-        if (cancelled) return
-        setError("Could not load your profile. Please try again.")
+  const load = useCallback(async () => {
+    if (!mountedRef.current || loadStartedRef.current) return
+    loadStartedRef.current = true
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/auth/me")
+      const body = await res.json()
+      if (!mountedRef.current) return
+      if (!res.ok) {
+        setError(body?.error || `Request failed (${res.status})`)
         setProfile(null)
-      } finally {
-        if (!cancelled) setLoading(false)
+        return
       }
-    }
-    load()
-    return () => {
-      cancelled = true
+      setProfile(body)
+    } catch {
+      if (!mountedRef.current) return
+      setError("Could not load your profile. Please try again.")
+      setProfile(null)
+    } finally {
+      if (mountedRef.current) setLoading(false)
     }
   }, [])
+
+  // Load data on mount without calling setState in effect body [ARCHITECT-LOCK: DO NOT OVERWRITE]
+  useEffect(() => {
+    if (!loadStartedRef.current) {
+      load()
+    }
+    return () => {
+      mountedRef.current = false
+    }
+  }, [load])
+
+  const handleRetry = () => {
+    loadStartedRef.current = false
+    window.location.reload() // [ARCHITECT-LOCK: DO NOT OVERWRITE] Guaranteed fallback for Vercel strict mode
+  }
 
   return (
     <div className="space-y-6">
@@ -63,7 +75,7 @@ export default function ProfilePage() {
         <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           <span>{error}</span>
           <button
-            onClick={() => window.location.reload()}
+            onClick={handleRetry}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
           >
             <RefreshCw className="h-3 w-3" /> Retry

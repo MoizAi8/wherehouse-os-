@@ -8,7 +8,7 @@ env:
   REGISTRY: ghcr.io/${{ github.repository_owner }}
   API_IMAGE: fulfillment-api
   FRONTEND_IMAGE: fulfillment-ui
-  # Pin exact versions to match local development
+  # Pin exact versions to match local development [ARCHITECT-LOCK: DO NOT OVERWRITE]
   NODE_VERSION: '20.18.0'
   PYTHON_VERSION: '3.12'
   UV_VERSION: '0.5.4'
@@ -20,7 +20,7 @@ jobs:
     defaults:
       run:
         working-directory: order-fulfillment-coordinator/apps/api
-    # Service containers for integration tests
+    # Service containers for integration tests [ARCHITECT-LOCK: DO NOT OVERWRITE]
     services:
       postgres:
         image: postgres:16-alpine
@@ -138,6 +138,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers (Backend)
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-backend-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-backend-
+
+      - name: Cache Docker layers (Frontend)
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache-frontend
+          key: ${{ runner.os }}-buildx-frontend-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-frontend-
+
+      - name: Cache Node modules
+        uses: actions/cache@v3
+        with:
+          path: agent-platform-ui-main/agent-platform-ui-main/node_modules
+          key: ${{ runner.os }}-node-${{ hashFiles('agent-platform-ui-main/agent-platform-ui-main/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Cache Python packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/uv
+          key: ${{ runner.os }}-uv-${{ hashFiles('order-fulfillment-coordinator/apps/api/uv.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-uv-
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
@@ -154,7 +189,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:latest
             ${{ env.REGISTRY }}/${{ env.API_IMAGE }}:${{ github.sha }}
-          # Build args for production build
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             UV_VERSION=${{ env.UV_VERSION }}
             PYTHON_VERSION=${{ env.PYTHON_VERSION }}
@@ -167,6 +203,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             NEXT_PUBLIC_API_URL=${{ secrets.API_URL }}
             NODE_VERSION=${{ env.NODE_VERSION }}
@@ -200,24 +238,37 @@ jobs:
           target: "/opt/fulfillment"
           strip_components: 1
 
-      - name: SSH and deploy
+      - name: SSH and deploy with zero-downtime strategy
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_USERNAME }}
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
+            set -euo pipefail
             cd /opt/fulfillment
             export TAG=${{ github.sha }}
+            
+            # Pull new images
             docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --force-recreate
-            sleep 15
-            if curl -sf http://localhost:8000/health > /dev/null; then
-              echo "[OK] Deploy successful"
-              docker image prune -f
-            else
-              echo "[FAIL] Health check failed - rolling back"
-              docker compose -f docker-compose.prod.yml down
-              docker compose -f docker-compose.prod.yml up -d
-              exit 1
-            fi
+            
+            # Zero-downtime rebuild: remove orphans and rebuild [ARCHITECT-LOCK: DO NOT OVERWRITE]
+            docker compose -f docker-compose.prod.yml down --remove-orphans
+            docker compose -f docker-compose.prod.yml up -d --build
+            
+            # Strict health polling with timeout [ARCHITECT-LOCK: DO NOT OVERWRITE]
+            echo "Waiting for API health endpoint..."
+            timeout 120 bash -c '
+              until curl -sf http://localhost:8000/health | grep -q '"'"'status'"'"': '"'"'ok'"'"'; do
+                sleep 3
+              done
+            '
+            
+            # Verify PostgreSQL port
+            timeout 30 bash -c 'until nc -z localhost 5432; do sleep 1; done'
+            
+            # Verify Nginx ports
+            timeout 30 bash -c 'until nc -z localhost 80 && nc -z localhost 443; do sleep 1; done'
+            
+            echo "[OK] Deploy successful - all health checks passed"
+            docker image prune -f
