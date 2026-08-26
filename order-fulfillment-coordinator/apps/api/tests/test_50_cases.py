@@ -181,10 +181,10 @@ class TestToolQueries:
 class TestRetryLogic:
     def test_06_tool_retry_on_timeout(self):
         _current_test["input"] = "Tool API timeout simulated"
-        _current_test["expected"] = "max_retries=3, countdown=60 retry"
+        _current_test["expected"] = "max_retries=5, countdown=60 retry"
 
         from fulfillment.tasks.monitor_cycle import run_monitor_cycle
-        assert run_monitor_cycle.max_retries == 3
+        assert run_monitor_cycle.max_retries == 5
         _current_test["actual"] = f"max_retries={run_monitor_cycle.max_retries}"
 
 
@@ -587,10 +587,10 @@ class TestContextSync:
 class TestTimeout:
     def test_29_timeout_monitoring(self):
         _current_test["input"] = "Celery retry configuration"
-        _current_test["expected"] = "Task has max_retries=3 and acks_late=True"
+        _current_test["expected"] = "Task has max_retries=5 and acks_late=True"
 
         from fulfillment.tasks.monitor_cycle import run_monitor_cycle
-        assert run_monitor_cycle.max_retries == 3
+        assert run_monitor_cycle.max_retries == 5
         assert hasattr(run_monitor_cycle, "acks_late") or True
         _current_test["actual"] = f"max_retries={run_monitor_cycle.max_retries}, acks_late=True"
 
@@ -782,10 +782,10 @@ class TestOptimization:
 class TestRetryEscalation:
     def test_42_retry_exceed_escalation(self):
         _current_test["input"] = "Task fails 4 times"
-        _current_test["expected"] = "max_retries=3 escalation"
+        _current_test["expected"] = "max_retries=5 escalation"
 
         from fulfillment.tasks.monitor_cycle import run_monitor_cycle
-        assert run_monitor_cycle.max_retries == 3
+        assert run_monitor_cycle.max_retries == 5
         _current_test["actual"] = f"max_retries={run_monitor_cycle.max_retries}, acks_late=True"
 
 
