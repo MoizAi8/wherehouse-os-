@@ -10,6 +10,14 @@
     "test": "vitest run --config vitest.config.mts",
     "test:watch": "vitest"
   },
+  "overrides": {
+    "html-encoding-sniffer": "3.0.0",
+    "@exodus/bytes": "3.1.1"
+  },
+  "resolutions": {
+    "html-encoding-sniffer": "3.0.0",
+    "@exodus/bytes": "3.1.1"
+  },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.68",
     "@hookform/resolvers": "^5.4.0",
