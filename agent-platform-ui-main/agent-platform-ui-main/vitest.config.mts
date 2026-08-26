@@ -1,7 +1,27 @@
 import { defineConfig } from "vitest/config"
-import path from "path"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const phantomModulePath = path.resolve(__dirname, "./__mocks__/empty.cjs")
+
+const omegaGhostInterceptor = {
+  name: "omega-ghost-interceptor",
+  enforce: "pre" as const,
+  resolveId(source: string) {
+    if (source === "@exodus/bytes" || source.includes("@exodus/bytes")) {
+      return phantomModulePath
+    }
+    if (source === "html-encoding-sniffer" || source.includes("html-encoding-sniffer")) {
+      return phantomModulePath
+    }
+    return null
+  }
+}
 
 export default defineConfig({
+  plugins: [omegaGhostInterceptor],
   test: {
     environment: "jsdom",
     setupFiles: ["./src/__tests__/setup.tsx"],
@@ -10,8 +30,8 @@ export default defineConfig({
     server: {
       deps: {
         inline: [
-          /@exodus\/bytes/,
           /html-encoding-sniffer/,
+          /@exodus\/bytes/,
           /jsdom/,
           /std-env/,
           /happy-dom/,
@@ -59,8 +79,8 @@ export default defineConfig({
       "@/app": path.resolve(__dirname, "./src/app"),
       "@/providers": path.resolve(__dirname, "./src/providers"),
       "@/types": path.resolve(__dirname, "./src/types"),
-      "@exodus/bytes": path.resolve(__dirname, "./src/__mocks__/@exodus-bytes.ts"),
-      "html-encoding-sniffer": path.resolve(__dirname, "./src/__mocks__/html-encoding-sniffer.ts")
+      "@exodus/bytes": path.resolve(__dirname, "./__mocks__/empty.cjs"),
+      "html-encoding-sniffer": path.resolve(__dirname, "./__mocks__/empty.cjs")
     },
     conditions: ["import", "module", "browser", "default"]
   },
