@@ -4,50 +4,19 @@ import { fileURLToPath } from "node:url"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
-const phantomModulePath = path.resolve(__dirname, "./__mocks__/empty.cjs")
-
-const omegaGhostInterceptor = {
-  name: "omega-ghost-interceptor",
-  enforce: "pre" as const,
-  resolveId(source: string) {
-    if (source === "@exodus/bytes" || source.includes("@exodus/bytes")) {
-      return phantomModulePath
-    }
-    if (source === "html-encoding-sniffer" || source.includes("html-encoding-sniffer")) {
-      return phantomModulePath
-    }
-    return null
-  }
-}
 
 export default defineConfig({
-  plugins: [omegaGhostInterceptor],
   test: {
-    environment: "jsdom",
+    environment: "happy-dom",
     setupFiles: ["./src/__tests__/setup.tsx"],
     globals: true,
     css: true,
     server: {
       deps: {
-        inline: [
-          /html-encoding-sniffer/,
-          /@exodus\/bytes/,
-          /jsdom/,
-          /std-env/,
-          /happy-dom/,
-          /node-fetch/,
-          /data-uri-to-buffer/,
-          /whatwg-url/,
-          /web-streams-polyfill/
-        ]
+        inline: []
       }
     },
     pool: "forks",
-    poolOptions: {
-      forks: {
-        singleFork: true
-      }
-    },
     maxConcurrency: 1,
     isolate: true,
     restoreMocks: true,
@@ -78,20 +47,12 @@ export default defineConfig({
       "@/contexts": path.resolve(__dirname, "./src/contexts"),
       "@/app": path.resolve(__dirname, "./src/app"),
       "@/providers": path.resolve(__dirname, "./src/providers"),
-      "@/types": path.resolve(__dirname, "./src/types"),
-      "@exodus/bytes": path.resolve(__dirname, "./__mocks__/empty.cjs"),
-      "html-encoding-sniffer": path.resolve(__dirname, "./__mocks__/empty.cjs")
+      "@/types": path.resolve(__dirname, "./src/types")
     },
     conditions: ["import", "module", "browser", "default"]
   },
   ssr: {
-    noExternal: [
-      "@exodus/bytes",
-      "html-encoding-sniffer",
-      "jsdom",
-      "std-env",
-      "happy-dom"
-    ],
+    noExternal: [],
     external: []
   },
   optimizeDeps: {
@@ -103,7 +64,7 @@ export default defineConfig({
       "@testing-library/jest-dom",
       "@testing-library/user-event",
       "vitest",
-      "jsdom",
+      "happy-dom",
       "react-dom/client",
       "react/jsx-runtime"
     ],
