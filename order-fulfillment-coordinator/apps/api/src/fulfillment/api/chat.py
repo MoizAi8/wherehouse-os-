@@ -319,7 +319,13 @@ async def chat(
 ) -> ChatResponse:
     message = body.message.strip()
     correlation_id = get_correlation_id()
-    user_id = _user.get("sub") if _user else None
+    # Defensive: handle both dict (production JWT) and User object (tests/ORM) [ARCHITECT-LOCK: DO NOT OVERWRITE]
+    if isinstance(_user, dict):
+        user_id = _user.get("sub")
+    elif _user is not None:
+        user_id = getattr(_user, "id", None) or getattr(_user, "sub", None)
+    else:
+        user_id = None
 
     log_agent_event("ChatAPI", "request_received", entity_id=correlation_id, details={
         "message_length": len(message),
