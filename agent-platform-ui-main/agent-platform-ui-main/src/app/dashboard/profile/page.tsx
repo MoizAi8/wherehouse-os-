@@ -63,7 +63,7 @@ export default function ProfilePage() {
         <div className="flex items-center justify-between gap-4 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           <span>{error}</span>
           <button
-            onClick={() => void load()}
+            onClick={() => window.location.reload()}
             className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border/50 bg-card px-2.5 py-1.5 text-xs font-medium text-foreground hover:bg-muted transition-colors"
           >
             <RefreshCw className="h-3 w-3" /> Retry

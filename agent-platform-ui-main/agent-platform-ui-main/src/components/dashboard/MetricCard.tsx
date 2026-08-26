@@ -16,8 +16,8 @@ function AnimatedValue({ value }: { value: string }) {
   const prefix = value.startsWith("$") ? "$" : ""
   const isValidNum = !isNaN(num)
   const [display, setDisplay] = useState(isValidNum ? 0 : num)
-  const frameRef = useRef<number>()
-  const startRef = useRef<number>()
+  const frameRef = useRef<number | undefined>(undefined)
+  const startRef = useRef<number | undefined>(undefined)
   const targetRef = useRef(num)
 
   useEffect(() => {

@@ -97,7 +97,6 @@ jobs:
           ODOO_USERNAME: ""
           ODOO_PASSWORD: ""
           ODOO_VERIFY_SSL: "true"
-          INTEGRATION_SECRET_KEY: ""
           MAX_ALLOWED_COST_INCREASE_PCT: "40.0"
           MAX_NOTIFICATIONS_PER_ORDER: "4"
           SHIPMENT_POLL_INTERVAL_SECONDS: "900"
