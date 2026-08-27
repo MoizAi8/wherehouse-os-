@@ -52,9 +52,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "autoprefixer": "^10.4.20",
     "eslint": "^9.39.4",
     "eslint-config-next": "16.2.7",
     "happy-dom": "^14.12.3",
+    "postcss": "^8.4.47",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.8"
