@@ -27,6 +27,9 @@ RUN npm install --include=dev --legacy-peer-deps --no-audit --no-fund
 # 3. Ensure the Tailwind PostCSS plugin is explicitly present
 RUN npm install @tailwindcss/postcss postcss autoprefixer tailwindcss --legacy-peer-deps --no-audit --no-fund
 
+# Flush out the stale Turbopack ghost cache from previous failed builds
+RUN rm -rf .next
+
 # 4. Now execute the Next.js optimized production build (Next.js automatically applies production optimizations during build)
 RUN npm run build
 # --- THE ENVIRONMENT OVERRIDE FIX END ---
