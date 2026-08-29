@@ -20,9 +20,6 @@ ENV BACKEND_URL=${BACKEND_URL}
 # Install devDependencies for build (Tailwind, TypeScript, etc.)
 RUN npm install --include=dev --legacy-peer-deps --no-audit --no-fund
 
-# Ensure the Tailwind PostCSS plugin is explicitly present
-RUN npm install @tailwindcss/postcss postcss autoprefixer tailwindcss --legacy-peer-deps --no-audit --no-fund
-
 # Flush out the stale Turbopack ghost cache from previous failed builds
 RUN rm -rf .next
 
