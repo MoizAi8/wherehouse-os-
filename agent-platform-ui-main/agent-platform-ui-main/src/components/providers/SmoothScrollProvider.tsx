@@ -1,6 +1,6 @@
 "use client"
 
-import { useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 type LenisInstance = {
   raf: (time: number) => void
@@ -11,8 +11,8 @@ export function SmoothScrollProvider({ children }: { children: React.ReactNode }
   const lenisRef = useRef<LenisInstance | null>(null)
   const [mounted, setMounted] = useState(false)
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useLayoutEffect(() => {
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true)
     import("lenis").then((mod) => {
       const Lenis = mod.default

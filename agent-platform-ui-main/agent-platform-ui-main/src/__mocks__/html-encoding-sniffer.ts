@@ -23,12 +23,9 @@ export function getEncoding(buffer: Buffer | Uint8Array): EncodingResult {
     }
   }
 
-  let asciiCount = 0
   let nonAsciiCount = 0
   for (let i = 0; i < Math.min(bytes.length, 1024); i++) {
-    if (bytes[i] <= 0x7f) {
-      asciiCount++
-    } else {
+    if (bytes[i] > 0x7f) {
       nonAsciiCount++
     }
   }
@@ -96,7 +93,9 @@ export function sniffEncoding(buffer: Buffer | Uint8Array): string {
   return getEncoding(buffer).encoding
 }
 
-export default {
+const sniffer = {
   getEncoding,
   sniffEncoding
 }
+
+export default sniffer
