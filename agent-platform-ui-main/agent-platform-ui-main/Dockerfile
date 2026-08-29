@@ -17,22 +17,17 @@ ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ARG BACKEND_URL
 ENV BACKEND_URL=${BACKEND_URL}
 
-# --- THE ENVIRONMENT OVERRIDE FIX START ---
-# 1. Force development mode to unlock devDependencies installation
-ENV NODE_ENV=development
-
-# 2. Run a completely clean install that explicitly INCLUDES devDependencies
+# Install devDependencies for build (Tailwind, TypeScript, etc.)
 RUN npm install --include=dev --legacy-peer-deps --no-audit --no-fund
 
-# 3. Ensure the Tailwind PostCSS plugin is explicitly present
+# Ensure the Tailwind PostCSS plugin is explicitly present
 RUN npm install @tailwindcss/postcss postcss autoprefixer tailwindcss --legacy-peer-deps --no-audit --no-fund
 
 # Flush out the stale Turbopack ghost cache from previous failed builds
 RUN rm -rf .next
 
-# 4. Now execute the Next.js optimized production build (Next.js automatically applies production optimizations during build)
+# Execute the Next.js optimized production build
 RUN npm run build
-# --- THE ENVIRONMENT OVERRIDE FIX END ---
 
 FROM base AS runner
 WORKDIR /app

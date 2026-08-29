@@ -1,12 +1,10 @@
 import type { Metadata } from "next"
 import { Sora, Barlow_Condensed } from "next/font/google"
 import "./globals.css"
-import { SmoothScrollProvider } from "@/components/providers/SmoothScrollProvider"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { NoiseOverlay } from "@/components/effects/NoiseOverlay"
 import { SettingsProvider } from "@/contexts/SettingsContext"
 import { SessionProvider } from "@/components/providers/SessionProvider"
-import { ThemeToggle } from "@/components/ui/ThemeToggle"
+import { ClientProviders } from "@/components/providers/ClientProviders"
 
 const sora = Sora({ variable: "--font-sora", subsets: ["latin"] })
 const barlowCondensed = Barlow_Condensed({ variable: "--font-barlow-condensed", subsets: ["latin"], weight: ["400", "500", "600", "700", "800"] })
@@ -24,15 +22,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
         <TooltipProvider>
-          <SmoothScrollProvider>
-            <SettingsProvider>
-              <SessionProvider>
-                <NoiseOverlay />
-                <ThemeToggle />
+          <SettingsProvider>
+            <SessionProvider>
+              <ClientProviders>
                 <main id="main-content">{children}</main>
-              </SessionProvider>
-            </SettingsProvider>
-          </SmoothScrollProvider>
+              </ClientProviders>
+            </SessionProvider>
+          </SettingsProvider>
         </TooltipProvider>
       </body>
     </html>

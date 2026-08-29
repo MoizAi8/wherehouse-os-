@@ -213,6 +213,7 @@ jobs:
           cache-to: type=gha,mode=max
           build-args: |
             NEXT_PUBLIC_API_URL=${{ secrets.API_URL }}
+            BACKEND_URL=${{ secrets.BACKEND_URL }}
             NODE_VERSION=${{ env.NODE_VERSION }}
             NEXT_TELEMETRY_DISABLED=1
 
