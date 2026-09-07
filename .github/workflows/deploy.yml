@@ -242,7 +242,16 @@ jobs:
       # Ensure all OCI-related secrets (OCI_USER, OCI_TENANCY, OCI_FINGERPRINT, OCI_REGION, OCI_KEY) are correctly defined in GitHub repository settings, as empty values will cause this step to fail.
       - name: Configure OCI CLI
         run: |
-          oci setup config --cli-rc-file /dev/null --region "${{ secrets.OCI_REGION }}" --tenancy "${{ secrets.OCI_TENANCY }}" --user "${{ secrets.OCI_USER }}" --key-file <(echo "${{ secrets.OCI_KEY }}") --fingerprint "${{ secrets.OCI_FINGERPRINT }}"
+          mkdir -p ~/.oci
+          echo "[DEFAULT]" > ~/.oci/config
+          echo "user=${{ secrets.OCI_USER }}" >> ~/.oci/config
+          echo "fingerprint=${{ secrets.OCI_FINGERPRINT }}" >> ~/.oci/config
+          echo "tenancy=${{ secrets.OCI_TENANCY }}" >> ~/.oci/config
+          echo "region=${{ secrets.OCI_REGION }}" >> ~/.oci/config
+          echo "key_file=~/.oci/oci_api_key.pem" >> ~/.oci/config
+          echo "${{ secrets.OCI_KEY }}" > ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/oci_api_key.pem
+          chmod 600 ~/.oci/config
 
       - name: Copy deploy files to instance
         uses: appleboy/scp-action@v0.1.7
