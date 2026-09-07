@@ -261,7 +261,6 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           source: "order-fulfillment-coordinator/,agent-platform-ui-main/"
           target: "~/fulfillment"
-          strip_components: 1
 
       - name: SSH and deploy with zero-downtime strategy
         uses: appleboy/ssh-action@v1.2.0
@@ -278,7 +277,7 @@ jobs:
               sudo systemctl enable --now docker
               sudo usermod -aG docker ubuntu
             fi
-            cd ~/fulfillment
+            cd ~/fulfillment/order-fulfillment-coordinator
             export TAG=${{ github.sha }}
             
             # Generate .env file from GitHub Secrets
