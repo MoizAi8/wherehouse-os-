@@ -231,9 +231,18 @@ jobs:
           bash install.sh --accept-all-defaults
           echo "$HOME/bin" >> $GITHUB_PATH
 
+      - name: Verify OCI Secrets
+        run: |
+          if [ -z "${{ secrets.OCI_USER }}" ] || [ -z "${{ secrets.OCI_TENANCY }}" ] || [ -z "${{ secrets.OCI_REGION }}" ] || [ -z "${{ secrets.OCI_KEY }}" ] || [ -z "${{ secrets.OCI_FINGERPRINT }}" ]; then
+            echo "Error: OCI secrets are not configured in GitHub repository settings."
+            echo "Required: OCI_USER, OCI_TENANCY, OCI_REGION, OCI_KEY, OCI_FINGERPRINT"
+            exit 1
+          fi
+
+      # Ensure all OCI-related secrets (OCI_USER, OCI_TENANCY, OCI_FINGERPRINT, OCI_REGION, OCI_KEY) are correctly defined in GitHub repository settings, as empty values will cause this step to fail.
       - name: Configure OCI CLI
         run: |
-          oci setup config --cli-rc-file /dev/null --region ${{ secrets.OCI_REGION }} --tenancy-id ${{ secrets.OCI_TENANCY }} --user-id ${{ secrets.OCI_USER }} --key-file <(echo "${{ secrets.OCI_KEY }}") --fingerprint ${{ secrets.OCI_FINGERPRINT }}
+          oci setup config --cli-rc-file /dev/null --region "${{ secrets.OCI_REGION }}" --tenancy "${{ secrets.OCI_TENANCY }}" --user "${{ secrets.OCI_USER }}" --key-file <(echo "${{ secrets.OCI_KEY }}") --fingerprint "${{ secrets.OCI_FINGERPRINT }}"
 
       - name: Copy deploy files to instance
         uses: appleboy/scp-action@v0.1.7
