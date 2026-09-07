@@ -260,7 +260,7 @@ jobs:
           username: ${{ secrets.OCI_USERNAME }}
           key: ${{ secrets.OCI_SSH_KEY }}
           source: "order-fulfillment-coordinator/docker-compose.prod.yml,order-fulfillment-coordinator/infra/"
-          target: "/opt/fulfillment"
+          target: "~/fulfillment"
           strip_components: 1
 
       - name: SSH and deploy with zero-downtime strategy
@@ -271,7 +271,7 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           script: |
             set -euo pipefail
-            cd /opt/fulfillment
+            cd ~/fulfillment
             export TAG=${{ github.sha }}
             
             # Pull new images
