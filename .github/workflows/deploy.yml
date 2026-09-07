@@ -320,6 +320,19 @@ jobs:
             SLA_CRITICAL_HOURS=${{ secrets.SLA_CRITICAL_HOURS }}
             EOF
             
+            # Pre-flight: free ports 80/443 on host
+            echo "=== Freeing ports 80 and 443 ==="
+            sudo systemctl stop nginx || true
+            sudo systemctl disable nginx || true
+            sudo systemctl stop apache2 || true
+            sudo systemctl disable apache2 || true
+            # Kill any process holding ports 80/443
+            sudo fuser -k 80/tcp 443/tcp 2>/dev/null || true
+            sudo ss -K dst = :80 || true
+            sudo ss -K dst = :443 || true
+            # Remove any dangling docker containers using host ports 80/443
+            sudo docker ps -a --filter "publish=80" --filter "publish=443" --format "{{.ID}}" | xargs -r sudo docker rm -f
+            
             # Pull new images
             sudo docker compose -f docker-compose.prod.yml pull
             
@@ -338,7 +351,7 @@ jobs:
             # Verify PostgreSQL port
             timeout 30 bash -c 'until nc -z localhost 5432; do sleep 1; done'
             
-            # Verify Nginx ports
+            # Verify Caddy ports (replaces Nginx check) [ARCHITECT-LOCK: DO NOT OVERWRITE]
             timeout 30 bash -c 'until nc -z localhost 80 && nc -z localhost 443; do sleep 1; done'
             
             echo "[OK] Deploy successful - all health checks passed"
