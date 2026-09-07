@@ -282,7 +282,7 @@ jobs:
             export TAG=${{ github.sha }}
             
             # Generate .env file from GitHub Secrets
-            cat > .env <<'EOF'
+            cat > .env <<EOF
 DATABASE_URL=${{ secrets.DATABASE_URL }}
 POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
 REDIS_URL=${{ secrets.REDIS_URL }}
