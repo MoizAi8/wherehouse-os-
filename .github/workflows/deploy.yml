@@ -259,7 +259,7 @@ jobs:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_USERNAME }}
           key: ${{ secrets.OCI_SSH_KEY }}
-          source: "order-fulfillment-coordinator/docker-compose.prod.yml,order-fulfillment-coordinator/infra/"
+          source: "order-fulfillment-coordinator/,agent-platform-ui-main/"
           target: "~/fulfillment"
           strip_components: 1
 
@@ -274,12 +274,52 @@ jobs:
             if ! command -v docker &> /dev/null; then
               echo "Installing Docker..."
               sudo apt-get update
-              sudo apt-get install -y docker.io docker-compose-v2
+              sudo apt-get install -y docker.io docker-compose-v2 docker-buildx-plugin
               sudo systemctl enable --now docker
               sudo usermod -aG docker ubuntu
             fi
             cd ~/fulfillment
             export TAG=${{ github.sha }}
+            
+            # Generate .env file from GitHub Secrets
+            cat > .env <<'EOF'
+DATABASE_URL=${{ secrets.DATABASE_URL }}
+POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+REDIS_URL=${{ secrets.REDIS_URL }}
+JWT_SECRET=${{ secrets.JWT_SECRET }}
+JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
+WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}
+INTEGRATION_SECRET_KEY=${{ secrets.INTEGRATION_SECRET_KEY }}
+OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
+OPENAI_BASE_URL=${{ secrets.OPENAI_BASE_URL }}
+OPENAI_MODEL=${{ secrets.OPENAI_MODEL }}
+EMBEDDING_MODEL=${{ secrets.EMBEDDING_MODEL }}
+EMBEDDING_DIMENSIONS=${{ secrets.EMBEDDING_DIMENSIONS }}
+QDRANT_URL=${{ secrets.QDRANT_URL }}
+QDRANT_API_KEY=${{ secrets.QDRANT_API_KEY }}
+RATE_LIMIT_ENABLED=${{ secrets.RATE_LIMIT_ENABLED }}
+RATE_LIMIT_DEFAULT=${{ secrets.RATE_LIMIT_DEFAULT }}
+RATE_LIMIT_AUTH=${{ secrets.RATE_LIMIT_AUTH }}
+RATE_LIMIT_CHAT=${{ secrets.RATE_LIMIT_CHAT }}
+CELERY_BROKER_URL=${{ secrets.CELERY_BROKER_URL }}
+CELERY_RESULT_BACKEND=${{ secrets.CELERY_RESULT_BACKEND }}
+DEBUG=${{ secrets.DEBUG }}
+TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}
+TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
+TWILIO_PHONE_NUMBER=${{ secrets.TWILIO_PHONE_NUMBER }}
+SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
+SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_FROM_EMAIL }}
+ODOO_URL=${{ secrets.ODOO_URL }}
+ODOO_DB=${{ secrets.ODOO_DB }}
+ODOO_USERNAME=${{ secrets.ODOO_USERNAME }}
+ODOO_PASSWORD=${{ secrets.ODOO_PASSWORD }}
+ODOO_VERIFY_SSL=${{ secrets.ODOO_VERIFY_SSL }}
+MAX_ALLOWED_COST_INCREASE_PCT=${{ secrets.MAX_ALLOWED_COST_INCREASE_PCT }}
+MAX_NOTIFICATIONS_PER_ORDER=${{ secrets.MAX_NOTIFICATIONS_PER_ORDER }}
+SHIPMENT_POLL_INTERVAL_SECONDS=${{ secrets.SHIPMENT_POLL_INTERVAL_SECONDS }}
+FAILED_DELIVERY_THRESHOLD_PCT=${{ secrets.FAILED_DELIVERY_THRESHOLD_PCT }}
+SLA_CRITICAL_HOURS=${{ secrets.SLA_CRITICAL_HOURS }}
+EOF
             
             # Pull new images
             sudo docker compose -f docker-compose.prod.yml pull
