@@ -6,8 +6,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-fulfillment}
       POSTGRES_USER: ${POSTGRES_USER:-fulfillment}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -19,8 +17,6 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -30,8 +26,6 @@ services:
   qdrant:
     image: qdrant/qdrant:latest
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6333:6333"
     volumes:
       - qdrant_storage:/qdrant/storage
       - qdrant_storage:/qdrant/snapshots

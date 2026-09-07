@@ -320,18 +320,25 @@ jobs:
             SLA_CRITICAL_HOURS=${{ secrets.SLA_CRITICAL_HOURS }}
             EOF
             
-            # Pre-flight: free ports 80/443 on host
-            echo "=== Freeing ports 80 and 443 ==="
+            # Pre-flight: free ports 80/443/5432/6379/6333 on host
+            echo "=== Freeing ports 80, 443, 5432, 6379, 6333 ==="
             sudo systemctl stop nginx || true
             sudo systemctl disable nginx || true
             sudo systemctl stop apache2 || true
             sudo systemctl disable apache2 || true
-            # Kill any process holding ports 80/443
-            sudo fuser -k 80/tcp 443/tcp 2>/dev/null || true
+            sudo systemctl stop redis-server || true
+            sudo systemctl disable redis-server || true
+            sudo systemctl stop postgresql || true
+            sudo systemctl disable postgresql || true
+            # Kill any process holding ports 80/443/5432/6379/6333
+            sudo fuser -k 80/tcp 443/tcp 5432/tcp 6379/tcp 6333/tcp 2>/dev/null || true
             sudo ss -K dst = :80 || true
             sudo ss -K dst = :443 || true
-            # Remove any dangling docker containers using host ports 80/443
-            sudo docker ps -a --filter "publish=80" --filter "publish=443" --format "{{.ID}}" | xargs -r sudo docker rm -f
+            sudo ss -K dst = :5432 || true
+            sudo ss -K dst = :6379 || true
+            sudo ss -K dst = :6333 || true
+            # Remove any dangling docker containers using host ports 80/443/5432/6379/6333
+            sudo docker ps -a --filter "publish=80" --filter "publish=443" --filter "publish=5432" --filter "publish=6379" --filter "publish=6333" --format "{{.ID}}" | xargs -r sudo docker rm -f
             
             # Pull new images
             sudo docker compose -f docker-compose.prod.yml pull
