@@ -284,6 +284,8 @@ jobs:
             cat > .env <<EOF
             DATABASE_URL=${{ secrets.DATABASE_URL }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+            POSTGRES_DB=${{ secrets.POSTGRES_DB }}
             REDIS_URL=${{ secrets.REDIS_URL }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
