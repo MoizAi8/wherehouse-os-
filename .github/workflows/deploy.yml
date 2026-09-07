@@ -346,6 +346,8 @@ jobs:
             # Zero-downtime rebuild: remove orphans and rebuild [ARCHITECT-LOCK: DO NOT OVERWRITE]
             sudo docker compose -f docker-compose.prod.yml down -v --remove-orphans
             sudo docker compose -f docker-compose.prod.yml up -d --build
+            # Debug: show Postgres logs immediately for troubleshooting
+            sudo docker compose -f docker-compose.prod.yml logs postgres
             
             # Debug: wait for Postgres init and show logs if unhealthy
             sleep 10 && sudo docker logs order-fulfillment-coordinator-postgres-1 || true
