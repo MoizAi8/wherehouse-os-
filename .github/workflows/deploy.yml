@@ -347,6 +347,9 @@ jobs:
             sudo docker compose -f docker-compose.prod.yml down --remove-orphans
             sudo docker compose -f docker-compose.prod.yml up -d --build
             
+            # Debug: wait for Postgres init and show logs if unhealthy
+            sleep 10 && sudo docker logs order-fulfillment-coordinator-postgres-1 || true
+            
             # Strict health polling with timeout [ARCHITECT-LOCK: DO NOT OVERWRITE]
             echo "Waiting for API health endpoint..."
             timeout 120 bash -c '
