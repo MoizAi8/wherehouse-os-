@@ -19,14 +19,14 @@ WORKDIR /app
 COPY pyproject.toml uv.lock* ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     pip install --no-cache-dir uv && \
-    uv sync --frozen --no-dev --no-install-project
+    uv sync --frozen --no-dev --no-install-project --system
 
 # Phase 2: Copy the actual application code [ARCHITECT-LOCK: DO NOT OVERWRITE]
 COPY . .
 
 # Phase 3: Sync the local project package now that the source is present [ARCHITECT-LOCK: DO NOT OVERWRITE]
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
+    uv sync --frozen --no-dev --system
 
 # ── Production Stage ────────────────────────────────────
 FROM base AS production
