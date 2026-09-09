@@ -15,30 +15,36 @@ ENV PIP_NO_CACHE_DIR=1 \
 
 WORKDIR /app
 
-# Phase 1: Install ONLY dependencies leveraging BuildKit cache mounts [ARCHITECT-LOCK: DO NOT OVERWRITE]
+# Phase 1: Install ONLY dependencies leveraging BuildKit cache mounts
 COPY pyproject.toml uv.lock* ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     pip install --no-cache-dir uv && \
-    uv sync --frozen --no-dev --no-install-project --system
+    uv sync --frozen --no-dev --no-install-project
 
-# Phase 2: Copy the actual application code [ARCHITECT-LOCK: DO NOT OVERWRITE]
+# Phase 2: Copy the actual application code
 COPY . .
 
-# Phase 3: Sync the local project package now that the source is present [ARCHITECT-LOCK: DO NOT OVERWRITE]
+# Phase 3: Sync the local project package now that the source is present
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --system
+    uv sync --frozen --no-dev
 
 # ── Production Stage ────────────────────────────────────
 FROM base AS production
 
 WORKDIR /app
 
-COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# Copy virtual environment from builder
+COPY --from=builder /app/.venv /app/.venv
+
+# Copy application source and config
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/alembic.ini ./
 COPY --from=builder /app/alembic ./alembic/
 
+# Expose venv binaries to PATH
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Set ownership and switch to non-root user
 RUN chown -R appuser:appuser /app
 
 USER appuser
