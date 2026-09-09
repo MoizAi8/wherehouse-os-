@@ -1,8 +1,30 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
+from typing import Annotated
 
+from pydantic import BeforeValidator, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _parse_cors_origins(value: str | list[str]) -> list[str]:
+    """Parse CORS origins from various input formats."""
+    if isinstance(value, list):
+        return value
+    if not value or not value.strip():
+        return ["*"]
+    value = value.strip()
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, list):
+            return [str(item).strip() for item in parsed if str(item).strip()]
+    except json.JSONDecodeError:
+        pass
+    return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+
+CorsOrigins = Annotated[list[str], BeforeValidator(_parse_cors_origins)]
 
 _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 
@@ -28,7 +50,7 @@ class Settings(BaseSettings):
     jwt_refresh_expiration_days: int = 7
     jwt_password_reset_expiration_minutes: int = 30
 
-    cors_origins: list[str] = [
+    cors_origins: CorsOrigins = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
