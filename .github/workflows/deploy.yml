@@ -358,7 +358,7 @@ jobs:
             # Strict health polling with timeout [ARCHITECT-LOCK: DO NOT OVERWRITE]
             echo "Waiting for API health endpoint..."
             timeout 120 bash -c '
-              until curl -sf http://localhost:8000/health | grep -q '"'"'status'"'"': '"'"'ok'"'"'; do
+              until curl -sf http://localhost:8000/health | grep -qE "status.*ok"; do
                 sleep 3
               done
             '
