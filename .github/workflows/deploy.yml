@@ -321,7 +321,7 @@ jobs:
             SHIPMENT_POLL_INTERVAL_SECONDS=${{ secrets.SHIPMENT_POLL_INTERVAL_SECONDS }}
             FAILED_DELIVERY_THRESHOLD_PCT=${{ secrets.FAILED_DELIVERY_THRESHOLD_PCT }}
             SLA_CRITICAL_HOURS=${{ secrets.SLA_CRITICAL_HOURS }}
-            CORS_ORIGINS='["*"]'
+            CORS_ORIGINS=*
             EOF
             
             # Pre-flight: free ports 80/443/5432/6379/6333 on host
