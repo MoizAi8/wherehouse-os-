@@ -2,25 +2,21 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated
 
-from pydantic import BeforeValidator
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def _parse_cors_origins(value: str | list[str]) -> list[str]:
+def _parse_cors_origins(value: str) -> list[str]:
     """Parse CORS origins from various input formats.
 
     Handles:
-    - List: ["http://a.com", "http://b.com"]
     - JSON array string: '["http://a.com", "http://b.com"]'
     - JSON array wrapped in single quotes: '"["http://a.com"]"'
     - Comma-separated: "http://a.com,http://b.com"
-    - Single value: "http://a.com"
+    - Single value: "http://a.com" or "*"
     - Empty/missing: defaults to ["*"]
     """
-    if isinstance(value, list):
-        return value
     if not value or not value.strip():
         return ["*"]
     value = value.strip()
@@ -39,8 +35,6 @@ def _parse_cors_origins(value: str | list[str]) -> list[str]:
         pass
     return [origin.strip() for origin in value.split(",") if origin.strip()]
 
-
-CorsOrigins = Annotated[list[str], BeforeValidator(_parse_cors_origins)]
 
 _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 
@@ -66,10 +60,22 @@ class Settings(BaseSettings):
     jwt_refresh_expiration_days: int = 7
     jwt_password_reset_expiration_minutes: int = 30
 
-    cors_origins: CorsOrigins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _normalize_cors_origins(cls, v: str | list[str]) -> str:
+        """Normalize CORS origins to canonical comma-separated string."""
+        if isinstance(v, list):
+            return ",".join(v)
+        if not v or not v.strip():
+            return "http://localhost:3000,http://127.0.0.1:3000"
+        return v.strip()
+
+    @property
+    def cors_origins_list(self) -> list[str]:
+        """Get CORS origins as a list for CORSMiddleware."""
+        return _parse_cors_origins(self.cors_origins)
 
     rate_limit_enabled: bool = True
     rate_limit_default: str = "120/minute"

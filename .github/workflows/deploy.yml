@@ -290,6 +290,7 @@ jobs:
             REDIS_URL=${{ secrets.REDIS_URL }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             JWT_ALGORITHM=${{ secrets.JWT_ALGORITHM }}
+            JWT_EXPIRATION_MINUTES=${{ secrets.JWT_EXPIRATION_MINUTES }}
             WEBHOOK_SECRET=${{ secrets.WEBHOOK_SECRET }}
             INTEGRATION_SECRET_KEY=${{ secrets.INTEGRATION_SECRET_KEY }}
             OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
@@ -311,6 +312,9 @@ jobs:
             TWILIO_PHONE_NUMBER=${{ secrets.TWILIO_PHONE_NUMBER }}
             SENDGRID_API_KEY=${{ secrets.SENDGRID_API_KEY }}
             SENDGRID_FROM_EMAIL=${{ secrets.SENDGRID_FROM_EMAIL }}
+            EASYPOST_API_KEY=${{ secrets.EASYPOST_API_KEY }}
+            SMARTYSTREETS_AUTH_ID=${{ secrets.SMARTYSTREETS_AUTH_ID }}
+            SMARTYSTREETS_AUTH_TOKEN=${{ secrets.SMARTYSTREETS_AUTH_TOKEN }}
             ODOO_URL=${{ secrets.ODOO_URL }}
             ODOO_DB=${{ secrets.ODOO_DB }}
             ODOO_USERNAME=${{ secrets.ODOO_USERNAME }}
@@ -321,6 +325,14 @@ jobs:
             SHIPMENT_POLL_INTERVAL_SECONDS=${{ secrets.SHIPMENT_POLL_INTERVAL_SECONDS }}
             FAILED_DELIVERY_THRESHOLD_PCT=${{ secrets.FAILED_DELIVERY_THRESHOLD_PCT }}
             SLA_CRITICAL_HOURS=${{ secrets.SLA_CRITICAL_HOURS }}
+            # Frontend / Domain configuration
+            FRONTEND_URL=${{ secrets.FRONTEND_URL }}
+            DOMAIN=${{ secrets.DOMAIN }}
+            SSL_EMAIL=${{ secrets.SSL_EMAIL }}
+            APP_VERSION=${{ secrets.APP_VERSION }}
+            BACKEND_URL=${{ secrets.BACKEND_URL }}
+            RESET_EMAIL_REDIRECT_URL=${{ secrets.RESET_EMAIL_REDIRECT_URL }}
+            API_URL=${{ secrets.API_URL }}
             CORS_ORIGINS=*
             EOF
             
@@ -348,7 +360,7 @@ jobs:
             sudo docker compose -f docker-compose.prod.yml pull
             
             # Zero-downtime rebuild: remove orphans and rebuild [ARCHITECT-LOCK: DO NOT OVERWRITE]
-            sudo docker compose -f docker-compose.prod.yml down -v --remove-orphans
+            sudo docker compose -f docker-compose.prod.yml down --remove-orphans
             sudo docker compose -f docker-compose.prod.yml up -d --build
             # Debug: show Postgres logs immediately for troubleshooting
             sudo docker compose -f docker-compose.prod.yml logs postgres

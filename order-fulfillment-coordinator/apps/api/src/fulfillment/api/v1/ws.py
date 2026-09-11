@@ -54,7 +54,7 @@ async def _authenticate(ws: WebSocket) -> bool:
             await ws.close(code=4403, reason="origin_missing")
             return False
     else:
-        allowed = settings.cors_origins
+        allowed = settings.cors_origins_list
         if allowed and "*" not in allowed and origin.rstrip("/") not in {o.rstrip("/") for o in allowed}:
             await ws.close(code=4403, reason="origin_not_allowed")
             return False
