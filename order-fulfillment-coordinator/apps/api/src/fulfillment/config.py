@@ -9,12 +9,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 def _parse_cors_origins(value: str | list[str]) -> list[str]:
-    """Parse CORS origins from various input formats."""
+    """Parse CORS origins from various input formats.
+
+    Handles:
+    - List: ["http://a.com", "http://b.com"]
+    - JSON array string: '["http://a.com", "http://b.com"]'
+    - JSON array wrapped in single quotes: '"["http://a.com"]"'
+    - Comma-separated: "http://a.com,http://b.com"
+    - Single value: "http://a.com"
+    - Empty/missing: defaults to ["*"]
+    """
     if isinstance(value, list):
         return value
     if not value or not value.strip():
         return ["*"]
     value = value.strip()
+
+    # Strip surrounding single or double quotes that may wrap the entire value
+    if (value.startswith("'") and value.endswith("'")) or (
+        value.startswith('"') and value.endswith('"')
+    ):
+        value = value[1:-1].strip()
+
     try:
         parsed = json.loads(value)
         if isinstance(parsed, list):
