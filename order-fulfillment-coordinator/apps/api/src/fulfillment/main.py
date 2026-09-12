@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -119,7 +120,15 @@ async def health() -> dict[str, object]:
 
     celery_connected = bool(celery_health.get("connected", False))
 
-    qdrant_ok = await check_qdrant_connection()
+    qdrant_ok = False
+    try:
+        qdrant_ok = await asyncio.wait_for(check_qdrant_connection(), timeout=3.0)
+    except asyncio.TimeoutError:
+        logger.warning("Health check Qdrant probe timed out")
+        qdrant_ok = False
+    except Exception as exc:
+        logger.warning("Health check Qdrant probe failed: %s", exc)
+        qdrant_ok = False
 
     status = "ok" if db_ok else "degraded"
     if db_ok and not (celery_connected and qdrant_ok):
