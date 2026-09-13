@@ -374,7 +374,7 @@ jobs:
             # Strict health polling with timeout [ARCHITECT-LOCK: DO NOT OVERWRITE]
             echo "Waiting for API health endpoint..."
             timeout 120 bash -c '
-              until response=$(curl -s http://localhost:8000/health); echo "API Response: $response"; echo "$response" | grep -qE "status.*ok"; do
+              until response=$(curl -s http://localhost/health); echo "API Response: $response"; echo "$response" | grep -qE "status.*ok"; do
                 sleep 3
               done
             ' || { echo "Health check timed out! Dumping API logs:"; sudo docker compose -f docker-compose.prod.yml logs api; exit 1; }
