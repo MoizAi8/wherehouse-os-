@@ -45,14 +45,22 @@ echo "→ Waiting for health checks..."
 sleep 10
 HEALTH_URL="${DOMAIN:+https://${DOMAIN}}/health"
 HEALTH_URL="${HEALTH_URL:-http://localhost/health}"
+health_ok=false
 for i in $(seq 1 12); do
     if curl -sf "$HEALTH_URL" > /dev/null 2>&1; then
         echo "✅ API is healthy"
+        health_ok=true
         break
     fi
     echo "   Waiting... ($i/12)"
     sleep 5
 done
+
+if [ "$health_ok" = false ]; then
+    echo "❌ Health check failed after 12 attempts"
+    docker compose -f docker-compose.prod.yml logs api
+    exit 1
+fi
 
 echo "→ Cleaning up old images..."
 docker image prune -f

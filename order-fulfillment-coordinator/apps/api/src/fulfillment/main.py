@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from fulfillment.api import auth, chat
@@ -18,17 +19,22 @@ from fulfillment.api.v1 import (
     fulfillment_centers,
     integrations,
     orders,
-    settings as settings_router,
     shipments,
     webhooks,
     ws,
 )
+from fulfillment.api.v1 import settings as settings_router
 from fulfillment.config import settings
-from fulfillment.database import init_db, check_db_connection
+from fulfillment.database import check_db_connection, engine, init_db
+from fulfillment.logging_config import (
+    get_correlation_id,
+    log_api_request,
+    set_correlation_id,
+    setup_logging,
+)
 from fulfillment.rate_limit import RateLimitMiddleware
-from fulfillment.vector_store import init_collections, check_qdrant_connection
-from fulfillment.logging_config import setup_logging, log_api_request, get_correlation_id, set_correlation_id
 from fulfillment.tasks.health import async_celery_worker_health
+from fulfillment.vector_store import check_qdrant_connection, init_collections
 
 setup_logging()
 
@@ -102,33 +108,18 @@ async def health() -> dict[str, object]:
     try:
         db_ok = await check_db_connection()
         if db_ok:
-            from sqlalchemy import text
-            from fulfillment.database import engine
-
             async with engine.connect() as conn:
                 await conn.execute(text("SELECT 1"))
             db_type = engine.dialect.name
     except Exception as exc:
         logger.warning("Health check DB probe failed: %s", exc)
 
-    celery_health = {"connected": False, "detail": "unavailable"}
-    try:
-        celery_health = await async_celery_worker_health(timeout=2.0)
-    except Exception as exc:
-        logger.warning("Health check Celery probe failed: %s", exc)
-        celery_health = {"connected": False, "detail": f"{type(exc).__name__}: {exc}"}
+    celery_task = asyncio.create_task(_safe_celery_health())
+    qdrant_task = asyncio.create_task(_safe_qdrant_health())
+
+    celery_health, qdrant_ok = await asyncio.gather(celery_task, qdrant_task)
 
     celery_connected = bool(celery_health.get("connected", False))
-
-    qdrant_ok = False
-    try:
-        qdrant_ok = await asyncio.wait_for(check_qdrant_connection(), timeout=3.0)
-    except asyncio.TimeoutError:
-        logger.warning("Health check Qdrant probe timed out")
-        qdrant_ok = False
-    except Exception as exc:
-        logger.warning("Health check Qdrant probe failed: %s", exc)
-        qdrant_ok = False
 
     status = "ok" if db_ok else "degraded"
     if db_ok and not (celery_connected and qdrant_ok):
@@ -148,3 +139,22 @@ async def health() -> dict[str, object]:
             "qdrant": qdrant_ok,
         },
     }
+
+
+async def _safe_celery_health() -> dict:
+    try:
+        return await async_celery_worker_health(timeout=1.0)
+    except Exception as exc:
+        logger.warning("Health check Celery probe failed: %s", exc)
+        return {"connected": False, "detail": f"{type(exc).__name__}: {exc}"}
+
+
+async def _safe_qdrant_health() -> bool:
+    try:
+        return await asyncio.wait_for(check_qdrant_connection(), timeout=2.0)
+    except TimeoutError:
+        logger.warning("Health check Qdrant probe timed out")
+        return False
+    except Exception as exc:
+        logger.warning("Health check Qdrant probe failed: %s", exc)
+        return False
