@@ -1,25 +1,40 @@
 # ── Domain-based routing ────────────────────────────────
 {$DOMAIN:localhost} {
-    tls {$SSL_EMAIL:off}
 
-    # API
-    handle_path /api/* {
-        reverse_proxy {$API_URL:http://api:8000}
+    # Cookie-based profile requests need NextAuth's server-side token bridge.
+    @frontend_profile {
+        path /api/auth/me
+        not header Authorization *
+    }
+    handle @frontend_profile {
+        reverse_proxy frontend:3000
+    }
+
+    # Preserve frontend-owned NextAuth and chat/AI handlers.
+    @frontend_api path /api/auth/session /api/auth/csrf /api/auth/providers /api/auth/signin* /api/auth/signout* /api/auth/callback/* /api/auth/error /api/chat /api/ai/*
+    handle @frontend_api {
+        reverse_proxy frontend:3000
+    }
+
+    # FastAPI owns these namespaces and explicit authentication operations.
+    @backend_api path /api/v1/* /api/chat/* /api/auth/login /api/auth/register /api/auth/refresh /api/auth/logout /api/auth/me /api/auth/change-password /api/auth/forgot-password /api/auth/reset-password /api/auth/users
+    handle @backend_api {
+        reverse_proxy api:8000
     }
 
     # Health
-    handle_path /health {
-        reverse_proxy {$API_URL:http://api:8000}
+    handle /health {
+        reverse_proxy api:8000
     }
 
     # WebSocket
-    handle_path /ws/* {
-        reverse_proxy {$API_URL:http://api:8000}
+    handle /ws/* {
+        reverse_proxy api:8000
     }
 
     # Frontend — everything else
     handle {
-        reverse_proxy {$FRONTEND_URL:http://frontend:3000}
+        reverse_proxy frontend:3000
     }
 
     # Security headers
@@ -32,7 +47,4 @@
     }
 }
 
-# ── HTTP→HTTPS redirect ────────────────────────────────
-http://{$DOMAIN:localhost} {
-    redir https://{$DOMAIN:localhost}{uri}
-}
+# Caddy manages certificates and HTTP redirects automatically for DOMAIN.

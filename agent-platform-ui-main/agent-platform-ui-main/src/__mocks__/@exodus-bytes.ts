@@ -1,4 +1,6 @@
 export interface BytesLike {
+  readonly buffer: ArrayBufferLike
+  readonly byteOffset: number
   readonly byteLength: number
   readonly [Symbol.toStringTag]: "Uint8Array"
   [index: number]: number
@@ -25,7 +27,7 @@ export function toBase64(bytes: BytesLike): string {
   if (typeof btoa !== "undefined") {
     return btoa(String.fromCharCode(...new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)))
   }
-  return Buffer.from(bytes).toString("base64")
+  return Buffer.from(new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)).toString("base64")
 }
 
 export function fromBase64(str: string): Uint8Array {

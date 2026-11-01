@@ -1,5 +1,11 @@
 # FulfillOS
 
+For the active OCI recovery procedure and deployment blockers, use the
+[production runbook](docs/production-runbook.md) and
+[verification report](docs/production-readiness-report.md). Older deployment
+commands below are background documentation; do not use them to bypass the
+required review and production approval.
+
 AI-powered multi-agent system that autonomously manages the complete post-purchase journey — from warehouse picking to doorstep delivery.
 
 ## System Architecture
