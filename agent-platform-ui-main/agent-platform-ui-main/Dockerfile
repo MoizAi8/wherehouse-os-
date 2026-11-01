@@ -1,24 +1,22 @@
 # ── Base Stage ──────────────────────────────────────────
-FROM node:20-alpine AS base
+ARG NODE_VERSION=24.22.2
+FROM node:${NODE_VERSION}-alpine AS base
 ENV NODE_ENV=production
 
 FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install --no-audit --no-fund --legacy-peer-deps --only=production
+RUN npm ci --omit=dev --strict-peer-deps --no-audit --no-fund
 
 FROM base AS builder
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install --no-audit --no-fund --legacy-peer-deps
+RUN npm ci --include=dev --strict-peer-deps --no-audit --no-fund
 COPY . .
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ARG BACKEND_URL
 ENV BACKEND_URL=${BACKEND_URL}
-
-# Install devDependencies for build (Tailwind, TypeScript, etc.)
-RUN npm install --include=dev --legacy-peer-deps --no-audit --no-fund
 
 # Flush out the stale Turbopack ghost cache from previous failed builds
 RUN rm -rf .next

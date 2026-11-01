@@ -2,11 +2,19 @@ name: Deploy to Oracle Cloud
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Deploy tested main to OCI (requires production approval)'
+        type: boolean
+        required: true
+        default: false
 
 env:
   # Pin exact versions to match local development [ARCHITECT-LOCK: DO NOT OVERWRITE]
-  NODE_VERSION: '20.18.0'
+  NODE_VERSION: '24.22.2'
   PYTHON_VERSION: '3.12'
   UV_VERSION: '0.5.4'
   API_IMAGE: fulfillment-api
@@ -16,6 +24,7 @@ jobs:
   test-api:
     name: Test Backend
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: order-fulfillment-coordinator/apps/api
@@ -105,22 +114,22 @@ jobs:
   test-frontend:
     name: Test Frontend
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: agent-platform-ui-main/agent-platform-ui-main
     steps:
       - uses: actions/checkout@v5
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: agent-platform-ui-main/agent-platform-ui-main/package-lock.json
-      - name: "Install dependencies (force-clean for native bindings) [ARCHITECT-LOCK: DO NOT OVERWRITE]"
-        run: |
-          npm cache clean --force
-          rm -rf node_modules package-lock.json
-          npm install --include=optional --no-audit --no-fund --legacy-peer-deps
+      - name: Install locked dependencies with strict peers
+        run: npm ci --include=dev --strict-peer-deps --no-audit --no-fund
+      - name: Check TypeScript
+        run: npx --no-install tsc --noEmit
       - name: Run ESLint
         run: npm run lint
       - name: Run Vitest test suite
@@ -130,10 +139,19 @@ jobs:
           # Required by Next.js for build-time checks
           NEXT_TELEMETRY_DISABLED: "1"
 
+      - name: Build production frontend
+        run: npm run build
+        env:
+          BACKEND_URL: http://api:8000
+          NEXT_TELEMETRY_DISABLED: '1'
+      - name: Verify built authentication routes
+        run: npm run test:auth
+
   build-and-push:
     name: Build & Push Images
     needs: [test-api, test-frontend]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
@@ -148,7 +166,7 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Cache Docker layers (Backend)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-buildx-backend-${{ github.sha }}
@@ -156,7 +174,7 @@ jobs:
             ${{ runner.os }}-buildx-backend-
 
       - name: Cache Docker layers (Frontend)
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: /tmp/.buildx-cache-frontend
           key: ${{ runner.os }}-buildx-frontend-${{ github.sha }}
@@ -164,7 +182,7 @@ jobs:
             ${{ runner.os }}-buildx-frontend-
 
       - name: Cache Node modules
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: agent-platform-ui-main/agent-platform-ui-main/node_modules
           key: ${{ runner.os }}-node-${{ hashFiles('agent-platform-ui-main/agent-platform-ui-main/package-lock.json') }}
@@ -172,7 +190,7 @@ jobs:
             ${{ runner.os }}-node-
 
       - name: Cache Python packages
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/uv
           key: ${{ runner.os }}-uv-${{ hashFiles('order-fulfillment-coordinator/apps/api/uv.lock') }}
@@ -180,6 +198,7 @@ jobs:
             ${{ runner.os }}-uv-
 
       - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -191,7 +210,7 @@ jobs:
         with:
           context: order-fulfillment-coordinator/apps/api
           target: production
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.API_IMAGE }}:latest
             ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.API_IMAGE }}:${{ github.sha }}
@@ -205,7 +224,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: agent-platform-ui-main/agent-platform-ui-main
-          push: true
+          push: ${{ github.event_name != 'pull_request' }}
           tags: |
             ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.FRONTEND_IMAGE }}:latest
             ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
@@ -221,7 +240,8 @@ jobs:
     name: Deploy to OCI
     needs: [build-and-push]
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    timeout-minutes: 35
+    if: github.repository == 'MoizAi8/wherehouse-os-' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.deploy
     environment: production
     permissions:
       contents: read
@@ -294,12 +314,13 @@ jobs:
           key: ${{ secrets.OCI_SSH_KEY }}
           fingerprint: ${{ secrets.OCI_SSH_FINGERPRINT }}
           source: "order-fulfillment-coordinator/docker-compose.prod.yml,order-fulfillment-coordinator/infra/"
-          target: "~/fulfillment/releases/${{ github.sha }}"
+          target: "~/fulfillment/releases/${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
       - name: Deploy immutable images and verify readiness
         uses: appleboy/ssh-action@v1.2.0
         env:
           CONFIG_B64: ${{ env.CONFIG_B64 }}
           TAG: ${{ github.sha }}
+          RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
           IMAGE_OWNER: ${{ github.repository_owner }}
           REGISTRY_USER: ${{ github.actor }}
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -308,10 +329,10 @@ jobs:
           username: ${{ secrets.OCI_USERNAME }}
           key: ${{ secrets.OCI_SSH_KEY }}
           fingerprint: ${{ secrets.OCI_SSH_FINGERPRINT }}
-          envs: CONFIG_B64,TAG,IMAGE_OWNER,REGISTRY_USER,REGISTRY_TOKEN
+          envs: CONFIG_B64,TAG,RELEASE_ID,IMAGE_OWNER,REGISTRY_USER,REGISTRY_TOKEN
           command_timeout: 30m
           script: |
             set -eu
             test -n "$CONFIG_B64"
-            cd "$HOME/fulfillment/releases/$TAG/order-fulfillment-coordinator"
+            cd "$HOME/fulfillment/releases/$RELEASE_ID/order-fulfillment-coordinator"
             bash infra/scripts/deploy.sh
