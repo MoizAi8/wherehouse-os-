@@ -80,7 +80,10 @@ class _Bucket:
 
     def is_stale(self, now: float, max_window: int) -> bool:
         """Bucket is reusable (fully refilled and idle for one window)."""
-        return now - self.timestamp > self.window and self.tokens >= self.count
+        # Idle buckets do not run take(), so their stored tokens never refill.
+        # After a full window their effective balance is full regardless of
+        # the stale stored balance; retaining them leaks one entry per client.
+        return now - self.timestamp > self.window
 
 
 class RateLimitMiddleware:

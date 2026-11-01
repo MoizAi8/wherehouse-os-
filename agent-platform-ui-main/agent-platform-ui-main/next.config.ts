@@ -1,6 +1,8 @@
 import type { NextConfig } from "next"
+import path from "node:path"
 
 const nextConfig: NextConfig = {
+  turbopack: { root: path.resolve(__dirname) },
   transpilePackages: ["three"],
   output: process.env.NODE_ENV === "production" ? "standalone" : undefined,
   async rewrites() {

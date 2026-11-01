@@ -10,6 +10,7 @@ const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Demo1234!"
  * Used when no session exists or the stored backend token is invalid/expired.
  */
 export async function refreshSession(): Promise<boolean> {
+  if (process.env.NODE_ENV === "production") return false
   try {
     const result = await signIn("credentials", {
       email: DEMO_EMAIL,

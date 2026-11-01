@@ -146,6 +146,12 @@ class Settings(BaseSettings):
                 "Set JWT_SECRET, WEBHOOK_SECRET and INTEGRATION_SECRET_KEY to strong values "
                 "(see .env.example)."
             )
+        from cryptography.fernet import Fernet
+
+        try:
+            Fernet(self.integration_secret_key.encode())
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("Production requires a valid INTEGRATION_SECRET_KEY Fernet key") from exc
 
 
 settings = Settings()

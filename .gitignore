@@ -7,3 +7,6 @@ node_modules/
 .next/
 .env
 .env.local
+release.env
+deploy-state/
+deployment-test-*/

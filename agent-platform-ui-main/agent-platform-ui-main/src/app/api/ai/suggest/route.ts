@@ -8,7 +8,8 @@ export async function POST() {
 
   try {
     const authHeaders = await getAuthHeaders()
-    const backendRes = await fetch(`${base}/api/chat/`, {
+    if (!authHeaders.Authorization) return Response.json({ error: "Not authenticated" }, { status: 401 })
+    const backendRes = await fetch(`${base}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({ message: "Give me optimization suggestions and recommendations." }),
