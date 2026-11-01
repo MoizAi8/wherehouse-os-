@@ -9,6 +9,7 @@ RUN groupadd -r appuser && useradd -r -g appuser appuser
 
 # ── Builder Stage ───────────────────────────────────────
 FROM base AS builder
+ARG UV_VERSION=0.12.3
 
 ENV PIP_NO_CACHE_DIR=1 \
     UV_COMPILE_BYTECODE=1
@@ -18,7 +19,7 @@ WORKDIR /app
 # Phase 1: Install ONLY dependencies leveraging BuildKit cache mounts
 COPY pyproject.toml uv.lock* ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    pip install --no-cache-dir uv && \
+    pip install --no-cache-dir "uv==${UV_VERSION}" && \
     uv sync --frozen --no-dev --no-install-project
 
 # Phase 2: Copy the actual application code

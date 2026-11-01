@@ -16,7 +16,7 @@ env:
   # Pin exact versions to match local development [ARCHITECT-LOCK: DO NOT OVERWRITE]
   NODE_VERSION: '24.22.2'
   PYTHON_VERSION: '3.12'
-  UV_VERSION: '0.5.4'
+  UV_VERSION: '0.12.3'
   API_IMAGE: fulfillment-api
   FRONTEND_IMAGE: fulfillment-ui
 

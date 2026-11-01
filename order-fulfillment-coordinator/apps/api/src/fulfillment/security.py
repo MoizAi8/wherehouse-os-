@@ -7,7 +7,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import bcrypt
-from jose import JWTError, jwt
+import jwt
+from jwt import InvalidTokenError
 
 from fulfillment.config import settings
 
@@ -42,9 +43,10 @@ def create_access_token(subject: str, role: str) -> str:
 def decode_access_token(token: str) -> dict[str, Any] | None:
     try:
         payload: dict[str, Any] = jwt.decode(
-            token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
+            token, settings.jwt_secret, algorithms=[settings.jwt_algorithm],
+            options={"require": ["exp", "iat", "sub"]},
         )
-    except JWTError:
+    except InvalidTokenError:
         return None
     if payload.get("typ") != "access":
         return None
