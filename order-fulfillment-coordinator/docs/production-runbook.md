@@ -1,14 +1,15 @@
 # Production recovery and deployment runbook
 
-Prepared 2026-11-02. **Do not deploy this repair until the blockers in
-[production-readiness-report.md](production-readiness-report.md) are resolved.**
-No production changes were made during this investigation.
+Updated 2026-11-02. The current [completion report](production-completion-report.md)
+and [merge/deployment plan](merge-deployment-plan.md) supersede earlier status
+snapshots. Local runtime, clean-install, audit, schema/auth, proxy-routing, and
+workflow checks are verified. Docker image/service integration and live OCI
+checks remain external prerequisites. Nothing has been pushed or deployed.
 
-Dependency upgrades and the repaired lockfile are now verified locally; see
-[security upgrade verification](security-upgrade-verification.md). Its current
-audit supersedes the initial dependency findings. CI Node-version alignment,
-clean-install pipeline changes, real Docker tests, and the OCI recovery steps
-below remain prerequisites.
+**Merging/pushing main no longer deploys OCI.** Tests and image builds run on
+main pushes and pull requests. Deployment requires manual `workflow_dispatch`
+on this fork's main with `deploy=true`. Configure production reviewers before
+using that gate; the inspected environment currently has no protection rules.
 
 ## Authoritative execution path
 
@@ -16,7 +17,7 @@ GitHub `.github/workflows/deploy.yml` tests the API in `apps/api` and the fronte
 in `../agent-platform-ui-main/agent-platform-ui-main`. It builds GHCR images
 `fulfillment-api:<commit SHA>` and `fulfillment-ui:<commit SHA>`. The deploy job
 copies only Compose and infrastructure files into
-`~/fulfillment/releases/<SHA>/order-fulfillment-coordinator`, then calls
+`~/fulfillment/releases/<SHA>-<run-id>-<attempt>/order-fulfillment-coordinator`, then calls
 `infra/scripts/deploy.sh`. It does not rebuild images on the VM.
 
 Caddy owns public ports 80/443. FastAPI, Next.js, PostgreSQL, Redis, and Qdrant
@@ -33,13 +34,12 @@ serving-slot design and capacity verification before claiming those guarantees.
 
 ## Required approvals and preparation
 
-1. Review the repair diff. Resolve dependency advisories and regenerate the
-   frontend lockfile with an approved dependency installation. The manifest and
-   lock currently disagree; CI still regenerates the lock, so builds are not
-   yet reproducible. Do not copy an unverified lockfile into production.
+1. Review the committed repair diff and current audit reports. Node 24.22.2 LTS
+   is pinned in CI, Docker, and .nvmrc. Use npm 11 and strict npm ci with the
+   verified lockfile; do not regenerate or delete it during deployment.
 2. Configure the GitHub `production` environment with required reviewers and
-   restrict it to `main`. The workflow still runs on pushes to `main`; protect
-   this environment before merging. Publishing, merging, pushing, and deployment
+   restrict it to `main`. Pushes run checks and image builds; production deployment is manual. Protect
+   this environment before approving a live run. Publishing, merging, pushing, and deployment
    each require the owner's authorization.
 3. Provision Docker Engine and Compose v2 on OCI separately. Confirm that the
    deployment account can run `docker info` or `sudo -n docker info`, and that
@@ -175,7 +175,9 @@ the host because application logs may contain customer data. No automatic
 rollback, image pruning, or database downgrade occurs.
 
 `~/fulfillment/deploy-state/current-release` records the latest successful
-release directory; `previous-release` records its predecessor. The first
+release directory; `previous-release` records its predecessor. Each release.env retains the exact
+application registry digests; reruns use distinct directories and cannot replace
+the previous configuration merely by rebuilding the same commit tag. The first
 deployment using this workflow has no automatically captured old release.
 Record the original image IDs/digests and configuration privately before it.
 
@@ -183,6 +185,23 @@ Record the original image IDs/digests and configuration privately before it.
 to an already-running previous slot. This is an explicit readiness blocker,
 not a successful rollback implementation. A true traffic-only rollback needs
 reviewed parallel serving slots and a verified Caddy switch.
+
+The new `infra/scripts/recover-release.sh --check` validates the recorded
+previous path, configuration, and local digest availability without changing
+services. It refuses missing metadata or resources outside the release root.
+After explicit owner approval and schema review, invoke:
+
+```bash
+bash infra/scripts/recover-release.sh --replace-services --schema-compatible
+```
+
+This holds the deployment lock, uses retained digests/configuration without
+pulling/building/migrating, replaces application services, verifies backend and
+HTTPS/frontend/session health, and updates release pointers only on success.
+It leaves infrastructure and volumes intact. No live replacement has been tested
+here. Compatibility acknowledgement is an operator attestation, not an automatic
+proof; do not bypass schema review. Records from deployments predating digest
+capture require an approved inventory before this command can work.
 
 If the owner explicitly approves service replacement as an interim recovery,
 validate that the previous release's schema expectations remain compatible

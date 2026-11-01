@@ -1,5 +1,8 @@
 # Security dependency compatibility and verification
 
+> Historical snapshot. Current runtime, security, workflow gates and verification
+> are documented in [production-completion-report.md](production-completion-report.md).
+
 2026-11-02. Upgrades were installed only after source inspection, registry
 metadata, release-note review, and strict-peer dry-run success. No
 `--legacy-peer-deps`, `--force`, bulk audit fix, or application migration was used.

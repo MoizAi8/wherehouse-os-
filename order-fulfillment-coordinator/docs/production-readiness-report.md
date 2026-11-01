@@ -1,5 +1,8 @@
 # Production recovery verification report
 
+> Historical snapshot. Current runtime, security, workflow gates and verification
+> are documented in [production-completion-report.md](production-completion-report.md).
+
 2026-11-02 — **NOT READY: unresolved critical blockers.**
 
 **Dependency follow-up:** targeted security updates have since been installed
