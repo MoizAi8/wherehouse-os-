@@ -65,7 +65,7 @@ def test_readiness_requires_all_production_backends():
     assert is_ready({"status": "ok", "backends": dict.fromkeys(("postgres", "celery", "qdrant"), True)})
 
 
-@pytest.mark.parametrize("failure", ["none", "pull", "migration", "readiness", "collision", "lock"])
+@pytest.mark.parametrize("failure", ["none", "existing", "pull", "migration", "readiness", "collision", "lock", "caddy", "tls", "registry"])
 def test_deploy_command_flow_and_failure_propagation(tmp_path, failure):
     bash = shutil.which("bash")
     if not bash and os.name == "nt":
@@ -86,9 +86,17 @@ set -e
 docker() {
     printf '%s\n' "$*" >> "$CALLS"
     case " $* " in
-      *" container inspect "*) [[ "$FAILURE" == collision ]]; return ;;
-      *" inspect -f "*) echo unrelated; return ;;
+      *" container inspect "*) [[ "$FAILURE" == collision || "$FAILURE" == existing ]]; return ;;
+      *" inspect -f "*)
+        if [[ "$FAILURE" == existing ]]; then
+          if [[ "$*" == *com.docker.compose.project* ]]; then echo order-fulfillment-coordinator;
+          else name="${!#}"; name="${name#order-fulfillment-coordinator-}"; echo "${name%-1}"; fi
+        else echo unrelated; fi
+        return ;;
+      *" login "*) cat >/dev/null; [[ "$FAILURE" != registry ]]; return ;;
+      *" image inspect "*) image="${!#}"; printf '%s@sha256:%064d\n' "${image%:*}" 0; return ;;
       *" pull "*) [[ "$FAILURE" != pull ]]; return ;;
+      *" caddy validate "*) [[ "$FAILURE" != caddy ]]; return ;;
       *" alembic upgrade head "*) [[ "$FAILURE" != migration ]]; return ;;
       *" config --format json "*) echo '{"services":{"caddy":{"environment":{"DOMAIN":"example.test"}}}}'; return ;;
       *" exec -T api python "*)
@@ -101,7 +109,7 @@ docker() {
     esac
     return 0
 }
-curl() { echo '{"status":"ok","backends":{"postgres":true,"celery":true,"qdrant":true}}'; }
+curl() { [[ "$FAILURE" != tls ]] || return 22; echo '{"status":"ok","backends":{"postgres":true,"celery":true,"qdrant":true}}'; }
 sleep() { :; }
 flock() { [[ "$FAILURE" != lock ]]; }
 export -f docker curl sleep flock
@@ -112,11 +120,14 @@ bash "$1"
            "CALLS": (tmp_path / "calls").as_posix(), "TEST_PY": Path(sys.executable).as_posix()}
     for name in ("CONFIG_B64", "REGISTRY_TOKEN", "DOCKER_HOST", "DOCKER_CONTEXT"):
         env.pop(name, None)
+    if failure == "registry":
+        env.update(REGISTRY_TOKEN="local-fixture-token", REGISTRY_USER="fixture")
     result = subprocess.run([bash, str(harness), str(scripts / "deploy.sh")],
                             env=env, capture_output=True, text=True, timeout=30)
-    assert (result.returncode == 0) == (failure == "none"), result.stdout + result.stderr
+    success = failure in ("none", "existing")
+    assert (result.returncode == 0) == success, result.stdout + result.stderr
     current = tmp_path / "state/current-release"
-    assert current.exists() == (failure == "none")
+    assert current.exists() == success
     calls = (tmp_path / "calls").read_text() if (tmp_path / "calls").exists() else ""
     assert " down " not in calls and " rm " not in calls
     assert "prune" not in calls and "--build" not in calls

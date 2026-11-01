@@ -180,18 +180,17 @@ def upgrade() -> None:
 
     # FK constraints on notifications added after orders/shipments exist so the
     # baseline upgrade is valid on PostgreSQL and SQLite.
-    op.create_foreign_key(
-        'notifications_order_id_fkey',
-        'notifications', 'orders',
-        ['order_id'], ['id'],
-        ondelete='CASCADE',
-    )
-    op.create_foreign_key(
-        'notifications_shipment_id_fkey',
-        'notifications', 'shipments',
-        ['shipment_id'], ['id'],
-        ondelete='SET NULL',
-    )
+    # SQLite needs table-rebuild batch mode for added constraints; PostgreSQL
+    # emits the same ALTER TABLE operations as before.
+    with op.batch_alter_table('notifications') as batch:
+        batch.create_foreign_key(
+            'notifications_order_id_fkey', 'orders',
+            ['order_id'], ['id'], ondelete='CASCADE',
+        )
+        batch.create_foreign_key(
+            'notifications_shipment_id_fkey', 'shipments',
+            ['shipment_id'], ['id'], ondelete='SET NULL',
+        )
     # ### end Alembic commands ###
 
 

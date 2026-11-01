@@ -32,7 +32,7 @@ services:
     # Readiness is probed by the API; do not assume curl exists in this image.
 
   api:
-    image: ghcr.io/${IMAGE_OWNER:?IMAGE_OWNER is required}/fulfillment-api:${TAG:?TAG is required}
+    image: &api-image ${API_IMAGE_REF:-ghcr.io/${IMAGE_OWNER:?IMAGE_OWNER is required}/fulfillment-api:${TAG:?TAG is required}}
     build:
       context: ./apps/api
       dockerfile: Dockerfile
@@ -94,7 +94,7 @@ services:
         condition: service_started
 
   celery-worker:
-    image: ghcr.io/${IMAGE_OWNER:?IMAGE_OWNER is required}/fulfillment-api:${TAG:?TAG is required}
+    image: *api-image
     build:
       context: ./apps/api
       dockerfile: Dockerfile
@@ -126,7 +126,7 @@ services:
         condition: service_healthy
 
   celery-beat:
-    image: ghcr.io/${IMAGE_OWNER:?IMAGE_OWNER is required}/fulfillment-api:${TAG:?TAG is required}
+    image: *api-image
     build:
       context: ./apps/api
       dockerfile: Dockerfile
@@ -150,7 +150,7 @@ services:
         condition: service_healthy
 
   frontend:
-    image: ghcr.io/${IMAGE_OWNER:?IMAGE_OWNER is required}/fulfillment-ui:${TAG:?TAG is required}
+    image: ${FRONTEND_IMAGE_REF:-ghcr.io/${IMAGE_OWNER:?IMAGE_OWNER is required}/fulfillment-ui:${TAG:?TAG is required}}
     build:
       context: ../agent-platform-ui-main/agent-platform-ui-main
       dockerfile: Dockerfile

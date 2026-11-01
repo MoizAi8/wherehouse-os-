@@ -14,6 +14,7 @@ flock -w 900 9 || { echo 'Another deployment holds the host lock'; exit 1; }
 IMAGE_OWNER="${IMAGE_OWNER,,}"
 [[ "$IMAGE_OWNER" =~ ^[a-z0-9][a-z0-9-]*$ ]] || exit 1
 export TAG IMAGE_OWNER
+unset API_IMAGE_REF FRONTEND_IMAGE_REF
 if [[ -n "${CONFIG_B64:-}" ]]; then
     printf '%s' "$CONFIG_B64" | base64 --decode > .env.new
     mv .env.new .env
@@ -57,6 +58,14 @@ if [[ -n "${REGISTRY_TOKEN:-}" ]]; then
     unset REGISTRY_TOKEN
 fi
 "${COMPOSE[@]}" pull
+# Retain the exact pulled application digests even if a SHA tag is rebuilt.
+for pair in API_IMAGE_REF:fulfillment-api FRONTEND_IMAGE_REF:fulfillment-ui; do
+    variable="${pair%%:*}"
+    repository="ghcr.io/$IMAGE_OWNER/${pair#*:}"
+    digest=$("${DOCKER[@]}" image inspect --format '{{index .RepoDigests 0}}' "$repository:$TAG")
+    [[ "$digest" =~ ^$repository@sha256:[a-f0-9]{64}$ ]] || { echo "Invalid retained image digest for ${pair#*:}"; exit 1; }
+    printf '%s=%s\n' "$variable" "$digest" >> release.env
+done
 "${COMPOSE[@]}" run --rm --no-deps api python -c 'from fulfillment.config import settings; settings.validate_production()'
 "${COMPOSE[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 "${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 postgres redis qdrant

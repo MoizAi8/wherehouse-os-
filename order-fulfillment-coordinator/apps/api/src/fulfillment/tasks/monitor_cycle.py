@@ -7,7 +7,7 @@ from celery import Celery
 from celery.signals import worker_ready, worker_shutdown, task_failure, task_retry
 
 from fulfillment.config import settings
-from fulfillment.database import async_session_factory
+from fulfillment.database import async_session_factory, engine
 from fulfillment.agents.orchestrator import FulfillmentOrchestrator
 from fulfillment.logging_config import log_agent_event, setup_logging
 
@@ -93,11 +93,20 @@ def on_task_retry(sender=None, reason=None, **kwargs):
 
 async def _run_monitor_cycle_async() -> dict:
     """Async implementation of monitor cycle with proper error handling."""
-    async with async_session_factory() as db:
-        orchestrator = FulfillmentOrchestrator(db)
-        result = await orchestrator.run_monitor_cycle()
-        await db.commit()
-        return result.model_dump()
+    try:
+        async with async_session_factory() as db:
+            orchestrator = FulfillmentOrchestrator(db)
+            result = await orchestrator.run_monitor_cycle()
+            # A failed initial DB read is returned as a cycle_error by the
+            # orchestrator. A queued job must fail so Celery can retry it.
+            if any(event.get("type") == "cycle_error" for event in result.events):
+                raise RuntimeError("Monitor cycle could not load its input state")
+            await db.commit()
+            return result.model_dump()
+    finally:
+        # Each synchronous Celery invocation owns a new asyncio loop. Do not
+        # carry asyncpg connections into the next task's different loop.
+        await engine.dispose()
 
 
 @celery_app.task(

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import hashlib
+import hmac
 import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,7 +33,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 class ChatMessage(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000)
-    session_id: str | None = None
+    session_id: str | None = Field(default=None, min_length=1, max_length=64)
 
 
 class ChatResponse(BaseModel):
@@ -310,6 +312,23 @@ _BASE_SYSTEM_PROMPT = (
 )
 
 
+def _owned_session_key(user: object, session_id: str) -> str:
+    user_id = user.get("sub") if isinstance(user, dict) else getattr(user, "id", None)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Authenticated identity required")
+    return hmac.new(
+        settings.jwt_secret.encode(),
+        f"{user_id}\0{session_id}".encode(),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def _require_chat_operator(user: object) -> None:
+    role = user.get("role") if isinstance(user, dict) else getattr(user, "role", None)
+    if getattr(role, "value", role) not in ("admin", "operator"):
+        raise HTTPException(status_code=403, detail="Operator or admin role required")
+
+
 @router.post("", response_model=ChatResponse)
 async def chat(
     request: Request,
@@ -334,15 +353,18 @@ async def chat(
     })
 
     session_id = body.session_id or str(uuid4())
-    history = await _load_chat_history(db, session_id)
+    storage_key = _owned_session_key(_user, session_id)
+    history = await _load_chat_history(db, storage_key)
     system_prompt = _BASE_SYSTEM_PROMPT + _history_section(history)
-    await _save_chat_message(db, session_id, "user", message)
+    await _save_chat_message(db, storage_key, "user", message)
 
     async def _respond(reply: str, action: str | None = None, data: dict | None = None) -> ChatResponse:
-        await _save_chat_message(db, session_id, "assistant", reply)
+        await _save_chat_message(db, storage_key, "assistant", reply)
         return ChatResponse(reply=reply, action=action, data=data, session_id=session_id)
 
     intent = await detect_intent(message, history)
+    if intent in ("create_order", "proceed_delivery"):
+        _require_chat_operator(_user)
     log_agent_event("ChatAPI", "intent_detected", entity_id=session_id, details={
         "intent": intent,
         "message_preview": message[:80],
@@ -1019,6 +1041,7 @@ async def chat(
 
     email = _extract_email(message)
     if email:
+        _require_chat_operator(_user)
         logger.info("LLM request sent | intent=fallback (create_order via email) | email='%s'", email)
         reply, action, data = await _handle_create_order(db, message, system_prompt)
         return await _respond(reply=reply, action=action, data=data)
@@ -1043,13 +1066,13 @@ async def chat(
 
 @router.get("/history", response_model=ChatHistoryResponse)
 async def chat_history(
-    session_id: str,
+    session_id: str = Query(min_length=1, max_length=64),
     db: AsyncSession = Depends(get_db),
     _user: dict[str, str] = Depends(get_current_user),
 ) -> ChatHistoryResponse:
     result = await db.execute(
         select(ChatMessageRecord)
-        .where(ChatMessageRecord.session_id == session_id)
+        .where(ChatMessageRecord.session_id == _owned_session_key(_user, session_id))
         .order_by(ChatMessageRecord.id.asc())
         .limit(200)
     )

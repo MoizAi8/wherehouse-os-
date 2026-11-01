@@ -6,32 +6,26 @@ from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import text, event
-from sqlalchemy.pool import NullPool
 
 from fulfillment.config import settings
 from fulfillment.logging_config import log_db_query, Timer
 
-engine = create_async_engine(
-    settings.async_database_url(),
-    echo=False,
-    pool_size=20,
-    max_overflow=10,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_timeout=30,
-    # For SQLite fallback in dev
-    connect_args={"check_same_thread": False} if "sqlite" in settings.async_database_url() else {},
-)
-
-# Use NullPool for serverless environments
-if settings.debug:
-    from sqlalchemy.pool import NullPool
-    from sqlalchemy import create_engine
-    
-    # For debug mode with SQLite, use NullPool with a simple creator
-    if "sqlite" in settings.async_database_url():
-        sync_url = settings.async_database_url().replace("postgresql+asyncpg://", "postgresql://").replace("sqlite+aiosqlite://", "sqlite://")
-        engine.pool = NullPool(creator=lambda: create_engine(sync_url).connect())  # type: ignore[arg-type]
+# SQLite debug connections must retain the async driver's DBAPI adapter.
+if "sqlite" in settings.async_database_url():
+    engine = create_async_engine(
+        settings.async_database_url(),
+        connect_args={"check_same_thread": False},
+    )
+else:
+    engine = create_async_engine(
+        settings.async_database_url(),
+        echo=False,
+        pool_size=20,
+        max_overflow=10,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_timeout=30,
+    )
 
 @event.listens_for(engine.sync_engine, "before_cursor_execute")
 def before_cursor_execute(conn, cursor, statement, parameters, context, executemany):
