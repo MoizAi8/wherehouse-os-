@@ -2,6 +2,14 @@
 
 2026-11-02 — **NOT READY: unresolved critical blockers.**
 
+**Dependency follow-up:** targeted security updates have since been installed
+after compatibility checks. The final production npm audit has zero critical
+and zero high records. The original advisory/declined-install section below
+is the historical investigation snapshot. See the current
+[security upgrade verification](security-upgrade-verification.md) for versions,
+checkpoint, peer checks, authentication tests, and remaining CI engine limits.
+The OCI/rollback/Docker verification blockers still apply.
+
 Repairs are local on `codex/warehouse-production-repair`. The initial working
 tree was clean. This is one Git repository rooted at `C:/Users/DC/wherehouse-os-`,
 with `origin` pointing to `MoizAi8/wherehouse-os-` and an `upstream` remote to

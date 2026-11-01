@@ -4,6 +4,12 @@ Prepared 2026-11-02. **Do not deploy this repair until the blockers in
 [production-readiness-report.md](production-readiness-report.md) are resolved.**
 No production changes were made during this investigation.
 
+Dependency upgrades and the repaired lockfile are now verified locally; see
+[security upgrade verification](security-upgrade-verification.md). Its current
+audit supersedes the initial dependency findings. CI Node-version alignment,
+clean-install pipeline changes, real Docker tests, and the OCI recovery steps
+below remain prerequisites.
+
 ## Authoritative execution path
 
 GitHub `.github/workflows/deploy.yml` tests the API in `apps/api` and the frontend
