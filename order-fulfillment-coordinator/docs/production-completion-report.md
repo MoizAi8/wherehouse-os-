@@ -2,6 +2,12 @@
 
 2026-11-02 — **CONDITIONALLY READY**.
 
+**Post-merge CI follow-up:** the user's merge at `e9d88ab` ran on GitHub and
+revealed a rate-limit clock-order defect hidden by local clock resolution.
+The [CI follow-up report](ci-backend-followup.md) records its deterministic
+reproduction, local fix, updated test results, and current checkout state.
+The results and no-merge statements below describe the original repair session.
+
 Local repairs, current security checks, and application regression gates pass.
 Real Linux image builds/container integration and live OCI/data/operational
 verification remain required before approving deployment. Nothing was pushed,

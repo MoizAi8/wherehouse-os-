@@ -50,13 +50,23 @@ def test_rate_limiter_reclaims_idle_clients_after_the_refill_window():
 
 
 @pytest.mark.asyncio
-async def test_public_health_is_rate_limited_with_retry_after(monkeypatch):
+@pytest.mark.parametrize("clock_step", [0.0, 0.001, 0.1])
+async def test_public_health_is_rate_limited_with_retry_after(monkeypatch, clock_step):
+    import itertools
+    from types import SimpleNamespace
+
+    from fulfillment import rate_limit
     from fulfillment.config import settings
     from httpx import ASGITransport, AsyncClient
 
     monkeypatch.setattr(settings, "debug", False)
     monkeypatch.setattr(settings, "rate_limit_enabled", True)
     monkeypatch.setattr(settings, "rate_limit_default", "1/hour")
+    # Patch only the limiter's clock binding, not asyncio's global time module.
+    # Linux may advance between request sampling and bucket construction;
+    # Windows' coarser clock hid the resulting loss of the very first token.
+    ticks = itertools.count(100.0, clock_step)
+    monkeypatch.setattr(rate_limit, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
 
     async def endpoint(scope, receive, send):
         await send({"type": "http.response.start", "status": 200, "headers": []})
@@ -67,4 +77,6 @@ async def test_public_health_is_rate_limited_with_retry_after(monkeypatch):
         assert (await client.get("/health")).status_code == 200
         limited = await client.get("/health")
         assert limited.status_code == 429
-        assert int(limited.headers["retry-after"]) > 0
+        assert int(limited.headers["retry-after"]) == 3600
+        monkeypatch.setattr(rate_limit, "time", SimpleNamespace(monotonic=lambda: 3700.0))
+        assert (await client.get("/health")).status_code == 200

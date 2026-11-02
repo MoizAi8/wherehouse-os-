@@ -23,6 +23,7 @@ local development and the demo login flow are not affected.
 from __future__ import annotations
 
 import logging
+import math
 import re
 import time
 
@@ -53,16 +54,18 @@ class _Bucket:
 
     __slots__ = ("count", "window", "tokens", "timestamp")
 
-    def __init__(self, count: int, window: int) -> None:
+    def __init__(self, count: int, window: int, now: float | None = None) -> None:
         self.count = count
         self.window = window
         self.tokens = float(count)
-        self.timestamp = time.monotonic()
+        self.timestamp = time.monotonic() if now is None else now
 
     def take(self, now: float) -> bool:
         elapsed = now - self.timestamp
         # refill proportionally to elapsed time
-        self.tokens = min(self.count, self.tokens + elapsed * (self.count / self.window))
+        # Divide elapsed time first so a full window refills a full token
+        # without rounding down a precomputed reciprocal rate.
+        self.tokens = min(self.count, self.tokens + (elapsed / self.window) * self.count)
         self.timestamp = now
         if self.tokens >= 1.0:
             self.tokens -= 1.0
@@ -76,7 +79,7 @@ class _Bucket:
         if self.count <= 0:
             return int(self.window)
         refill_per_sec = self.count / self.window
-        return max(1, int((1.0 - self.tokens) / refill_per_sec) + 1)
+        return max(1, math.ceil((1.0 - self.tokens) / refill_per_sec))
 
     def is_stale(self, now: float, max_window: int) -> bool:
         """Bucket is reusable (fully refilled and idle for one window)."""
@@ -99,8 +102,10 @@ class RateLimitMiddleware:
         self._buckets: dict[str, _Bucket] = {}
         self._max_window = 60
 
-    def _make_bucket(self, limit_str: str) -> _Bucket:
-        return _Bucket(*_parse_limit(limit_str))
+    def _make_bucket(self, limit_str: str, now: float) -> _Bucket:
+        # Use the same request timestamp for initialization and consumption.
+        # Sampling a later constructor time can subtract from a full bucket.
+        return _Bucket(*_parse_limit(limit_str), now=now)
 
     def _client_ip(self, scope: Scope) -> str:
         headers = scope.get("headers") or []
@@ -141,7 +146,7 @@ class RateLimitMiddleware:
 
         bucket = self._buckets.get(key)
         if bucket is None:
-            bucket = self._make_bucket(limit_str)
+            bucket = self._make_bucket(limit_str, now)
             self._max_window = max(self._max_window, bucket.window)
             self._buckets[key] = bucket
 
