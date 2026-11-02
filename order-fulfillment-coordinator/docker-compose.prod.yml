@@ -33,6 +33,8 @@ services:
     # Readiness is probed by the API; do not assume curl exists in this image.
 
   api:
+    # Reap orphaned probe processes; the old OCI PID 1 accumulated ~1,000 zombies.
+    init: true
     image: &api-image ${API_IMAGE_REF:-ghcr.io/${IMAGE_OWNER:?IMAGE_OWNER is required}/fulfillment-api:${TAG:?TAG is required}}
     build:
       context: ./apps/api
@@ -95,6 +97,7 @@ services:
         condition: service_started
 
   celery-worker:
+    init: true
     image: *api-image
     build:
       context: ./apps/api
@@ -127,6 +130,7 @@ services:
         condition: service_healthy
 
   celery-beat:
+    init: true
     image: *api-image
     build:
       context: ./apps/api
