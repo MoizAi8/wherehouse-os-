@@ -70,7 +70,12 @@ done
 "${COMPOSE[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 "${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 postgres redis qdrant
 "${COMPOSE[@]}" run --rm --no-deps api alembic upgrade head
-"${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 240 api celery-worker celery-beat frontend caddy
+# Compose 2.40 rejects --wait for beat's explicitly disabled inherited API probe.
+# Start the scheduler separately; retain real health gates on API and worker.
+"${COMPOSE[@]}" up -d --no-build celery-beat
+beat_id=$("${COMPOSE[@]}" ps -q celery-beat)
+[[ -n "$beat_id" && "$("${DOCKER[@]}" inspect -f '{{.State.Running}}' "$beat_id")" == true ]] || { echo 'Celery scheduler is not running'; exit 1; }
+"${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 360 api celery-worker frontend caddy
 "${COMPOSE[@]}" exec -T caddy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 ready=false
 for ((attempt=1; attempt<=24; attempt++)); do

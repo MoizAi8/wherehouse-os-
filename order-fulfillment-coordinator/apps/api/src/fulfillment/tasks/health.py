@@ -23,7 +23,11 @@ def celery_worker_health(timeout: float = 2.0) -> dict:
     health endpoint uses this to report broker/worker status (fail soft).
     """
     try:
-        result = celery_app.send_task(_PING_TASK)
+        # The old unconsumed health queue can contain months of stale probes.
+        # Execute current readiness probes separately without deleting old work.
+        result = celery_app.send_task(
+            _PING_TASK, queue="readiness", expires=max(10.0, timeout * 2),
+        )
         raw = result.get(timeout=timeout)
         return {"connected": raw == "pong", "detail": str(raw)}
     except Exception as exc:

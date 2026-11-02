@@ -1,0 +1,38 @@
+name: Inspect or enable existing OCI HTTPS
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect existing rules or add HTTPS only to the verified application VNIC
+        type: choice
+        options: [inspect, allow_https]
+        default: inspect
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: oci-warehouse-network
+  cancel-in-progress: false
+jobs:
+  network:
+    if: github.repository == 'MoizAi8/wherehouse-os-' && github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install isolated official network diagnostic SDK
+        run: |
+          python -m venv .oci-network-venv
+          .oci-network-venv/bin/python -m pip install --disable-pip-version-check 'oci==2.189.0'
+      - name: Inspect or enable only verified instance HTTPS
+        env:
+          NETWORK_MODE: ${{ inputs.mode }}
+          OCI_TENANCY: ${{ secrets.OCI_TENANCY }}
+          OCI_USER: ${{ secrets.OCI_USER }}
+          OCI_FINGERPRINT: ${{ secrets.OCI_FINGERPRINT }}
+          OCI_KEY: ${{ secrets.OCI_KEY }}
+        run: .oci-network-venv/bin/python .github/scripts/oci_network.py

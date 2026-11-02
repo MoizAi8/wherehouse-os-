@@ -93,7 +93,13 @@ def test_deploy_command_flow_and_failure_propagation(tmp_path, failure):
 set -e
 docker() {
     printf '%s\n' "$*" >> "$CALLS"
+    if [[ "$*" == *" up -d "* && "$*" == *" --wait "* && "$*" == *"celery-beat"* ]]; then
+        echo 'container celery-beat has no healthcheck configured'
+        return 1
+    fi
     case " $* " in
+      *" ps -q celery-beat "*) echo fixture-beat; return ;;
+      *".State.Running"*) echo true; return ;;
       *" container inspect "*) [[ "$FAILURE" == collision || "$FAILURE" == existing ]]; return ;;
       *" inspect -f "*)
         if [[ "$FAILURE" == existing ]]; then

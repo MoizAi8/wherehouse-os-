@@ -143,7 +143,7 @@ async def health() -> dict[str, object]:
 
 async def _safe_celery_health() -> dict:
     try:
-        return await async_celery_worker_health(timeout=1.0)
+        return await async_celery_worker_health(timeout=5.0)
     except Exception as exc:
         logger.warning("Health check Celery probe failed: %s", exc)
         return {"connected": False, "detail": f"{type(exc).__name__}: {exc}"}
