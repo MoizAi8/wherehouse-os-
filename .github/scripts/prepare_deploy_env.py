@@ -5,6 +5,13 @@ import re
 
 
 def encode_settings(environ: dict[str, str]) -> str:
+    if environ.get("CFG_CHAT_PROVIDER") == "gemini-free":
+        if environ.get("GEMINI_FREE_TIER_CONFIRMED", "").lower() != "true":
+            raise ValueError("Confirm the Gemini project has no linked billing account before enabling inference")
+        if environ.get("CFG_CHAT_MODEL") != "gemini-3.5-flash-lite":
+            raise ValueError("The zero-budget release permits only the reviewed Gemini Flash-Lite model")
+        if environ.get("CFG_CHAT_BASE_URL") != "https://generativelanguage.googleapis.com/v1beta/openai/":
+            raise ValueError("The Gemini credential must use the official HTTPS endpoint")
     values = {key[4:]: value for key, value in environ.items() if key.startswith("CFG_") and value}
     required = ("POSTGRES_PASSWORD", "JWT_SECRET", "WEBHOOK_SECRET", "INTEGRATION_SECRET_KEY",
                 "DOMAIN", "FRONTEND_URL")
@@ -22,8 +29,10 @@ def encode_settings(environ: dict[str, str]) -> str:
 
 
 if __name__ == "__main__":
-    if not os.environ.get("CFG_OPENAI_API_KEY"):
-        print("External AI and embeddings are unconfigured; core application only. No provider requests will be enabled.")
+    if not os.environ.get("CFG_OPENAI_API_KEY") and not os.environ.get("CFG_CHAT_API_KEY"):
+        print("External AI is unconfigured; core database functionality remains available.")
+    if os.environ.get("CFG_CHAT_API_KEY") and not os.environ.get("CFG_OPENAI_API_KEY"):
+        print("Chat-only provider configured. Embeddings remain unconfigured; existing vector collections are unchanged.")
     encoded = encode_settings(dict(os.environ))
     print(f"::add-mask::{encoded}")
     with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as target:

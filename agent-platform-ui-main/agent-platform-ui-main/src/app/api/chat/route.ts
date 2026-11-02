@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = (await req.json()) as { message?: string; sessionId?: string }
+    const body = (await req.json()) as { message?: string; sessionId?: string; confirmationToken?: string }
 
     const message = body.message?.trim()
     if (!message) {
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
     const backendRes = await fetch(`${base}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", ...authHeaders },
-      body: JSON.stringify({ message, session_id: body.sessionId || null }),
+      body: JSON.stringify({ message, session_id: body.sessionId || null, confirmation_token: body.confirmationToken || null }),
       signal: AbortSignal.timeout(60000),
     })
 

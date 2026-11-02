@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from enum import Enum
@@ -63,13 +64,14 @@ class CircuitBreaker:
                 )
 
         try:
-            if asyncio.iscoroutinefunction(func):
-                result = await func(*args, **kwargs)
-            else:
-                result = func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            # SDK decorators may be synchronous wrappers returning an awaitable.
+            # Success/failure must be recorded only after the actual call finishes.
+            if inspect.isawaitable(result):
+                result = await result
 
             await self._on_success()
-            return cast(T, result)
+            return result
 
         except self.excluded_exceptions:
             raise

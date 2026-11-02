@@ -9,9 +9,9 @@ export function SessionExpiryGuard() {
   const { data: session, status } = useSession()
   const pathname = usePathname()
   useEffect(() => {
-    if (process.env.NODE_ENV === "production" && (
+    if (process.env.NODE_ENV === "production" && pathname.startsWith("/dashboard") && (
       session?.error === "SessionExpired" ||
-      (status === "unauthenticated" && pathname.startsWith("/dashboard"))
+      status === "unauthenticated"
     )) void refreshSession()
   }, [session?.error, status, pathname])
   return null

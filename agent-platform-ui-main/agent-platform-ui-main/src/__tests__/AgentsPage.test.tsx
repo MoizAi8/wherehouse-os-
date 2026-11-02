@@ -28,8 +28,8 @@ describe("Category 3: Agents Page", () => {
     render(<AgentsPage />)
     expect(screen.getByText("RoutingAgent")).toBeInTheDocument()
     expect(screen.getByText("MonitorAgent")).toBeInTheDocument()
-    expect(screen.getAllByText("active").length).toBeGreaterThan(0)
-    expect(screen.getAllByText("processing").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("unverified")).toHaveLength(7)
+    expect(screen.queryByText("active")).not.toBeInTheDocument()
   })
 
   it("Test 17: Agent cards reflect monitor data", () => {
@@ -44,9 +44,9 @@ describe("Category 3: Agents Page", () => {
     expect(screen.getByText("Notification Relay")).toBeInTheDocument()
   })
 
-  it("Test 19: Reroute handler activates when delays detected", () => {
+  it("Test 19: Delays do not fabricate a rerouting agent runtime state", () => {
     render(<AgentsPage />)
-    expect(screen.getAllByText("active").length).toBeGreaterThan(0)
+    expect(screen.getAllByText("unverified")).toHaveLength(7)
   })
 
   it("Test 20: Loading state shows skeleton", () => {

@@ -125,16 +125,20 @@ class RateLimitMiddleware:
             del self._buckets[key]
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] not in ("http", "websocket") or not self._enabled:
+        path = scope.get("path", "")
+        is_demo = path.startswith("/api/demo/")
+        if scope["type"] not in ("http", "websocket") or (not self._enabled and not is_demo):
             await self.app(scope, receive, send)
             return
 
-        path = scope.get("path", "")
         client_ip = self._client_ip(scope)
         now = time.monotonic()
         self._prune(now)
 
-        if _AUTH_PATH.match(path):
+        if is_demo:
+            key = f"demo-chat:{client_ip}" if path == "/api/demo/chat" else f"demo-read:{client_ip}"
+            limit_str = "10/minute" if path == "/api/demo/chat" else "120/minute"
+        elif _AUTH_PATH.match(path):
             key = f"auth:{client_ip}"
             limit_str = settings.rate_limit_auth
         elif _CHAT_PATH.match(path):
@@ -146,6 +150,9 @@ class RateLimitMiddleware:
 
         bucket = self._buckets.get(key)
         if bucket is None:
+            if is_demo and len(self._buckets) >= 10000:
+                await self._send_429(send, 60)
+                return
             bucket = self._make_bucket(limit_str, now)
             self._max_window = max(self._max_window, bucket.window)
             self._buckets[key] = bucket

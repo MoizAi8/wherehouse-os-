@@ -11,11 +11,11 @@ export interface AgentInfo {
   id: string
   name: string
   role: string
-  status: "active" | "idle" | "error" | "processing"
+  status: "active" | "idle" | "error" | "processing" | "unknown"
   uptime: string
   tasksCompleted: number
-  workload: number
-  accuracy: number
+  workload: number | null
+  accuracy: number | null
 }
 
 export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { name: string; role: string }) => void }) {
@@ -23,59 +23,60 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
   const { query } = useSearch()
 
   const agents = useMemo<AgentInfo[]>(() => {
-    const delaysDetected = monitorData?.delays_detected ?? 0
     if (loading) return []
     return [
       {
         id: "routing",
         name: "RoutingAgent",
         role: "Order Router",
-        status: "active",
+        status: "unknown",
         uptime: "--",
         tasksCompleted: 0,
-        workload: 0,
-        accuracy: 0,
+        workload: null,
+        accuracy: null,
       },
       {
         id: "monitor",
         name: "MonitorAgent",
         role: "Shipment Monitor",
-        status: "processing",
+        status: "unknown",
         uptime: "--",
         tasksCompleted: monitorData?.shipments_checked ?? 0,
-        workload: 0,
-        accuracy: 0,
+        workload: null,
+        accuracy: null,
       },
       {
         id: "prediction",
         name: "PredictionAgent",
         role: "Failure Predictor",
-        status: "processing",
+        status: "unknown",
         uptime: "--",
-        tasksCompleted: delaysDetected,
-        workload: 0,
-        accuracy: 0,
+        tasksCompleted: 0,
+        workload: null,
+        accuracy: null,
       },
       {
         id: "rerouting",
         name: "ReroutingAgent",
         role: "Reroute Handler",
-        status: delaysDetected > 0 ? "active" : "idle",
+        status: "unknown",
         uptime: "--",
         tasksCompleted: monitorData?.reroutes_initiated ?? 0,
-        workload: 0,
-        accuracy: 0,
+        workload: null,
+        accuracy: null,
       },
       {
         id: "communication",
         name: "CommunicationAgent",
         role: "Notification Relay",
-        status: "active",
+        status: "unknown",
         uptime: "--",
         tasksCompleted: monitorData?.notifications_sent ?? 0,
-        workload: 0,
-        accuracy: 0,
+        workload: null,
+        accuracy: null,
       },
+      { id: "cost", name: "CostOptimizer", role: "Cost Comparison", status: "unknown", uptime: "--", tasksCompleted: 0, workload: null, accuracy: null },
+      { id: "orchestrator", name: "FulfillmentOrchestrator", role: "Workflow Coordination", status: "unknown", uptime: "--", tasksCompleted: 0, workload: null, accuracy: null },
     ]
   }, [loading, monitorData])
 
@@ -99,6 +100,7 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
 
   return (
     <div className="space-y-2" role="list" aria-label="Agent status list">
+      <p className="text-xs text-muted-foreground">Component roster. Runtime state, workload and accuracy are unverified.</p>
       {filtered.map((agent, i) => (
         <AgentCard key={agent.id} agent={agent} index={i} onSelect={onAgentSelect} />
       ))}

@@ -79,7 +79,7 @@ export default function DashboardPage() {
     { icon: Bot, label: "Total Orders", value: kpis ? String(kpis.total_orders) : "–" },
     { icon: TrendingUp, label: "On-Time Rate", value: kpis ? `${kpis.on_time_delivery_rate.toFixed(1)}%` : "–" },
     { icon: Clock, label: "Avg Delivery (days)", value: kpis ? kpis.avg_delivery_time_days.toFixed(1) : "–" },
-    { icon: Activity, label: "Shipments Today", value: monitor ? String(monitor.shipments_checked) : "–" },
+    { icon: Activity, label: "Last Recorded Cycle Checks", value: monitor && monitor.recorded !== false ? String(monitor.shipments_checked) : "–" },
   ]
 
   const delays = monitor?.delays_detected ?? 0

@@ -53,6 +53,21 @@ def test_core_deployment_does_not_require_an_external_ai_credential():
     assert "DOMAIN='test-value'" in decoded
 
 
+def test_gemini_zero_budget_configuration_requires_explicit_free_tier_confirmation():
+    env = {**settings(), "CFG_CHAT_PROVIDER": "gemini-free", "CFG_CHAT_API_KEY": "fixture-not-a-key",
+           "CFG_CHAT_MODEL": "gemini-3.5-flash-lite",
+           "CFG_CHAT_BASE_URL": "https://generativelanguage.googleapis.com/v1beta/openai/"}
+    with pytest.raises(ValueError, match="no linked billing"):
+        encode_settings(env)
+    env["GEMINI_FREE_TIER_CONFIRMED"] = "true"
+    decoded = base64.b64decode(encode_settings(env)).decode()
+    assert "CHAT_API_KEY='fixture-not-a-key'" in decoded
+    assert "GEMINI_FREE_TIER_CONFIRMED" not in decoded
+    env["CFG_CHAT_BASE_URL"] = "https://untrusted.invalid/"
+    with pytest.raises(ValueError, match="official HTTPS"):
+        encode_settings(env)
+
+
 def test_dotenv_refuses_passwords_that_break_the_database_url():
     env = settings()
     env["CFG_POSTGRES_PASSWORD"] = "unsafe@password"

@@ -1,3 +1,24 @@
+{
+    # IP URL clients normally omit SNI; Docker sees its internal address.
+    default_sni 140.245.218.97
+}
+
+# A trusted IP certificate terminates TLS before redirecting to the canonical
+# hostname. This preserves one NextAuth cookie/CSRF origin, not two auth sites.
+https://140.245.218.97 {
+    tls {
+        issuer acme {
+            dir https://acme-v02.api.letsencrypt.org/directory
+            profile shortlived
+        }
+    }
+    redir https://{$DOMAIN}{uri} 308
+}
+
+http://140.245.218.97 {
+    redir https://{$DOMAIN}{uri} 308
+}
+
 # ── Domain-based routing ────────────────────────────────
 {$DOMAIN:localhost} {
 
@@ -17,7 +38,7 @@
     }
 
     # FastAPI owns these namespaces and explicit authentication operations.
-    @backend_api path /api/v1/* /api/chat/* /api/auth/login /api/auth/register /api/auth/refresh /api/auth/logout /api/auth/me /api/auth/change-password /api/auth/forgot-password /api/auth/reset-password /api/auth/users
+    @backend_api path /api/v1/* /api/chat/* /api/demo/* /api/auth/login /api/auth/register /api/auth/refresh /api/auth/logout /api/auth/me /api/auth/change-password /api/auth/forgot-password /api/auth/reset-password /api/auth/users
     handle @backend_api {
         reverse_proxy api:8000
     }

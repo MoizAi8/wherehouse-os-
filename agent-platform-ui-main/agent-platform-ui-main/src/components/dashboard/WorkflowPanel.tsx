@@ -50,9 +50,10 @@ export function WorkflowPanel() {
   return (
     <div className="rounded-xl glass-card">
       <div className="flex items-center justify-between border-b border-border/30 px-5 py-3">
-        <div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-muted-foreground" /><h3 className="text-sm font-semibold">Active Workflows</h3></div>
+        <div className="flex items-center gap-2"><GitBranch className="h-4 w-4 text-muted-foreground" /><h3 className="text-sm font-semibold">Workflow simulations</h3></div>
         <Badge variant="secondary" className="text-[10px]">{filtered.length} workflows</Badge>
       </div>
+      <p className="px-5 py-3 text-xs text-muted-foreground">Sample data. These controls change this view only; no production workflow is started, paused or completed.</p>
       <ScrollArea className="h-[320px]">
         <div className="divide-y divide-border/30">
           {filtered.map((wf, i) => {
@@ -69,7 +70,7 @@ export function WorkflowPanel() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-muted-foreground">{wf.agents} agents</span>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleWorkflow(wf.id)}>
+                    <Button aria-label={`Toggle simulation ${wf.name}`} variant="ghost" size="icon" className="h-7 w-7" onClick={() => toggleWorkflow(wf.id)}>
                       {wf.status === "running" ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                     </Button>
                   </div>

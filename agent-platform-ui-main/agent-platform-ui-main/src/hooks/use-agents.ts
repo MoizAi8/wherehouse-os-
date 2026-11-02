@@ -12,6 +12,7 @@ export interface MonitorResponse {
   anomalies_found: number
   events: Record<string, unknown>[]
   completed_at: string
+  recorded?: boolean
 }
 
 const EMPTY_MONITOR: MonitorResponse = {
@@ -28,7 +29,7 @@ const EMPTY_MONITOR: MonitorResponse = {
 export function useAgentMonitor() {
   return useApi(async () => {
     try {
-      return await api.post<MonitorResponse>("/api/v1/agents/monitor")
+      return await api.get<MonitorResponse>("/api/v1/agents/status")
     } catch (err) {
       if (err instanceof ApiError && err.status === 403) {
         // Viewers can view the agent roster but cannot run a monitor cycle.

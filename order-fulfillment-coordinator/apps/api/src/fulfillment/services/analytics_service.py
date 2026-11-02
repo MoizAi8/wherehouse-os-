@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import func, select, case
+from sqlalchemy import func, select, case, ColumnElement
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.models.order import Order, OrderStatus
@@ -16,6 +17,13 @@ logger = logging.getLogger(__name__)
 class AnalyticsService:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+
+    def _delivery_days(self) -> ColumnElement[float | Decimal]:
+        # Duration starts when the shipment was created, not at its ETA.
+        # SQLite datetime subtraction is numeric string coercion, not an interval.
+        if self.db.get_bind().dialect.name == "sqlite":
+            return func.julianday(Shipment.actual_delivery) - func.julianday(Shipment.created_at)
+        return func.extract("epoch", Shipment.actual_delivery - Shipment.created_at) / 86400
 
     async def compute_kpis(
         self,
@@ -40,15 +48,16 @@ class AnalyticsService:
         delayed_count = await self._scalar(delayed_count_q)
 
         on_time_rate = 0.0
-        if delivered_count > 0:
-            on_time = delivered_count - delayed_count
-            on_time_rate = round((on_time / delivered_count) * 100, 2)
+        completed = await self._scalar(select(func.count(Shipment.id)).where(Shipment.actual_delivery.isnot(None)))
+        if completed > 0:
+            on_time = await self._scalar(select(func.count(Shipment.id)).where(
+                Shipment.actual_delivery.isnot(None), Shipment.estimated_delivery.isnot(None),
+                Shipment.actual_delivery <= Shipment.estimated_delivery))
+            on_time_rate = round((on_time / completed) * 100, 2)
 
         avg_delivery = await self._scalar(
             select(
-                func.avg(
-                    func.extract("epoch", Shipment.actual_delivery - Shipment.estimated_delivery) / 86400
-                )
+                func.avg(self._delivery_days())
             ).where(Shipment.actual_delivery.isnot(None))
         )
 
@@ -98,9 +107,7 @@ class AnalyticsService:
                 ).label("delayed_shipments"),
                 func.avg(Shipment.shipping_cost).label("avg_cost"),
                 func.sum(Shipment.shipping_cost).label("total_cost"),
-                func.avg(
-                    func.extract("epoch", Shipment.actual_delivery - Shipment.estimated_delivery) / 86400
-                ).label("avg_delivery_days"),
+                func.avg(self._delivery_days()).label("avg_delivery_days"),
             )
             .group_by(Shipment.carrier_name)
         )

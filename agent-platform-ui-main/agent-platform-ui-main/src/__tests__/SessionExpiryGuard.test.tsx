@@ -40,3 +40,10 @@ it("does not interrupt an authenticated session or one still loading", () => {
   view.rerender(<SessionExpiryGuard />)
   expect(refreshSession).not.toHaveBeenCalled()
 })
+
+it("never redirects the isolated public demo because a production cookie expired", () => {
+  vi.mocked(usePathname).mockReturnValue("/demo")
+  setSession({ data: { error: "SessionExpired" }, status: "authenticated" })
+  render(<SessionExpiryGuard />)
+  expect(refreshSession).not.toHaveBeenCalled()
+})

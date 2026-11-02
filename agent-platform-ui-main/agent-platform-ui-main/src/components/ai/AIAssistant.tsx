@@ -46,6 +46,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
   const [streamContent, setStreamContent] = useState("")
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "checking">("checking")
   const [retryAttempt, setRetryAttempt] = useState(0)
+  const [pendingAction, setPendingAction] = useState<{ message: string; token: string } | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const idCounter = useRef(0)
 
@@ -117,16 +118,17 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     setMessages([{ id: "0", role: "assistant", content: "Chat cleared. Send a message to start a new conversation." }])
     idCounter.current = 1
     setRetryAttempt(0)
+    setPendingAction(null)
   }
 
   // Separate async function for retry logic (not a useCallback to avoid circular reference)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const sendWithRetry = async (text: string, retries = MAX_RETRIES): Promise<{ reply: string; sessionId?: string }> => {
+  const sendWithRetry = async (text: string, retries = MAX_RETRIES, confirmationToken?: string): Promise<{ reply: string; sessionId?: string; confirmation?: { message: string; token: string } }> => {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId }),
+        body: JSON.stringify({ message: text, sessionId, confirmationToken }),
       })
 
       if (!res.ok) {
@@ -140,8 +142,12 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
 
       const data = await res.json()
       setRetryAttempt(0)
-      return { reply: data.reply, sessionId: data.sessionId }
+      return { reply: data.reply, sessionId: data.session_id || data.sessionId,
+        confirmation: data.action === "confirmation_required" ? { message: data.data.message, token: data.data.confirmation_token } : undefined }
     } catch (err) {
+      // A confirmed operation may have committed even if its response was lost.
+      // Never automatically replay a state-changing request.
+      if (confirmationToken) throw err
       if (err instanceof ApiError && (err.status === 401 || err.status === 403)) throw err
       if (retries > 0) {
         const nextAttempt = MAX_RETRIES - retries + 1
@@ -154,7 +160,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     }
   }
 
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (text: string, confirmationToken?: string) => {
     if (!text.trim() || streaming) return
 
     idCounter.current += 1
@@ -162,10 +168,12 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setStreaming(true)
+    setPendingAction(null)
     setStreamContent("")
 
     try {
-      const { reply, sessionId: newSessionId } = await sendWithRetry(text)
+      const { reply, sessionId: newSessionId, confirmation } = await sendWithRetry(text, MAX_RETRIES, confirmationToken)
+      setPendingAction(confirmation || null)
       if (newSessionId) {
         window.localStorage.setItem(SESSION_KEY, newSessionId)
         setSessionId(newSessionId)
@@ -269,6 +277,12 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
           )}
         </div>
       </ScrollArea>
+
+      {pendingAction && <div className="mx-4 rounded-lg border border-warning/40 bg-warning/5 p-3 text-sm">
+        <p className="mb-2 break-words">Review action: {pendingAction.message}</p>
+        <div className="flex gap-2"><button disabled={streaming} onClick={() => void handleSend(pendingAction.message, pendingAction.token)} className="rounded bg-accent px-3 py-2 text-white">Confirm warehouse action</button>
+          <button onClick={() => setPendingAction(null)} className="rounded border border-border px-3 py-2">Cancel action</button></div>
+      </div>}
 
       <div className="p-4 border-t border-border/30">
         <div className="flex flex-wrap gap-1.5 mb-3">

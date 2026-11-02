@@ -87,6 +87,15 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     openai_base_url: str = ""
     openai_model: str = "gpt-4o-mini"
+    # Chat-only overrides never enable embeddings for a different provider.
+    chat_api_key: str = ""
+    chat_base_url: str = ""
+    chat_model: str = ""
+    chat_provider: str = "openai-compatible"
+    chat_timeout_seconds: float = 25.0
+    chat_max_output_tokens: int = 500
+    teacher_demo_mode: bool = False
+    teacher_demo_llm_max_requests: int = 100
     embedding_model: str = "text-embedding-3-small"
     embedding_dimensions: int = 1536
 

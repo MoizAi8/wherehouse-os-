@@ -1070,7 +1070,7 @@ ENDPOINT_CASES = [
     ('where is my parcel', 'check_status'),
     ('sare orders dikhao', 'list_orders'),
     ('pending wale batao', 'filter_orders'),
-    ('create order demo@example.com Lahore 3kg', 'create_order_created'),
+    ('create order demo@example.com Lahore 3kg', 'confirmation_required'),
     ('create order', 'create_order_missing_fields'),
     ('total orders kitne hain', 'metrics'),
     ('sasta route batao', 'cost_analysis'),
@@ -1259,4 +1259,5 @@ def test_chat_endpoint_reuses_session(chat_client, message: str, expected_action
     assert resp.json()["session_id"] == "sess-1000"
 
 
-
+# Persisted history/user isolation is tested in test_chat_access.py with a
+# committing database fixture. Keep the generated corpus at its existing scope.

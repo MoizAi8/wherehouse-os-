@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
 import { api } from "@/lib/api"
+import { usePathname } from "next/navigation"
 
 export interface AppSettings {
   theme: "dark" | "light"
@@ -63,6 +64,7 @@ function loadLocal(): AppSettings {
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const protectedPage = usePathname().startsWith("/dashboard")
   const [settings, setSettings] = useState<AppSettings>(defaults)
   const [loaded, setLoaded] = useState(false)
   const [savedSnapshot, setSavedSnapshot] = useState(JSON.stringify(defaults))
@@ -70,7 +72,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const local = loadLocal()
 
-    api.get<AppSettings>("/api/v1/settings")
+    // Public pages must not fetch protected settings or trigger a login redirect.
+    const remoteSettings = protectedPage ? api.get<Partial<AppSettings>>("/api/v1/settings") : Promise.resolve({})
+    remoteSettings
       .then((remote) => {
         const merged = { ...defaults, ...local, ...remote }
         setSettings(merged)
@@ -81,7 +85,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setSavedSnapshot(JSON.stringify(local))
       })
       .finally(() => setLoaded(true))
-  }, [])
+  }, [protectedPage])
 
   useEffect(() => {
     if (!loaded) return

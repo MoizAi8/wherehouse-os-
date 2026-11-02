@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from fulfillment.api import auth, chat
+from fulfillment.api import auth, chat, demo
 from fulfillment.api.v1 import (
     agents,
     analytics,
@@ -89,6 +89,7 @@ app.add_middleware(RequestLoggingMiddleware)
 
 app.include_router(auth.router)
 app.include_router(chat.router)
+app.include_router(demo.router)
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(shipments.router, prefix="/api/v1/shipments", tags=["shipments"])
 app.include_router(carriers.router, prefix="/api/v1/carriers", tags=["carriers"])

@@ -284,7 +284,7 @@ ENDPOINT_CASES = [
     ("where is my parcel", "check_status"),
     ("sare orders dikhao", "list_orders"),
     ("pending wale batao", "filter_orders"),
-    ("create order demo@example.com Lahore 3kg", "create_order"),
+    ("create order demo@example.com Lahore 3kg", "confirmation_required"),
     ("create order", "create_order_missing_fields"),
     ("total orders kitne hain", "metrics"),
     ("sasta route batao", "cost_analysis"),
@@ -646,16 +646,8 @@ def test_chat_endpoint_reuses_session(chat_client, message: str, expected_action
     assert resp.json()["session_id"] == "sess-1000"
 
 
-def test_chat_history_endpoint(chat_client) -> None:
-    client, _ = chat_client
-    with patch.object(chat_module, "_intent_analyzer", IntentAnalyzer(None)), \\
-         patch.object(chat_module, "_openai_client", None):
-        client.post("/api/chat", json={{"message": "hello", "session_id": "sess-hist"}})
-        resp = client.get("/api/chat/history", params={{"session_id": "sess-hist"}})
-    assert resp.status_code == 200
-    body = resp.json()
-    assert body["session_id"] == "sess-hist"
-    assert len(body["messages"]) == 2  # user + assistant
+# Persisted history/user isolation is tested in test_chat_access.py with a
+# committing database fixture. Keep the generated corpus at its existing scope.
 '''
     Path(out_path).write_text(src, encoding="utf-8")
     print(f"wrote {out_path}")

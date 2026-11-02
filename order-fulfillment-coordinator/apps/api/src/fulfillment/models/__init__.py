@@ -26,3 +26,4 @@ __all__ = [
     "RefreshToken",
     "ChatMessageRecord",
 ]
+from fulfillment.models.chat_approval import ChatApproval  # noqa: F401

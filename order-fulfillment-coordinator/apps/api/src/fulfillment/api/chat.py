@@ -4,11 +4,12 @@ import logging
 import hashlib
 import hmac
 import re
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, APIConnectionError, APITimeoutError
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func as sqlfunc
@@ -21,6 +22,8 @@ from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment
 from fulfillment.schemas.order import OrderCreate, OrderRead
 from fulfillment.services.order_service import OrderService
+from fulfillment.services import chat_approval
+from fulfillment.services.conversation import CONVERSATION_PROMPT, chat_client, chat_model, conversation_instructions
 from fulfillment.resilience import with_retry, get_circuit_breaker
 from fulfillment.logging_config import log_agent_event, get_correlation_id
 
@@ -34,6 +37,7 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 class ChatMessage(BaseModel):
     message: str = Field(..., min_length=1, max_length=5000)
     session_id: str | None = Field(default=None, min_length=1, max_length=64)
+    confirmation_token: str | None = Field(default=None, min_length=32, max_length=128)
 
 
 class ChatResponse(BaseModel):
@@ -41,6 +45,9 @@ class ChatResponse(BaseModel):
     action: str | None = None
     data: dict | None = None
     session_id: str | None = None
+    mode: str = "deterministic"
+    model: str | None = None
+    usage: dict[str, int] | None = None
 
 
 class ChatHistoryMessage(BaseModel):
@@ -54,14 +61,11 @@ class ChatHistoryResponse(BaseModel):
     messages: list[ChatHistoryMessage]
 
 
-_openai_client: AsyncOpenAI | None = None
-if settings.openai_api_key:
-    _openai_client = AsyncOpenAI(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_base_url or None,
-        timeout=25.0,
-        max_retries=0,
-    )
+_openai_client: AsyncOpenAI | None = chat_client()
+_conversation_history: ContextVar[tuple[tuple[str, str], ...]] = ContextVar("conversation_history", default=())
+_generation_mode: ContextVar[str] = ContextVar("generation_mode", default="deterministic")
+_database_answer: ContextVar[bool] = ContextVar("database_answer", default=False)
+_model_usage: ContextVar[dict[str, int] | None] = ContextVar("model_usage", default=None)
 
 _intent_analyzer = IntentAnalyzer(_openai_client)
 
@@ -93,6 +97,7 @@ INTENT_MAP = {
     "HELP": "help",
     "GREETING": "greeting",
     "CREATE_ORDER": "create_order",
+    "CONVERSATION": "conversation",
 }
 
 async def detect_intent(text: str, history: list[tuple[str, str]] | None = None) -> str:
@@ -150,6 +155,7 @@ async def _handle_create_order(
     )
 
     service = OrderService(db)
+
     order = await service.create_order(payload)
 
     context = (
@@ -170,26 +176,32 @@ async def _handle_create_order(
         fallback=(
             f"Your order was created successfully. Order ID: #{order.id[:8]}, "
             f"customer {order.customer_email}, destination {order.shipping_city}, {order.shipping_state}. "
-            f"It will be routed shortly."
+            "No shipment has been created. Routing requires a separate confirmation."
         ),
     )
     return reply, "create_order_created", OrderRead.model_validate(order).model_dump(mode="json")
 
 
 async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: int = 500, fallback: str | None = None) -> str:
+    if _database_answer.get() and fallback is not None:
+        _generation_mode.set("database")
+        return fallback
     if not _openai_client:
         return fallback or "AI service is not configured."
 
     async def _call_openai():
         base_kwargs = {
-            "model": settings.openai_model or "gpt-4o-mini",
+            "model": chat_model(),
             "messages": [
                 {"role": "system", "content": system_prompt},
+                *[{"role": role, "content": content} for role, content in _conversation_history.get()],
                 {"role": "user", "content": user_prompt},
             ],
             "temperature": 0.3,
-            "max_tokens": max_tokens,
+            "max_tokens": min(max_tokens, max(16, min(500, settings.chat_max_output_tokens))),
         }
+        if settings.chat_provider == "gemini-free":
+            base_kwargs["reasoning_effort"] = "minimal"
         return await _openai_breaker.call(
             _openai_client.chat.completions.create,
             **base_kwargs
@@ -198,9 +210,9 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
     try:
         resp = await with_retry(
             _call_openai,
-            max_retries=2,
+            max_retries=1,
             base_delay=0.5,
-            retry_exceptions=(Exception,),
+            retry_exceptions=(APIConnectionError, APITimeoutError),
         )
         content = resp.choices[0].message.content
         reply = content.strip() if content else ""
@@ -212,9 +224,13 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
             logger.info("LLM response empty, no fallback available")
             return "I found the information you asked about but couldn't summarize it. Please try rephrasing your question."
         logger.info("LLM response generation received | length=%d", len(reply))
+        if reply:
+            _generation_mode.set("llm")
+            if resp.usage:
+                _model_usage.set({"input_tokens": resp.usage.prompt_tokens, "output_tokens": resp.usage.completion_tokens})
         return reply
     except Exception as e:
-        logger.error("LLM response generation failed | error='%s'", e)
+        logger.error("LLM response generation failed | error_type=%s", type(e).__name__)
         return fallback or "I'm having trouble processing your request right now. Please try again."
 
 
@@ -279,7 +295,7 @@ def _history_section(history: list[tuple[str, str]]) -> str:
     )
 
 
-_BASE_SYSTEM_PROMPT = (
+_BASE_SYSTEM_PROMPT = CONVERSATION_PROMPT + (
     "You are the Warehouse OS AI — an intelligent, professional, and helpful warehouse management assistant.\n\n"
     "You help operators manage autonomous agents, interpret metrics, and optimize fulfillment workflows. "
     "You can engage in natural conversation, answer questions about system status, and assist with order fulfillment tasks.\n\n"
@@ -355,22 +371,64 @@ async def chat(
     session_id = body.session_id or str(uuid4())
     storage_key = _owned_session_key(_user, session_id)
     history = await _load_chat_history(db, storage_key)
-    system_prompt = _BASE_SYSTEM_PROMPT + _history_section(history)
+    # History remains untrusted conversation, never elevated into system rules.
+    bounded = []
+    size = 0
+    for role, content in reversed(history):
+        if role not in ("user", "assistant"):
+            continue
+        content = content[:2000]
+        if size + len(content) > 6000:
+            break
+        bounded.append((role, content))
+        size += len(content)
+    _conversation_history.set(tuple(reversed(bounded)))
+    _generation_mode.set("deterministic")
+    _model_usage.set(None)
+    _database_answer.set(False)
+    system_prompt = _BASE_SYSTEM_PROMPT
     await _save_chat_message(db, storage_key, "user", message)
 
     async def _respond(reply: str, action: str | None = None, data: dict | None = None) -> ChatResponse:
         await _save_chat_message(db, storage_key, "assistant", reply)
-        return ChatResponse(reply=reply, action=action, data=data, session_id=session_id)
+        # A follow-up request may arrive before a yield dependency's teardown.
+        # Persist history and any issued approval before advertising success.
+        await db.commit()
+        return ChatResponse(reply=reply, action=action, data=data, session_id=session_id,
+            mode=_generation_mode.get(), model=chat_model() if _generation_mode.get() == "llm" else None,
+            usage=_model_usage.get())
+
+    async def _approve(action: str, payload: dict) -> tuple[ChatResponse | None, dict]:
+        _require_chat_operator(_user)
+        if body.confirmation_token:
+            approved = await chat_approval.consume(db, body.confirmation_token, storage_key, action, message)
+            return None, approved
+        token = await chat_approval.issue(db, storage_key, action, message, payload)
+        response = await _respond("Please review and confirm this warehouse action. Nothing has been changed. "
+            "Confirmation expires in five minutes and can be used once.", "confirmation_required",
+            {"confirmation_token": token, "message": message, "operation": action, "preview": payload})
+        return response, payload
 
     intent = await detect_intent(message, history)
+    _database_answer.set(intent not in ("greeting", "help", "conversation"))
     if intent in ("create_order", "proceed_delivery"):
         _require_chat_operator(_user)
     log_agent_event("ChatAPI", "intent_detected", entity_id=session_id, details={
         "intent": intent,
-        "message_preview": message[:80],
+        "message_length": len(message),
     })
 
     service = OrderService(db)
+
+    if re.search(r"\binventory\b|\bstock\s+(?:level|count|quantity)|اسٹاک", message, re.I):
+        return await _respond("The production order database does not expose inventory quantities. "
+            "I cannot invent stock levels. The isolated teacher demo has clearly labelled sample inventory.",
+            action="inventory_unavailable")
+
+    if intent == "conversation":
+        reply = await _generate_llm_reply(conversation_instructions(message), message, max_tokens=350,
+            fallback="A language model is unavailable. I can still help with database-backed warehouse commands.")
+        return await _respond(reply, action="conversation")
 
     if intent == "greeting":
         logger.info("LLM request sent | intent=greeting")
@@ -390,10 +448,8 @@ async def chat(
     if intent == "help":
         logger.info("LLM request sent | intent=help")
         reply = await _generate_llm_reply(
-            system_prompt,
-            f"The user is asking for help or guidance. They said: \"{message}\"\n\n"
-            f"Give a helpful, conversational overview of what you can assist with — orders, shipments, agents, metrics, analytics. "
-            f"Keep it natural and inviting. Don't list commands or syntax. Just explain capabilities in plain language.",
+            conversation_instructions(message),
+            message,
             max_tokens=250,
             fallback=(
                 "I can help you with your warehouse operations — creating and tracking orders, checking shipment status, "
@@ -411,8 +467,13 @@ async def chat(
                 system_prompt,
                 "The user wants to proceed with delivery but there are no pending orders. Let them know politely.",
                 max_tokens=80,
+                fallback="There are no pending orders to route. No shipment was created.",
             )
             return await _respond(reply=reply, action="proceed_delivery")
+        approval, snapshot = await _approve("proceed_delivery", {"order_ids": [order.id for order in pending]})
+        if approval:
+            return approval
+        pending = [order for order in pending if order.id in snapshot["order_ids"]]
         routed = []
         failed = []
         for o in pending:
@@ -439,6 +500,7 @@ async def chat(
             system_prompt,
             f"The user requested to process all pending deliveries. Here are the results:\n{data_summary}\n\nSummarize the results for the user in a friendly way.",
             max_tokens=300,
+            fallback=data_summary,
         )
         return await _respond(
             reply=reply,
@@ -455,6 +517,7 @@ async def chat(
                 system_prompt,
                 "The user wants to see orders but there are none. Suggest they create one.",
                 max_tokens=80,
+                fallback="The database contains no orders.",
             )
             return await _respond(
                 reply=reply,
@@ -568,7 +631,7 @@ async def chat(
         total_events = ev_count_r.scalar() or 0
 
         context = (
-            "Active agents:\n"
+            "Defined agent components (runtime availability is not established by this query):\n"
             "1. FulfillmentOrchestrator — coordinates all agents\n"
             "2. RoutingAgent — decides carrier and fulfillment center\n"
             "3. MonitorAgent — checks shipments every 15 minutes\n"
@@ -585,6 +648,7 @@ async def chat(
             system_prompt,
             f"The user wants to know about agents and their status.\n\nCurrent system state:\n{context}\n\nPresent the agent information in a clear organized way.",
             max_tokens=400,
+            fallback=context,
         )
         return await _respond(reply=reply, action="agent_count")
 
@@ -609,13 +673,11 @@ async def chat(
         monitor_events = ev_count.scalar() or 0
 
         context = (
-            f"FulfillmentOrchestrator: {monitor_events} cycles completed\n"
-            f"RoutingAgent: assigned carrier to {processing_count} orders\n"
-            f"MonitorAgent: monitoring {total_shipments} shipments\n"
-            f"PredictionAgent: scoring {total_shipments} shipments\n"
-            f"CostOptimizer: analyzed ${total_cost:.2f} total cost\n"
-            f"ReroutingAgent: evaluating alternatives\n"
-            f"CommunicationAgent: sending alerts\n\n"
+            f"Recorded MonitorAgent events: {monitor_events}\n"
+            f"Processing orders: {processing_count}\n"
+            f"Active shipments in the queried batch: {total_shipments}\n"
+            f"Recorded shipment costs: ${total_cost:.2f}\n"
+            "Runtime throughput and completed agent cycles are not inferred from these counts.\n\n"
             f"Active: {total_shipments} | Delayed: {delayed_count}\n"
             f"Total orders: {total_orders} (Pending: {pending_count})"
         )
@@ -624,6 +686,7 @@ async def chat(
             system_prompt,
             f"The user wants agent performance data.\n\nCurrent performance:\n{context}\n\nPresent the performance data in a clear readable format.",
             max_tokens=400,
+            fallback=context,
         )
         return await _respond(reply=reply, action="agent_perf")
 
@@ -641,14 +704,14 @@ async def chat(
             f"Pending: {pending_count}\n"
             f"Processing: {processing_count}\n"
             f"Delayed: {delayed_count}\n"
-            f"Agents: 7 online"
+            "Seven agent components are defined; runtime availability must be checked separately."
         )
         logger.info("LLM request sent | intent=metrics")
         reply = await _generate_llm_reply(
             system_prompt,
             f"The user wants system metrics and summary.\n\nData:\n{context}\n\nPresent the metrics clearly and suggest what they might want to check next. Never use markdown or ** bold formatting.",
             max_tokens=300,
-            fallback=f"Current system metrics: {total} orders total, {pending_count} pending, {processing_count} processing, {delayed_count} delayed, 7 agents online.",
+            fallback=f"Current system metrics: {total} orders total, {pending_count} pending, {processing_count} processing, {delayed_count} delayed shipments. Agent runtime availability is not inferred from component definitions.",
         )
         return await _respond(reply=reply, action="metrics")
 
@@ -666,6 +729,7 @@ async def chat(
             system_prompt,
             f"The user wants insights and recommendations.\n\nSystem state:\n{context}\n\nProvide actionable insights and recommendations based on this data.",
             max_tokens=300,
+            fallback=context + "\nReview pending orders and carrier capacity before approving routing. No action has been executed.",
         )
         return await _respond(reply=reply, action="insight")
 
@@ -696,6 +760,7 @@ async def chat(
                 system_prompt,
                 f"The user wants to see {filter_status} orders but there are none. Let them know.",
                 max_tokens=80,
+                fallback=f"There are no {filter_status} orders in the database.",
             )
             return await _respond(
                 reply=reply,
@@ -711,6 +776,7 @@ async def chat(
             system_prompt,
             f"The user wants to see {filter_status} orders. Found {total} {filter_status} orders.\n\nOrders:\n{order_lines}\n\nPresent these {filter_status} orders clearly.",
             max_tokens=300,
+            fallback=f"Found {total} {filter_status} orders:\n{order_lines}",
         )
         return await _respond(
             reply=reply,
@@ -719,15 +785,20 @@ async def chat(
         )
 
     if intent == "create_order":
+        if _extract_email(message) and _extract_city(message):
+            approval, _ = await _approve("create_order", {"request": message})
+            if approval:
+                return approval
         reply, action, data = await _handle_create_order(db, message, system_prompt)
+        if action == "create_order_created":
+            await db.commit()
         return await _respond(reply=reply, action=action, data=data)
 
     if intent == "fulfillment_centers":
         svc = OrderService(db)
         total = await svc.count_orders()
-        shipped = await svc.count_orders(status_filter="shipped")
         processing = await svc.count_orders(status_filter="processing")
-        pending_count = total - processing - shipped
+        pending_count = await svc.count_orders(status_filter="pending")
         from fulfillment.models.fulfillment_center import FulfillmentCenter
         fc_result = await db.execute(select(FulfillmentCenter))
         fcs = list(fc_result.scalars().all())
@@ -756,6 +827,7 @@ async def chat(
             system_prompt,
             f"The user wants fulfillment center and carrier info.\n\nData:\n{context}\n\nPresent the fulfillment center and carrier information clearly.",
             max_tokens=400,
+            fallback=context,
         )
         return await _respond(reply=reply, action="fulfillment_centers")
 
@@ -770,6 +842,7 @@ async def chat(
                 system_prompt,
                 "The user wants the oldest pending order but there are none. Let them know.",
                 max_tokens=80,
+                fallback="There are no pending orders in the database.",
             )
             return await _respond(reply=reply, action="oldest_pending")
         created = oldest.created_at
@@ -790,6 +863,7 @@ async def chat(
             system_prompt,
             f"The user wants the oldest pending order.\n\nDetails:\n{context}\n\nPresent this information to the user.",
             max_tokens=200,
+            fallback=context,
         )
         return await _respond(reply=reply, action="oldest_pending")
 
@@ -808,6 +882,7 @@ async def chat(
                 system_prompt,
                 "The user wants carrier usage info but no carriers are being used. Let them know.",
                 max_tokens=80,
+                fallback="No shipment carrier usage is recorded in the database.",
             )
             return await _respond(reply=reply, action="carrier_usage")
         lines = "\n".join(
@@ -819,6 +894,7 @@ async def chat(
             system_prompt,
             f"The user wants carrier usage data.\n\nCarrier usage:\n{lines}\n\nPresent carrier usage info clearly.",
             max_tokens=300,
+            fallback=lines,
         )
         return await _respond(reply=reply, action="carrier_usage")
 
@@ -838,6 +914,7 @@ async def chat(
             system_prompt,
             f"The user wants active shipments.\n\nData:\n{context}\n\nPresent the active shipments in a clear format.",
             max_tokens=300,
+            fallback=context,
         )
         return await _respond(reply=reply, action="active_shipments")
 
@@ -852,6 +929,7 @@ async def chat(
                 system_prompt,
                 "The user wants delayed shipments but all are on time. Let them know the good news.",
                 max_tokens=80,
+                fallback="No active shipments in the queried batch are flagged delayed. This does not establish historical on-time performance.",
             )
             return await _respond(reply=reply, action="delayed_shipments")
         lines = "\n".join(
@@ -865,6 +943,7 @@ async def chat(
             system_prompt,
             f"The user wants delayed shipments.\n\nData:\n{context}\n\nPresent the delayed shipments with reasons.",
             max_tokens=300,
+            fallback=context,
         )
         return await _respond(reply=reply, action="delayed_shipments")
 
@@ -875,12 +954,13 @@ async def chat(
         delayed_ships = [s for s in active if getattr(s, "is_delayed", False)]
         on_time = len(active) - len(delayed_ships)
         pct = round(on_time / len(active) * 100, 1) if active else 0
-        context = f"On-Time: {on_time} | Delayed: {len(delayed_ships)} | Rate: {pct}%"
+        context = f"Active shipments not flagged delayed: {on_time} | Delayed: {len(delayed_ships)} | Share: {pct}%. This is not historical delivery on-time performance."
         logger.info("LLM request sent | intent=on_time_shipments")
         reply = await _generate_llm_reply(
             system_prompt,
             f"The user wants on-time shipment stats.\n\nData:\n{context}\n\nPresent the on-time shipment performance.",
             max_tokens=150,
+            fallback=context,
         )
         return await _respond(reply=reply, action="on_time_shipments")
 
@@ -901,6 +981,7 @@ async def chat(
                 system_prompt,
                 "The user wants high-risk shipments but there are none. Let them know.",
                 max_tokens=80,
+                fallback="No active shipments in the queried batch meet the heuristic high-risk threshold.",
             )
             return await _respond(reply=reply, action="high_risk_shipments")
         high_risk.sort(key=lambda x: x["failure_probability"], reverse=True)
@@ -915,6 +996,7 @@ async def chat(
             system_prompt,
             f"The user wants high-risk shipments.\n\nData:\n{context}\n\nPresent the high-risk shipments with risk factors.",
             max_tokens=300,
+            fallback="Heuristic risk estimates:\n" + context,
         )
         return await _respond(reply=reply, action="high_risk_shipments")
 
@@ -930,6 +1012,7 @@ async def chat(
                 system_prompt,
                 "The user wants reroute history but none have happened. Let them know.",
                 max_tokens=80,
+                fallback="No executed reroutes are recorded in the event log.",
             )
             return await _respond(reply=reply, action="reroute_list")
         from fulfillment.models.shipment import Shipment as Shp
@@ -945,6 +1028,7 @@ async def chat(
             system_prompt,
             f"The user wants reroute history.\n\nData:\n{context}\n\nPresent the rerouted shipments information.",
             max_tokens=300,
+            fallback=context,
         )
         return await _respond(reply=reply, action="reroute_list")
 
@@ -958,6 +1042,7 @@ async def chat(
                 system_prompt,
                 "The user wants cost analysis but no shipment data is available. Let them know.",
                 max_tokens=80,
+                fallback="There are no shipments available for cost analysis.",
             )
             return await _respond(reply=reply, action="cost_analysis")
         a = analysis["analysis"]
@@ -981,6 +1066,7 @@ async def chat(
             system_prompt,
             f"The user wants shipping cost analysis.\n\nData:\n{context}\n\nPresent the cost analysis with recommendations.",
             max_tokens=400,
+            fallback=context,
         )
         return await _respond(reply=reply, action="cost_analysis")
 
@@ -1005,6 +1091,7 @@ async def chat(
             system_prompt,
             f"The user wants notification statistics.\n\nData:\n{context}\n\nPresent the notification stats clearly.",
             max_tokens=200,
+            fallback=context,
         )
         return await _respond(reply=reply, action="notification_stats")
 
@@ -1036,14 +1123,22 @@ async def chat(
             system_prompt,
             f"The user wants monitor cycle stats.\n\nData ({now.strftime('%b %d, %H:%M')} UTC):\n{context}\n\nPresent the cycle status clearly.",
             max_tokens=300,
+            fallback="Current queried shipment batch and recent events (not a completed-cycle count):\n" + context,
         )
         return await _respond(reply=reply, action="cycle_stats")
 
     email = _extract_email(message)
     if email:
         _require_chat_operator(_user)
-        logger.info("LLM request sent | intent=fallback (create_order via email) | email='%s'", email)
+        if _extract_city(message):
+            approval, _ = await _approve("create_order", {"request": message})
+            if approval:
+                return approval
+        _database_answer.set(True)
+        logger.info("Chat create-order fallback requested")
         reply, action, data = await _handle_create_order(db, message, system_prompt)
+        if action == "create_order_created":
+            await db.commit()
         return await _respond(reply=reply, action=action, data=data)
 
     logger.info("LLM request sent | intent=fallback (no intent matched)")

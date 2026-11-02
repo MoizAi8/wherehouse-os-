@@ -33,7 +33,7 @@ describe("Category 1: Dashboard Overview", () => {
     expect(screen.getByText("Total Orders")).toBeInTheDocument()
     expect(screen.getByText("On-Time Rate")).toBeInTheDocument()
     expect(screen.getByText("Avg Delivery (days)")).toBeInTheDocument()
-    expect(screen.getByText("Shipments Today")).toBeInTheDocument()
+    expect(screen.getByText("Last Recorded Cycle Checks")).toBeInTheDocument()
     expect(screen.getByText("8421")).toBeInTheDocument()
     expect(screen.getByText("94.2%")).toBeInTheDocument()
   })

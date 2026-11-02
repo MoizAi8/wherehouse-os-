@@ -12,6 +12,10 @@ from fulfillment.config import settings
 logger = logging.getLogger("fulfillment.intent_analyzer")
 
 INTENT_CONFIGS = {
+    "CONVERSATION": {
+        "agent": "ConversationAssistant",
+        "description": "General knowledge, reasoning, casual conversation, greetings, farewells or follow-ups that need no warehouse data/action",
+    },
     "ROUTE_ORDER": {
         "agent": "RoutingAgent",
         "description": "User wants to route an order, create a shipment, assign a warehouse, or make shipping decisions. Roman Urdu: 'order route karo', 'yeh parcel bhejo', 'Lahore bhejo', 'order dispatch karo'",
@@ -179,14 +183,14 @@ SYSTEM_PROMPT += (
 KEYWORD_FALLBACKS: list[tuple[re.Pattern, str, str]] = [
     (re.compile(r"\b(track|where|kahan|status|pata\s*laga|pahunch|arrived|delivery\s*progress|consignment)\b", re.IGNORECASE), "TRACK_SHIPMENT", "MonitorAgent"),
     (re.compile(r"\b(cost|price|cheap|sasta|kharacha|kharche|kharcha|budget|expensive|mahanga|save|bache|bchat)\b", re.IGNORECASE), "OPTIMIZE_COST", "CostOptimizer"),
-    (re.compile(r"\b(route|ship|deliver|bhej|dispatch|forward|transfer|send)\b", re.IGNORECASE), "ROUTE_ORDER", "RoutingAgent"),
+    (re.compile(r"\b(route|ship|deliver|proceed\s+(?:with\s+)?delivery|bhej|dispatch|forward|transfer|send)\b", re.IGNORECASE), "ROUTE_ORDER", "RoutingAgent"),
     (re.compile(r"\b(notify|notification|sms|email|inform|alert|bata|intimate)\b", re.IGNORECASE), "SEND_NOTIFICATION", "CommunicationAgent"),
     (re.compile(r"\b(risk|delay|late|predict|failure|fail|chance|probability|hoga|chance)\b", re.IGNORECASE), "PREDICT_RISK", "PredictionAgent"),
     (re.compile(r"\b(reroute|redirect|change\s*route|alter|alternative|doosra\s*raasta)\b", re.IGNORECASE), "REROUTE_SHIPMENT", "ReroutingAgent"),
     (re.compile(r"\b(agent|worker|monitor|health|perform)\b", re.IGNORECASE), "AGENT_INFO", "MonitorAgent"),
-    (re.compile(r"\b(metric|kpi|summary|total\s*order|count|kitne|how\s*many)\b", re.IGNORECASE), "GET_METRICS", "MonitorAgent"),
+    (re.compile(r"\b(metrics?|kpis?|summary|total\s*orders?|count|kitne|how\s*many)\b", re.IGNORECASE), "GET_METRICS", "MonitorAgent"),
     (re.compile(r"\b(create|new\s*order|naya|order\s*laga|order\s*ban|place)\b", re.IGNORECASE), "CREATE_ORDER", "RoutingAgent"),
-    (re.compile(r"\b(list|all\s*order|show|dikha|dikhao|dikhay|sab|sare|sarii|tamam|saare)\b", re.IGNORECASE), "LIST_ORDERS", "RoutingAgent"),
+    (re.compile(r"\b(list|all\s*orders?|show|dikha|dikhao|dikhay|sab|sare|sarii|tamam|saare)\b", re.IGNORECASE), "LIST_ORDERS", "RoutingAgent"),
     (re.compile(r"\b(help|can you|kya\s*kar|options|commands|kya\s*ho|guide)\b", re.IGNORECASE), "HELP", "MonitorAgent"),
     (re.compile(r"\b(hello|hi|hey|salam|assalam|namaste|adaab|good\s*morning|good\s*evening|good\s*day|kya\s*haal|howdy|wasup|greeting)\b", re.IGNORECASE), "GREETING", "MonitorAgent"),
     (re.compile(r"\b(pending|delayed|processing|filter)\b", re.IGNORECASE), "FILTER_ORDERS", "MonitorAgent"),
@@ -218,7 +222,7 @@ class IntentResult:
 class IntentAnalyzer:
     def __init__(self, openai_client: AsyncOpenAI | None = None):
         self.client = openai_client
-        self.model = settings.openai_model or "gpt-4o-mini"
+        self.model = settings.chat_model or settings.openai_model or "gpt-4o-mini"
 
     def _keyword_fallback(self, text: str) -> IntentResult | None:
         matched: list[tuple[str, str, int]] = []
@@ -256,6 +260,16 @@ class IntentAnalyzer:
             })
 
         keyword = self._keyword_fallback(text)
+        recent = " ".join(content for _, content in (history or [])[-2:])
+        warehouse = re.search(r"warehouse|inventor|\border|shipment|\bagent|\bstock|carrier|fulfill|parcel|tracking|delivery|shipping|\broute\b|rerout|\bmetrics\b|\bkpi\b|analytics|pending wale|delayed wale|گودام|آرڈر|اسٹاک", text + " " + recent, re.I)
+        if (keyword and keyword.intent == "GREETING" and not warehouse) or (
+            keyword and keyword.intent in ("CREATE_ORDER", "ROUTE_ORDER") and re.match(r"\s*(how|explain|describe)\b", text, re.I)
+        ):
+            return IntentResult({"intent": "CONVERSATION", "required_agent": "ConversationAssistant",
+                "confidence": 0.8, "reason": "Conversation or workflow explanation; not an execution request"})
+        if not warehouse:
+            return IntentResult({"intent": "CONVERSATION", "required_agent": "ConversationAssistant",
+                "confidence": 0.8, "reason": "General conversation; no warehouse operation requested"})
         if keyword is not None and keyword.intent in _STRONG_ACTION_INTENTS:
             keyword.reason = f"{keyword.reason}; strong action keywords matched, executing tool directly"
             return keyword
@@ -278,6 +292,7 @@ class IntentAnalyzer:
                     {"role": "user", "content": user_content},
                 ],
                 "temperature": 0,
+                "max_tokens": 250,
                 "timeout": 6,
             }
             # Thinking models spend completion budget on hidden reasoning;
@@ -315,16 +330,16 @@ class IntentAnalyzer:
             return IntentResult(data)
 
         except Exception as e:
-            logger.warning("LLM intent analysis failed | error='%s'", e)
+            logger.warning("LLM intent analysis failed | error_type=%s", type(e).__name__)
             fallback = self._keyword_fallback(text)
             if fallback:
-                fallback.reason = f"LLM failed ({e}), used keyword fallback"
+                fallback.reason = "Provider request failed; used keyword fallback"
                 return fallback
             return IntentResult({
                 "intent": "HELP",
                 "required_agent": "MonitorAgent",
                 "confidence": 0.2,
-                "reason": f"LLM analysis failed and no keyword match: {e}",
+                "reason": "Provider request failed and no keyword match",
                 "missing_information": [],
                 "secondary_agents": [],
             })
