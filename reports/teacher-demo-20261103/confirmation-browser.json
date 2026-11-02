@@ -1,0 +1,11 @@
+{
+  "real_browser": true,
+  "synthetic_only": true,
+  "passed": 4,
+  "checks": [
+    "unconfirmed action preserves order count",
+    "cancel action preserves order count",
+    "confirmed action forwarded once through real NextAuth proxy",
+    "creation does not automatically dispatch a shipment"
+  ]
+}

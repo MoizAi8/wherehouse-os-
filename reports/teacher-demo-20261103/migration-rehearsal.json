@@ -1,0 +1,9 @@
+{
+  "synthetic_only": true,
+  "previous_revision": "c4d7e9f0a1b2",
+  "new_revision": "d5e8f1a2b3c4",
+  "existing_tables_preserved": 11,
+  "existing_data_and_schemas_identical": true,
+  "production_database_touched": false,
+  "new_approval_table_empty": true
+}

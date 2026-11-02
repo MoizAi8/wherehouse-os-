@@ -48,7 +48,7 @@ def matches(reply: str, expected: str, kind: str = "fact") -> bool:
         return "?" in reply
     if expected == "roman":
         return not re.search(r"[\u0600-\u06ff\u0900-\u097f]", reply) and bool(re.search(
-            r"\b(aap|main|mein|hai|hain|hun|hoon|shukriya|salam|salaam|khuda|alvida|kaam|waqt|kar)\b", lower))
+            r"\b(aap|main|mein|hai|hain|hun|hoon|shukriya|salam|salaam|khuda|alvida|kaam|waqt|kar|wa[a-z]*(?:salam|salaam)[a-z]*)\b", lower))
     if expected == "urdu":
         return bool(re.search(r"[\u0600-\u06ff]", reply)) and not re.search(r"[\u0900-\u097f]", reply)
     if kind == "number":
@@ -61,6 +61,9 @@ class Evaluation:
     def __init__(self, base: str, only: str = "") -> None:
         check(urlparse(base).hostname in ("127.0.0.1", "localhost", "::1"), "QA must never target production")
         self.client = httpx.Client(base_url=base, timeout=180)
+        state = self.client.get("/api/demo/status").json()
+        if state.get("llm_configured") and state.get("model") != "warehouse-os-qa-qwen":
+            raise RuntimeError("The 500-scenario runner permits only the zero-cost local alias; use the separate bounded Gemini verifier")
         self.tokens: dict[str, str] = {}
         self.requests = 0
         self.evidence: dict = {}

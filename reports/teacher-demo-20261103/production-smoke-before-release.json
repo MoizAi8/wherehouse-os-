@@ -1,0 +1,33 @@
+{
+  "checked_at": "2026-11-02T21:51:30.036395+00:00",
+  "production_changes": false,
+  "origin": "https://140-245-218-97.sslip.io",
+  "checks": {
+    "healthy_dependencies": true,
+    "unauthenticated_rejected": true,
+    "teacher_nextauth_login": true,
+    "/api/v1/orders": 200,
+    "/api/v1/analytics/kpis": 200,
+    "cookie_profile_bridge": true,
+    "authenticated_chat": 200,
+    "invalid_token_rejected": true,
+    "logout": true
+  },
+  "hostname_addresses": [
+    "140.245.218.97"
+  ],
+  "140-245-218-97.sslip.io": {
+    "trusted_tls": true,
+    "SAN": [
+      [
+        "DNS",
+        "140-245-218-97.sslip.io"
+      ]
+    ],
+    "expires": "Jan 31 12:36:40 2027 GMT"
+  },
+  "140.245.218.97": {
+    "trusted_tls": false,
+    "certificate_change_not_deployed": true
+  }
+}

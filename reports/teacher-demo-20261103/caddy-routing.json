@@ -1,0 +1,65 @@
+{
+  "proposed_routing_only": true,
+  "tls_issuance_tested": false,
+  "production_config_applied": false,
+  "results": [
+    {
+      "path": "/api/auth/session",
+      "bearer_present": false,
+      "owner": "frontend",
+      "passed": true
+    },
+    {
+      "path": "/api/chat",
+      "bearer_present": false,
+      "owner": "frontend",
+      "passed": true
+    },
+    {
+      "path": "/api/chat/history",
+      "bearer_present": true,
+      "owner": "backend",
+      "passed": true
+    },
+    {
+      "path": "/api/demo/status",
+      "bearer_present": false,
+      "owner": "backend",
+      "passed": true
+    },
+    {
+      "path": "/api/v1/agents/status",
+      "bearer_present": true,
+      "owner": "backend",
+      "passed": true
+    },
+    {
+      "path": "/api/auth/me",
+      "bearer_present": false,
+      "owner": "frontend",
+      "passed": true
+    },
+    {
+      "path": "/api/auth/me",
+      "bearer_present": true,
+      "owner": "backend",
+      "passed": true
+    },
+    {
+      "path": "/health",
+      "bearer_present": false,
+      "owner": "backend",
+      "passed": true
+    },
+    {
+      "path": "/demo",
+      "bearer_present": false,
+      "owner": "frontend",
+      "passed": true
+    },
+    {
+      "case": "IP canonical redirect preserves path and query",
+      "passed": true
+    }
+  ]
+}

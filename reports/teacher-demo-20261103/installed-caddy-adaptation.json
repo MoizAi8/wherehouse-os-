@@ -1,0 +1,6 @@
+{
+  "actual_installed_caddy_adaptation": "PASS",
+  "ip_acme_profile": "shortlived",
+  "production_config_applied": false,
+  "certificate_issued": false
+}

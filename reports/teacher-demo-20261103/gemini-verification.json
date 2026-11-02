@@ -1,0 +1,107 @@
+{
+  "synthetic_only": true,
+  "billing_disabled_owner_confirmed": true,
+  "maximum_logical_inference_requests": 7,
+  "no_deployment": true,
+  "results": [
+    {
+      "case": "knowledge",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "usage": {
+        "input_tokens": 209,
+        "output_tokens": 7
+      },
+      "reply": "The capital of Pakistan is Islamabad."
+    },
+    {
+      "case": "arithmetic",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "usage": {
+        "input_tokens": 212,
+        "output_tokens": 2
+      },
+      "reply": "42"
+    },
+    {
+      "case": "roman-urdu",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "usage": {
+        "input_tokens": 205,
+        "output_tokens": 19
+      },
+      "reply": "Salam! Main Warehouse OS hoon, bataiye aaj main aapki kya madad kar sakta hoon?"
+    },
+    {
+      "case": "urdu",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "usage": {
+        "input_tokens": 204,
+        "output_tokens": 21
+      },
+      "reply": "السلام علیکم! میں ویئر ہاؤس او ایس ہوں۔ آج میں آپ کی کیا مدد کر سکتا ہوں؟"
+    },
+    {
+      "case": "memory-store",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "usage": {
+        "input_tokens": 209,
+        "output_tokens": 15
+      },
+      "reply": "Got it, mango is your favorite! I've noted that down."
+    },
+    {
+      "case": "memory-recall",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "usage": {
+        "input_tokens": 232,
+        "output_tokens": 6
+      },
+      "reply": "Your favorite fruit is mango!"
+    },
+    {
+      "case": "isolated-read-tool",
+      "passed": true,
+      "http": 200,
+      "mode": "model_with_read_tool",
+      "model": "gemini-3.5-flash-lite"
+    },
+    {
+      "case": "unauthenticated-/api/v1/orders",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "case": "unauthenticated-/api/v1/agents/status",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "case": "unauthenticated-/api/v1/analytics/kpis",
+      "passed": true,
+      "http": 401
+    }
+  ],
+  "workflow_url": "https://github.com/MoizAi8/wherehouse-os-/actions/runs/41531599185",
+  "tested_commit": "a56c7bc",
+  "cloud_inference_requests_successful": 7,
+  "inference_cost_usd": 0,
+  "cost_basis": "Owner-confirmed Free tier with no linked billing account"
+}

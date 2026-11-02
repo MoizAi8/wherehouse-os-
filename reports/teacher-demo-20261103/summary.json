@@ -1,0 +1,56 @@
+{
+  "planned_distinct_scenarios": 500,
+  "distinct_results": 500,
+  "execution_attempts": 1195,
+  "passed": 498,
+  "failed": 2,
+  "blocked": 0,
+  "not_executed": 0,
+  "success_rate_all_planned": 99.6,
+  "cloud_inference_requests": 0,
+  "inference_cost_usd": 0,
+  "categories": {
+    "natural": {
+      "planned": 150,
+      "passed": 148,
+      "failed": 2,
+      "blocked": 0
+    },
+    "memory": {
+      "planned": 70,
+      "passed": 70,
+      "failed": 0,
+      "blocked": 0
+    },
+    "warehouse": {
+      "planned": 100,
+      "passed": 100,
+      "failed": 0,
+      "blocked": 0
+    },
+    "tools": {
+      "planned": 50,
+      "passed": 50,
+      "failed": 0,
+      "blocked": 0
+    },
+    "security": {
+      "planned": 50,
+      "passed": 50,
+      "failed": 0,
+      "blocked": 0
+    },
+    "reliability": {
+      "planned": 50,
+      "passed": 50,
+      "failed": 0,
+      "blocked": 0
+    },
+    "browser": {
+      "planned": 30,
+      "passed": 30,
+      "failed": 0,
+      "blocked": 0
+    }
+  }
+}
