@@ -5,6 +5,8 @@ import { Bot, Send, Loader2, Trash2, AlertTriangle, WifiOff } from "lucide-react
 import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Message } from "@/lib/ai/client"
+import { ApiError } from "@/lib/api"
+import { refreshSession } from "@/lib/session"
 
 const SESSION_KEY = "fulfillos_chat_session"
 const MAX_RETRIES = 3
@@ -57,7 +59,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     let cancelled = false
     async function loadHistory() {
       try {
-        const res = await fetch(`/api/chat/history?sessionId=${encodeURIComponent(sessionId)}`)
+        const res = await fetch(`/api/chat?sessionId=${encodeURIComponent(sessionId)}`)
         if (!res.ok) return
         const data = await res.json()
         if (cancelled || !data?.messages?.length) return
@@ -80,7 +82,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
 
   const checkConnection = useCallback(async () => {
     try {
-      const res = await fetch("/api/health", { method: "GET", cache: "no-store" })
+      const res = await fetch("/health", { method: "GET", cache: "no-store" })
       setConnectionStatus(res.ok ? "connected" : "disconnected")
     } catch {
       setConnectionStatus("disconnected")
@@ -91,7 +93,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
     // Perform initial connection check using async IIFE to avoid setState-in-effect warning
     const doInitialCheck = async () => {
       try {
-        const res = await fetch("/api/health", { method: "GET", cache: "no-store" })
+        const res = await fetch("/health", { method: "GET", cache: "no-store" })
         setConnectionStatus(res.ok ? "connected" : "disconnected")
       } catch {
         setConnectionStatus("disconnected")
@@ -128,14 +130,19 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
       })
 
       if (!res.ok) {
+        if (res.status === 401) {
+          await refreshSession()
+          throw new ApiError(401, "Your session expired. Please sign in again.")
+        }
         const errorData = await res.json().catch(() => ({}))
-        throw new Error(errorData.error || `Request failed: ${res.status}`)
+        throw new ApiError(res.status, errorData.error || `Request failed: ${res.status}`)
       }
 
       const data = await res.json()
       setRetryAttempt(0)
       return { reply: data.reply, sessionId: data.sessionId }
     } catch (err) {
+      if (err instanceof ApiError && (err.status === 401 || err.status === 403)) throw err
       if (retries > 0) {
         const nextAttempt = MAX_RETRIES - retries + 1
         setRetryAttempt(nextAttempt)

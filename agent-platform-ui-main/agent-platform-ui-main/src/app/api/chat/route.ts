@@ -20,6 +20,9 @@ export async function POST(req: NextRequest) {
     }
 
     const authHeaders = await getAuthHeaders()
+    if (!authHeaders.Authorization) {
+      return Response.json({ error: "Not authenticated" }, { status: 401 })
+    }
 
     const backendRes = await fetch(`${base}/api/chat`, {
       method: "POST",
@@ -63,6 +66,9 @@ export async function GET(req: NextRequest) {
     }
 
     const authHeaders = await getAuthHeaders()
+    if (!authHeaders.Authorization) {
+      return Response.json({ error: "Not authenticated" }, { status: 401 })
+    }
 
     const backendRes = await fetch(
       `${base}/api/chat/history?session_id=${encodeURIComponent(sessionId)}`,

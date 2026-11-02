@@ -10,7 +10,8 @@ import { setTimeout as delay } from "node:timers/promises"
 const require = createRequire(import.meta.url)
 const { encode, getToken } = require("next-auth/jwt")
 const secret = "isolated-auth-regression-secret-not-for-production"
-const accessToken = "isolated-backend-token"
+const backendToken = exp => `fixture.${Buffer.from(JSON.stringify({ exp })).toString("base64url")}.fixture-signature`
+const accessToken = backendToken(Math.floor(Date.now() / 1000) + 3600)
 let loginCalls = 0
 const checks = []
 const fixture = createServer(async (req, res) => {
@@ -35,6 +36,14 @@ const fixture = createServer(async (req, res) => {
       return
     }
     res.end(JSON.stringify({ id: "fixture-user", email: "operator@example.test", role: "OPERATOR" }))
+    return
+  }
+  if (req.url === "/api/chat" || req.url?.startsWith("/api/chat/history?")) {
+    if (req.headers.authorization !== `Bearer ${accessToken}`) {
+      res.writeHead(401).end(JSON.stringify({ detail: "Not authenticated" }))
+      return
+    }
+    res.end(JSON.stringify(req.method === "POST" ? { reply: "Authenticated warehouse reply" } : { messages: [] }))
     return
   }
   res.writeHead(404).end("{}")
@@ -123,6 +132,15 @@ try {
   assert.equal((await profile.json()).id, "fixture-user")
   checks.push("authenticated profile forwards backend bearer token")
 
+  assert.equal((await request("/api/chat?sessionId=fixture", accepted.jar)).status, 200)
+  assert.equal((await request("/api/chat", accepted.jar, { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Show orders" }) })).status, 200)
+  checks.push("cookie-authenticated chat and history forward backend bearer token")
+  assert.equal((await request("/api/chat?sessionId=fixture")).status, 401)
+  assert.equal((await request("/api/chat", new Map(), { method: "POST",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Show orders" }) })).status, 401)
+  checks.push("anonymous chat and history fail closed")
+
   const cookieName = [...accepted.jar.keys()].find(name => name.includes("session-token"))
   assert.ok(cookieName)
   const tampered = new Map(accepted.jar)
@@ -134,6 +152,22 @@ try {
   const expiredJar = new Map([[cookieName, expired]])
   assert.equal((await (await request("/api/auth/session", expiredJar)).json()).accessToken, undefined)
   checks.push("expired session rejected")
+
+  // Real defect: a valid, long-lived NextAuth cookie carried an expired
+  // backend JWT. Existing production cookies have no accessTokenExpires.
+  const oldBackend = await encode({ secret, token: { sub: "fixture-user",
+    accessToken: backendToken(Math.floor(Date.now() / 1000) - 60) }, maxAge: 3600 })
+  const staleJar = new Map([[cookieName, oldBackend]])
+  const staleSession = await (await request("/api/auth/session", staleJar)).json()
+  assert.equal(staleSession.accessToken, undefined)
+  assert.equal(staleSession.error, "SessionExpired")
+  assert.equal((await request("/api/auth/me", staleJar)).status, 401)
+  assert.equal((await request("/api/chat?sessionId=fixture", staleJar)).status, 401)
+  checks.push("legacy NextAuth cookie cannot forward an expired backend JWT")
+
+  const legacy = await encode({ secret, token: { sub: "fixture-user", accessToken }, maxAge: 3600 })
+  assert.equal((await request("/api/chat?sessionId=fixture", new Map([[cookieName, legacy]]))).status, 200)
+  checks.push("unexpired legacy cookie remains compatible")
 
   const malformed = await getToken({ secret, req: { cookies: {}, headers: { authorization: "Bearer %E0%A4%A" } } })
   assert.equal(malformed, null)

@@ -1,16 +1,24 @@
 "use client"
 
-import { signIn } from "next-auth/react"
+import { signIn, signOut } from "next-auth/react"
 
 const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_EMAIL || "demo@fulfillos.com"
 const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Demo1234!"
 
 /**
- * Silently (re)establishes the NextAuth session with the demo credentials.
- * Used when no session exists or the stored backend token is invalid/expired.
+ * Requires a fresh production login when authentication expires. Only the
+ * development fallback may sign into the existing local demo account.
  */
+let signingOut: Promise<unknown> | undefined
+
 export async function refreshSession(): Promise<boolean> {
-  if (process.env.NODE_ENV === "production") return false
+  if (process.env.NODE_ENV === "production") {
+    // Expired/legacy cookies cannot be renewed without re-authentication.
+    // Never substitute demo credentials or keep displaying a stale session.
+    signingOut ??= signOut({ callbackUrl: "/api/auth/signin?callbackUrl=%2Fdashboard" })
+    await signingOut
+    return false
+  }
   try {
     const result = await signIn("credentials", {
       email: DEMO_EMAIL,
@@ -39,6 +47,7 @@ export async function ensureValidSession(): Promise<boolean> {
       headers: { Authorization: `Bearer ${session.accessToken}` },
     })
     if (res.ok) return true
+    if (res.status !== 401 && res.status !== 403) return true
   } catch {
     // Network error — keep existing session rather than churning it.
     return Boolean(session.accessToken)

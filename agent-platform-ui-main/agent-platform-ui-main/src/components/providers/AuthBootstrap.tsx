@@ -11,7 +11,8 @@ export function AuthBootstrap({ children }: { children: React.ReactNode }) {
 
     async function bootstrap() {
       try {
-        await ensureValidSession()
+        const valid = await ensureValidSession()
+        if (!valid && process.env.NODE_ENV === "production") return
       } catch {
         // Proceed without session — API calls surface errors as before.
       }

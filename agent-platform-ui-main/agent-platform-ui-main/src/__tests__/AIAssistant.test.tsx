@@ -1,6 +1,9 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import { AIAssistant } from "@/components/ai/AIAssistant"
+import { refreshSession } from "@/lib/session"
+
+vi.mock("@/lib/session", () => ({ refreshSession: vi.fn().mockResolvedValue(false) }))
 
 describe("Category 5: Chat & AI Assistant", () => {
   beforeEach(() => {
@@ -51,5 +54,25 @@ describe("Category 5: Chat & AI Assistant", () => {
     expect(screen.getByPlaceholderText("Ask anything about your warehouse...")).toBeInTheDocument()
     const submitButtons = screen.getAllByRole("button", { name: "" })
     expect(submitButtons.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it("uses the authenticated history bridge and the actual health route", async () => {
+    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) })
+    render(<AIAssistant />)
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/health", expect.anything()))
+    expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/chat\?sessionId=/))
+    expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("/api/chat/history"))
+  })
+
+  it("requests sign-in once instead of retrying unauthorized chat writes", async () => {
+    global.fetch = vi.fn().mockImplementation(async (_path, options) => options?.method === "POST"
+      ? { ok: false, status: 401 } : { ok: true, json: async () => ({ messages: [] }) })
+    render(<AIAssistant />)
+    const input = screen.getByPlaceholderText("Ask anything about your warehouse...")
+    fireEvent.change(input, { target: { value: "Show orders" } })
+    fireEvent.submit(input.closest("form")!)
+    await waitFor(() => expect(screen.getByText(/Your session expired/)).toBeInTheDocument())
+    expect(refreshSession).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(fetch).mock.calls.filter(([, options]) => options?.method === "POST")).toHaveLength(1)
   })
 })
