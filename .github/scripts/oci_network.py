@@ -72,7 +72,7 @@ def main() -> None:
     already_allowed = any(permits_https(rule) for rule in rules)
     result = {"region": REGION, "public_ip": PUBLIC_IP, "mode": mode, "public_tcp_443_allowed": already_allowed, "changed": False}
     if mode == "allow_https" and not already_allowed:
-        groups = oci.pagination.list_call_get_all_results(network.list_network_security_groups, COMPARTMENT, vcn_id=subnet.vcn_id, display_name=GROUP_NAME).data
+        groups = oci.pagination.list_call_get_all_results(network.list_network_security_groups, compartment_id=COMPARTMENT, vcn_id=subnet.vcn_id, display_name=GROUP_NAME).data
         groups = [group for group in groups if group.lifecycle_state == "AVAILABLE" and (group.freeform_tags or {}).get("warehouse_instance") == INSTANCE]
         if len(groups) > 1:
             raise RuntimeError("Ambiguous dedicated HTTPS security group")
