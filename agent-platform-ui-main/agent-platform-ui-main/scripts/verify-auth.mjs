@@ -102,6 +102,11 @@ try {
   assert.equal(providers.credentials.type, "credentials")
   checks.push("credentials provider discovery")
 
+  const firstVisitSignIn = await request("/api/auth/signin?callbackUrl=%2Fdashboard")
+  assert.equal(firstVisitSignIn.status, 200)
+  assert.match(await firstVisitSignIn.text(), /Sign in with Credentials/)
+  checks.push("first-visit sign-in form is reachable without a sign-out POST")
+
   const anonymous = await (await request("/api/auth/session")).json()
   assert.equal(anonymous.accessToken, undefined)
   checks.push("anonymous session has no backend token")

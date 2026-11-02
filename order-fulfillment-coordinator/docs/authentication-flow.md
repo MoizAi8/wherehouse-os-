@@ -33,7 +33,11 @@ absolute expiration on each session read, including cookies from older releases.
 Expired/malformed backend tokens are withheld and marked `SessionExpired`.
 The client checks its session every minute and on focus; protected pages return
 to the normal sign-in page when either the backend token or browser cookie
-expires. A 401 also requires sign-in. Chat does not retry unauthorized writes.
+expires. This opens the normal sign-in form directly, without first posting
+sign-out: simultaneous first-visit CSRF-cookie initialization can otherwise
+send an anonymous visitor to a sign-out confirmation page. Expired backend
+tokens are already withheld, and successful credential verification replaces
+the session cookie. A 401 also requires sign-in. Chat does not retry unauthorized writes.
 Valid legacy cookies continue to work until their actual backend expiration.
 
 This deliberately requires a new login after one hour. Extending the backend

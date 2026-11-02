@@ -1,6 +1,6 @@
 "use client"
 
-import { signIn, signOut } from "next-auth/react"
+import { signIn } from "next-auth/react"
 
 const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_EMAIL || "demo@fulfillos.com"
 const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Demo1234!"
@@ -9,14 +9,17 @@ const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Demo1234!"
  * Requires a fresh production login when authentication expires. Only the
  * development fallback may sign into the existing local demo account.
  */
-let signingOut: Promise<unknown> | undefined
+let signingIn: Promise<unknown> | undefined
 
 export async function refreshSession(): Promise<boolean> {
   if (process.env.NODE_ENV === "production") {
     // Expired/legacy cookies cannot be renewed without re-authentication.
     // Never substitute demo credentials or keep displaying a stale session.
-    signingOut ??= signOut({ callbackUrl: "/api/auth/signin?callbackUrl=%2Fdashboard" })
-    await signingOut
+    // Opening the sign-in form is a GET. An anonymous first visit can have
+    // concurrent NextAuth CSRF-cookie initialization, so do not POST sign-out
+    // before offering credentials. Expired backend tokens are already withheld.
+    signingIn ??= signIn(undefined, { callbackUrl: "/dashboard" })
+    await signingIn
     return false
   }
   try {
