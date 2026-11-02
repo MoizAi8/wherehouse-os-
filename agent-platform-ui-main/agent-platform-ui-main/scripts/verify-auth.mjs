@@ -107,6 +107,33 @@ try {
   assert.match(await firstVisitSignIn.text(), /Sign in with Credentials/)
   checks.push("first-visit sign-in form is reachable without a sign-out POST")
 
+  // Reproduce late anonymous responses arriving after the form rendered.
+  const lateReads = await Promise.all(["session", "session", "providers"].map(action =>
+    request(`/api/auth/${action}`)))
+  for (const response of lateReads) {
+    assert.ok(!response.headers.getSetCookie().some(cookie => /next-auth\.(csrf-token|callback-url)=/.test(cookie)))
+  }
+  checks.push("anonymous session/provider reads do not initialize form cookies")
+  const firstVisitJar = new Map()
+  const form = await request("/api/auth/signin?callbackUrl=%2Fdashboard", firstVisitJar)
+  const html = await form.text()
+  const formToken = html.match(/name="csrfToken"[^>]*value="([^"]+)"/)?.[1]
+  assert.ok(formToken)
+  for (const response of lateReads) {
+    for (const cookie of response.headers.getSetCookie()) {
+      const pair = cookie.split(";")[0]; const split = pair.indexOf("=")
+      firstVisitJar.set(pair.slice(0, split), pair.slice(split + 1))
+    }
+  }
+  const firstVisit = await request("/api/auth/callback/credentials", firstVisitJar, {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ csrfToken: formToken, email: "operator@example.test",
+      password: "fixture-password", json: "true" }),
+  })
+  assert.equal((await firstVisit.json()).url, origin + "/dashboard")
+  assert.equal((await (await request("/api/auth/session", firstVisitJar)).json()).accessToken, accessToken)
+  checks.push("late anonymous responses preserve first-visit form CSRF and dashboard callback")
+
   const anonymous = await (await request("/api/auth/session")).json()
   assert.equal(anonymous.accessToken, undefined)
   checks.push("anonymous session has no backend token")
@@ -119,6 +146,16 @@ try {
   assert.equal(loginCalls, beforeCsrf)
   checks.push("missing CSRF cannot reach credential verification")
 
+  const mismatchJar = new Map()
+  await request("/api/auth/csrf", mismatchJar)
+  await request("/api/auth/callback/credentials", mismatchJar, {
+    method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ csrfToken: "mismatched-fixture-token", email: "operator@example.test",
+      password: "fixture-password", json: "true" }),
+  })
+  assert.equal(loginCalls, beforeCsrf)
+  checks.push("mismatched CSRF remains rejected before credential verification")
+
   const rejected = await signIn("wrong-password")
   assert.match(rejected.result.url, /CredentialsSignin/)
   assert.equal((await (await request("/api/auth/session", rejected.jar)).json()).accessToken, undefined)
@@ -126,7 +163,10 @@ try {
 
   const accepted = await signIn("fixture-password")
   assert.equal(accepted.result.url, origin + "/dashboard")
-  const session = await (await request("/api/auth/session", accepted.jar)).json()
+  const renewed = await request("/api/auth/session", accepted.jar)
+  assert.ok(renewed.headers.getSetCookie().some(cookie => cookie.includes("next-auth.session-token=")))
+  checks.push("session reads preserve authenticated session-cookie renewal")
+  const session = await renewed.json()
   assert.equal(session.user.email, "operator@example.test")
   assert.equal(session.user.id, "fixture-user")
   assert.equal(session.accessToken, accessToken)
@@ -184,6 +224,32 @@ try {
     body: new URLSearchParams({ csrfToken: csrf.csrfToken, callbackUrl: origin, json: "true" }) })
   assert.equal((await (await request("/api/auth/session", accepted.jar)).json()).accessToken, undefined)
   checks.push("signout clears the session")
+  if (process.env.AUTH_BROWSER_QA === "true") {
+    // Optional local tooling; no application dependency or CI browser install.
+    const { chromium } = require("../../../.tools/qa-browser/node_modules/playwright")
+    const browser = await chromium.launch({ channel: "msedge", headless: true })
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const context = await browser.newContext()
+        const page = await context.newPage()
+        try {
+          await page.goto(origin + "/dashboard", { waitUntil: "domcontentloaded" })
+          await page.locator('input[name="email"]').waitFor()
+          const formToken = await page.locator('input[name="csrfToken"]').inputValue()
+          const cookie = (await context.cookies()).find(value => value.name.includes("csrf-token"))
+          assert.ok(cookie)
+          assert.equal(decodeURIComponent(cookie.value).split("|")[0], formToken)
+          await page.locator('input[name="email"]').fill("operator@example.test")
+          await page.locator('input[name="password"]').fill("fixture-password")
+          await page.locator('button[type="submit"]').click()
+          await page.waitForURL(origin + "/dashboard", { waitUntil: "domcontentloaded" })
+          const response = await context.request.get(origin + "/api/auth/session")
+          assert.equal((await response.json()).accessToken, accessToken)
+          checks.push(`real browser first-visit protected-page sign-in ${attempt + 1}`)
+        } finally { await context.close() }
+      }
+    } finally { await browser.close() }
+  }
   console.log(JSON.stringify({ status: "passed", checks }, null, 2))
 } finally {
   app.kill()

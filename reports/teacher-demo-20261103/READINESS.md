@@ -1,13 +1,12 @@
-# Current release readiness
+# Current production status
 
-See [the full verification report](REPORT.md).
+- 78b98ea deployed through OCI run 80 after CI/Docker builds passed.
+- Public isolated demo, real Gemini Free-tier chat and trusted direct-IP HTTPS are live.
+- All 33 live HTTP checks passed; eight containers run with dependency readiness green.
+- Protected first-visit browser login exposed a CSRF-cookie race. Direct sign-in works. A tested correction awaits renewed release authorization.
+- Correction: 66 frontend tests, lint/types/build, 19 built auth checks and three real first-visit browser sign-ins passed.
+- Controlled 500-case evaluation: 498 passed, two local-Qwen quality failures, none blocked. No paid inference.
+- Demo has no automatic expiration and remains controlled by TEACHER_DEMO_MODE.
 
-- 500 distinct scenarios: 498 passed, 2 genuine local-model failures, no blocked/unexecuted cases.
-- 1,197 backend, 66 frontend and 15 built authentication checks passed; lint/types/build clean.
-- 30 real browser scenarios and four additional confirmation checks passed.
-- Real Gemini Free-tier integration: 10/10 checks, seven inference requests, no paid usage.
-- CI run 41531599185 is green for checkpoint a56c7bc. Image publishing and deployment were skipped.
-- Production remains 00ecaa9 and passes a fresh authenticated smoke test.
-- Trusted direct-IP HTTPS is prepared and adapted, not issued or deployed.
-- A fresh private production PostgreSQL backup has a validated archive manifest and saved SHA-256.
-- Explicit main-push/production authorization, Docker builds and live release verification remain required.
+See [live status](LIVE-RELEASE.md), [prepared correction](CSRF-CORRECTION.md),
+and [full pre-release evidence](REPORT.md).

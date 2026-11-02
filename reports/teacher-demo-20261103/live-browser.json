@@ -1,0 +1,45 @@
+{
+  "origin": "https://140-245-218-97.sslip.io",
+  "real_browser": "Microsoft Edge / Playwright",
+  "ignoreHTTPSErrors": false,
+  "results": [
+    {
+      "name": "real public root opens teacher dashboard without login",
+      "passed": true
+    },
+    {
+      "name": "all eight demo views available",
+      "passed": true
+    },
+    {
+      "name": "sample order filter works in live browser",
+      "passed": true
+    },
+    {
+      "name": "live public chat reads sample stock",
+      "passed": true
+    },
+    {
+      "name": "public demo has no protected API 401 failures",
+      "passed": true
+    },
+    {
+      "name": "direct IP has browser-trusted TLS and opens canonical demo",
+      "passed": true
+    },
+    {
+      "name": "expired protected cookie does not block public demo",
+      "passed": true
+    },
+    {
+      "name": "private dashboard still presents normal login",
+      "passed": true
+    },
+    {
+      "name": "browser execution",
+      "passed": false,
+      "error_type": "TimeoutError",
+      "message": "page.waitForURL: Timeout 60000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"domcontentloaded\"\n============================================================"
+    }
+  ]
+}

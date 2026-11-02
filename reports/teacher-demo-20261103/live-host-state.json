@@ -1,0 +1,67 @@
+{
+  "current_release": "/home/ubuntu/fulfillment/releases/78b98ea89e8de530690bbec0f0fb931668d9f382-41534406364-1/order-fulfillment-coordinator",
+  "previous_release": "/home/ubuntu/fulfillment/releases/00ecaa93c31d5cea8eab7c86ef27a84c9dee9b06-41515031459-1/order-fulfillment-coordinator",
+  "services": {
+    "api": {
+      "running": true,
+      "health": "healthy",
+      "image": "ghcr.io/moizai8/fulfillment-api@sha256:3e59426cef8a39a6a1b444c8dfabc21bbbe50158f187101e63051c2d41c80bfe",
+      "runtime_configuration": {
+        "demo_mode": "true",
+        "provider": "gemini-free",
+        "model": "gemini-3.5-flash-lite",
+        "chat_base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "chat_key_present": true,
+        "legacy_embedding_key_present": false,
+        "debug": "false"
+      }
+    },
+    "frontend": {
+      "running": true,
+      "health": null,
+      "image": "ghcr.io/moizai8/fulfillment-ui@sha256:3700025ffe7db74fc75f9fcb14581805f61c3fd33690e1034129b37b627adee6"
+    },
+    "caddy": {
+      "running": true,
+      "health": null,
+      "image": "caddy@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648"
+    },
+    "postgres": {
+      "running": true,
+      "health": "healthy",
+      "image": "postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685"
+    },
+    "redis": {
+      "running": true,
+      "health": "healthy",
+      "image": "redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf"
+    },
+    "qdrant": {
+      "running": true,
+      "health": null,
+      "image": "qdrant/qdrant@sha256:12364fe851b9f17356fc88189fc06d1b521262e04659ec7345975b00c9246a10"
+    },
+    "celery-worker": {
+      "running": true,
+      "health": "healthy",
+      "image": "ghcr.io/moizai8/fulfillment-api@sha256:3e59426cef8a39a6a1b444c8dfabc21bbbe50158f187101e63051c2d41c80bfe"
+    },
+    "celery-beat": {
+      "running": true,
+      "health": null,
+      "image": "ghcr.io/moizai8/fulfillment-api@sha256:3e59426cef8a39a6a1b444c8dfabc21bbbe50158f187101e63051c2d41c80bfe"
+    }
+  },
+  "database": {
+    "migration": "d5e8f1a2b3c4",
+    "approval_rows": 0,
+    "order_count": 0
+  },
+  "caddy_version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=",
+  "release_env": {
+    "TAG": "78b98ea89e8de530690bbec0f0fb931668d9f382",
+    "IMAGE_OWNER": "moizai8",
+    "API_IMAGE_REF": "ghcr.io/moizai8/fulfillment-api@sha256:3e59426cef8a39a6a1b444c8dfabc21bbbe50158f187101e63051c2d41c80bfe",
+    "FRONTEND_IMAGE_REF": "ghcr.io/moizai8/fulfillment-ui@sha256:3700025ffe7db74fc75f9fcb14581805f61c3fd33690e1034129b37b627adee6"
+  }
+}

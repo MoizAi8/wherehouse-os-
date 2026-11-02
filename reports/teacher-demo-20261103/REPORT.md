@@ -1,5 +1,9 @@
 # Warehouse OS — teacher demo and AI verification
 
+**Historical pre-release evaluation.** See [current live status](LIVE-RELEASE.md)
+and the separately prepared [first-visit login correction](CSRF-CORRECTION.md).
+Original evidence and pre-release limitations below are retained for traceability.
+
 ## Release status
 
 Implementation checkpoint **a56c7bc** is on `codex/teacher-demo-qa`.
