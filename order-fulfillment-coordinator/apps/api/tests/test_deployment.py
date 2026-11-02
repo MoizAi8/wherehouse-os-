@@ -45,6 +45,14 @@ def test_missing_required_settings_names_only():
         encode_settings({"CFG_OPENAI_API_KEY": "never-print-this"})
 
 
+def test_core_deployment_does_not_require_an_external_ai_credential():
+    env = settings()
+    del env["CFG_OPENAI_API_KEY"]
+    decoded = base64.b64decode(encode_settings(env)).decode()
+    assert "OPENAI_API_KEY" not in decoded
+    assert "DOMAIN='test-value'" in decoded
+
+
 def test_dotenv_refuses_passwords_that_break_the_database_url():
     env = settings()
     env["CFG_POSTGRES_PASSWORD"] = "unsafe@password"

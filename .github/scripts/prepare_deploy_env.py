@@ -7,7 +7,7 @@ import re
 def encode_settings(environ: dict[str, str]) -> str:
     values = {key[4:]: value for key, value in environ.items() if key.startswith("CFG_") and value}
     required = ("POSTGRES_PASSWORD", "JWT_SECRET", "WEBHOOK_SECRET", "INTEGRATION_SECRET_KEY",
-                "OPENAI_API_KEY", "DOMAIN", "FRONTEND_URL")
+                "DOMAIN", "FRONTEND_URL")
     missing = [key for key in required if not values.get(key)]
     if missing:
         raise ValueError("Missing deployment settings: " + ", ".join(missing))
@@ -22,6 +22,8 @@ def encode_settings(environ: dict[str, str]) -> str:
 
 
 if __name__ == "__main__":
+    if not os.environ.get("CFG_OPENAI_API_KEY"):
+        print("External AI and embeddings are unconfigured; core application only. No provider requests will be enabled.")
     encoded = encode_settings(dict(os.environ))
     print(f"::add-mask::{encoded}")
     with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as target:
