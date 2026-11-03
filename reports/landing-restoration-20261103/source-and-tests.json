@@ -1,0 +1,18 @@
+{
+  "pre_demo_reference": "00ecaa9",
+  "exact_original_source": {
+    "app/page.tsx": true,
+    "components/hero/LazyWarehouseHero.tsx": true,
+    "components/hero/WarehouseHero.tsx": true,
+    "components/landing/LandingSections.tsx": true
+  },
+  "frontend_tests_passed": 74,
+  "built_auth_checks_passed": 26,
+  "browser_checks_passed": 29,
+  "frontend_lint": "passed",
+  "production_build_and_types": "passed",
+  "backend": "unchanged; prior 1221 tests passed",
+  "previous_candidate": "47cfd6d",
+  "production_changed": false,
+  "push_performed": false
+}

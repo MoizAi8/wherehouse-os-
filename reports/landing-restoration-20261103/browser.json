@@ -1,0 +1,122 @@
+{
+  "local_isolated_backend": true,
+  "real_browser": "Microsoft Edge",
+  "results": [
+    {
+      "name": "root displays original landing instead of redirecting",
+      "passed": true
+    },
+    {
+      "name": "original warehouse canvas is visible",
+      "passed": true
+    },
+    {
+      "name": "original warehouse descriptions and launch button are present",
+      "passed": true
+    },
+    {
+      "name": "original landing button opens dashboard without login",
+      "passed": true
+    },
+    {
+      "name": "original landing launches full Warehouse OS dashboard",
+      "passed": true
+    },
+    {
+      "name": "original sidebar and styling retained",
+      "passed": true
+    },
+    {
+      "name": "separate demo landing is absent",
+      "passed": true
+    },
+    {
+      "name": "restricted viewer guest session issued without credentials",
+      "passed": true
+    },
+    {
+      "name": "original chat page renders",
+      "passed": true
+    },
+    {
+      "name": "original agents page renders",
+      "passed": true
+    },
+    {
+      "name": "original workflows page renders",
+      "passed": true
+    },
+    {
+      "name": "original orders page renders",
+      "passed": true
+    },
+    {
+      "name": "original order table uses isolated samples",
+      "passed": true
+    },
+    {
+      "name": "original monitoring page renders",
+      "passed": true
+    },
+    {
+      "name": "original integrations page renders",
+      "passed": true
+    },
+    {
+      "name": "original analytics page renders",
+      "passed": true
+    },
+    {
+      "name": "original team page renders",
+      "passed": true
+    },
+    {
+      "name": "original notifications page renders",
+      "passed": true
+    },
+    {
+      "name": "original settings page renders",
+      "passed": true
+    },
+    {
+      "name": "guest preferences do not expose cached owner configuration",
+      "passed": true
+    },
+    {
+      "name": "original chat reads isolated warehouse records",
+      "passed": true
+    },
+    {
+      "name": "original chat refuses destructive actions without faking success",
+      "passed": true
+    },
+    {
+      "name": "guest chat uses a separate local session identifier",
+      "passed": true
+    },
+    {
+      "name": "guest browsing and chat produce no HTTP 401 errors",
+      "passed": true
+    },
+    {
+      "name": "guest mutation returns explicit 403",
+      "passed": true
+    },
+    {
+      "name": "guest token cannot access production orders",
+      "passed": true
+    },
+    {
+      "name": "old demo URL redirects to original dashboard",
+      "passed": true
+    },
+    {
+      "name": "browser history navigation works",
+      "passed": true
+    },
+    {
+      "name": "original navigation remains available at mobile viewport",
+      "passed": true
+    }
+  ]
+}
