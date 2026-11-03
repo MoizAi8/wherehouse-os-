@@ -1,0 +1,11 @@
+{
+  "source": "Existing original production /dashboard on b726603",
+  "public_entry_not_used": true,
+  "api_v1": "Intercepted with isolated sample DTOs for visual comparison",
+  "history": "Empty QA history; no production chat records loaded",
+  "viewport": [
+    1440,
+    1000
+  ],
+  "screenshot": "original-production-ui-sample-baseline.png"
+}

@@ -1,3 +1,4 @@
+import { guestFetch } from "@/lib/demo-guest"
 import { NextRequest } from "next/server"
 
 import { backendUrl, getAuthHeaders } from "@/lib/backend"
@@ -12,7 +13,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const body = (await req.json()) as { message?: string; sessionId?: string; confirmationToken?: string }
+    const body = (await req.json()) as { message?: string; sessionId?: string; confirmationToken?: string; history?: { role: string; content: string }[] }
 
     const message = body.message?.trim()
     if (!message) {
@@ -21,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const authHeaders = await getAuthHeaders()
     if (!authHeaders.Authorization) {
-      return Response.json({ error: "Not authenticated" }, { status: 401 })
+      return guestFetch("chat", { method: "POST", body: JSON.stringify({ message, history: body.history || [] }) })
     }
 
     const backendRes = await fetch(`${base}/api/chat`, {
@@ -67,7 +68,7 @@ export async function GET(req: NextRequest) {
 
     const authHeaders = await getAuthHeaders()
     if (!authHeaders.Authorization) {
-      return Response.json({ error: "Not authenticated" }, { status: 401 })
+      return guestFetch("history")
     }
 
     const backendRes = await fetch(

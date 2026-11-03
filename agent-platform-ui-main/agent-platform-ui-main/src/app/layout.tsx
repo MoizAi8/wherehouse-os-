@@ -22,13 +22,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
         <TooltipProvider>
-          <SettingsProvider>
-            <SessionProvider>
+          <SessionProvider>
+            <SettingsProvider>
               <ClientProviders>
                 <main id="main-content">{children}</main>
               </ClientProviders>
-            </SessionProvider>
-          </SettingsProvider>
+            </SettingsProvider>
+          </SessionProvider>
         </TooltipProvider>
       </body>
     </html>

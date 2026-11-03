@@ -12,10 +12,27 @@ const { encode, getToken } = require("next-auth/jwt")
 const secret = "isolated-auth-regression-secret-not-for-production"
 const backendToken = exp => `fixture.${Buffer.from(JSON.stringify({ exp })).toString("base64url")}.fixture-signature`
 const accessToken = backendToken(Math.floor(Date.now() / 1000) + 3600)
+let guestEnabled = false
 let loginCalls = 0
 const checks = []
 const fixture = createServer(async (req, res) => {
   res.setHeader("Content-Type", "application/json")
+  if (req.url?.startsWith("/api/demo/guest/")) {
+    if (!guestEnabled) { res.writeHead(404).end("{}"); return }
+    if (req.url === "/api/demo/guest/session" && req.method === "POST") {
+      res.end(JSON.stringify({ demoGuest: true, accessToken: "fixture-guest-only",
+        expires: new Date(Date.now() + 3600000).toISOString(),
+        user: { id: "demo-guest", name: "Demo Guest", role: "VIEWER" } }))
+      return
+    }
+    if (req.headers.authorization !== "Bearer fixture-guest-only") {
+      res.writeHead(401).end("{}"); return
+    }
+    res.end(JSON.stringify(req.url.includes("/history") ? { messages: [] } :
+      req.url.includes("/chat") ? { reply: "Read-only sample reply", sample: true, action_executed: false } :
+      { id: "demo-guest", role: "VIEWER" }))
+    return
+  }
   if (req.url === "/api/auth/login" && req.method === "POST") {
     loginCalls++
     let body = ""
@@ -250,6 +267,33 @@ try {
       }
     } finally { await browser.close() }
   }
+  guestEnabled = true
+  const guestJar = new Map()
+  const guestResponse = await request("/api/auth/session", guestJar)
+  const guestSession = await guestResponse.json()
+  assert.equal(guestSession.demoGuest, true)
+  assert.equal(guestSession.user.role, "VIEWER")
+  assert.equal(guestSession.accessToken, "fixture-guest-only")
+  assert.ok(guestResponse.headers.getSetCookie().some(cookie => cookie.includes("warehouse-demo-guest=") && cookie.includes("HttpOnly") && cookie.includes("SameSite=Lax")))
+  checks.push("enabled guest mode issues a separate HTTP-only restricted session without credentials")
+  const guestProfile = await request("/api/auth/me", guestJar)
+  assert.equal((await guestProfile.json()).id, "demo-guest")
+  assert.equal((await request("/api/chat?sessionId=public", guestJar)).status, 200)
+  const guestChat = await request("/api/chat", guestJar, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: "Show orders", history: [] }) })
+  assert.equal((await guestChat.json()).sample, true)
+  checks.push("original profile and chat use only the restricted guest backend")
+  const ownerWithGuest = await signIn("fixture-password")
+  for (const [key,value] of guestJar) ownerWithGuest.jar.set(key,value)
+  const ownerSession = await (await request("/api/auth/session", ownerWithGuest.jar)).json()
+  assert.equal(ownerSession.accessToken, accessToken)
+  assert.equal(ownerSession.demoGuest, undefined)
+  assert.equal((await (await request("/api/auth/me", ownerWithGuest.jar)).json()).id, "fixture-user")
+  checks.push("owner login takes precedence over a guest cookie while guest mode is enabled")
+  guestEnabled = false
+  const disabledSession = await (await request("/api/auth/session", guestJar)).json()
+  assert.equal(disabledSession.accessToken, undefined)
+  assert.equal((await request("/api/chat?sessionId=public", guestJar)).status, 404)
+  checks.push("disabling guest mode revokes existing guest access and restores normal authentication")
   console.log(JSON.stringify({ status: "passed", checks }, null, 2))
 } finally {
   app.kill()

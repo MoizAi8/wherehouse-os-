@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react"
+import { useSessionIdentity } from "@/components/providers/SessionProvider"
 import { api } from "@/lib/api"
 import { usePathname } from "next/navigation"
 
@@ -51,10 +52,10 @@ const STORAGE_KEY = "warehouse-os-settings"
 
 const SettingsContext = createContext<SettingsContextType | null>(null)
 
-function loadLocal(): AppSettings {
+function loadLocal(storageKey: string): AppSettings {
   if (typeof window === "undefined") return { ...defaults }
   try {
-    const stored = localStorage.getItem(STORAGE_KEY)
+    const stored = localStorage.getItem(storageKey)
     if (stored) {
       const parsed = JSON.parse(stored)
       return { ...defaults, ...parsed }
@@ -64,13 +65,16 @@ function loadLocal(): AppSettings {
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
+  const identity = useSessionIdentity()
+  const storageKey = identity === "guest" ? `${STORAGE_KEY}-guest` : STORAGE_KEY
   const protectedPage = usePathname().startsWith("/dashboard")
   const [settings, setSettings] = useState<AppSettings>(defaults)
   const [loaded, setLoaded] = useState(false)
   const [savedSnapshot, setSavedSnapshot] = useState(JSON.stringify(defaults))
 
   useEffect(() => {
-    const local = loadLocal()
+    if (identity === "loading") return
+    const local = loadLocal(storageKey)
 
     // Public pages must not fetch protected settings or trigger a login redirect.
     const remoteSettings = protectedPage ? api.get<Partial<AppSettings>>("/api/v1/settings") : Promise.resolve({})
@@ -85,13 +89,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         setSavedSnapshot(JSON.stringify(local))
       })
       .finally(() => setLoaded(true))
-  }, [protectedPage])
+  }, [protectedPage, identity, storageKey])
 
   useEffect(() => {
     if (!loaded) return
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(settings))
+    localStorage.setItem(storageKey, JSON.stringify(settings))
     applyTheme(settings.theme)
-  }, [settings, loaded])
+  }, [settings, loaded, storageKey])
 
   const updateSetting = useCallback(<K extends keyof AppSettings>(key: K, value: AppSettings[K]) => {
     setSettings((prev) => ({ ...prev, [key]: value }))

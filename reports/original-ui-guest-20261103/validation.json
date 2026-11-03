@@ -1,0 +1,17 @@
+{
+  "backend_tests_passed": 1221,
+  "frontend_tests_passed": 75,
+  "built_auth_checks_passed": 26,
+  "browser_checks_passed": 25,
+  "backend_ruff": "passed",
+  "backend_mypy": "84 source files clean",
+  "frontend_lint": "passed",
+  "frontend_types": "passed",
+  "production_build": "passed",
+  "real_gemini_browser_requests": 1,
+  "gemini_test_limitation": "QA-only relay to existing production public Gemini endpoint; new guest release not deployed",
+  "deployment_authorization_required": true,
+  "database_schema_changes": false,
+  "application_dependency_changes": false,
+  "caddy_changes": false
+}

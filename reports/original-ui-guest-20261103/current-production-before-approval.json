@@ -1,0 +1,29 @@
+{
+  "checked_at": "2026-11-03T10:04:32.852252+00:00",
+  "deployed_commit": "b726603",
+  "new_correction_deployed": false,
+  "results": [
+    {
+      "check": "trusted HTTPS 140-245-218-97.sslip.io",
+      "passed": true,
+      "expires": "Jan 31 12:36:40 2027 GMT"
+    },
+    {
+      "check": "trusted HTTPS 140.245.218.97",
+      "passed": true,
+      "expires": "Nov  9 13:18:50 2026 GMT"
+    },
+    {
+      "check": "existing public entry https://140-245-218-97.sslip.io",
+      "passed": true,
+      "http": 307,
+      "location": "/demo"
+    },
+    {
+      "check": "existing public entry https://140.245.218.97",
+      "passed": true,
+      "http": 308,
+      "location": "https://140-245-218-97.sslip.io/"
+    }
+  ]
+}

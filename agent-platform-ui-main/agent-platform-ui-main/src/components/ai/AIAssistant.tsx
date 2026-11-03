@@ -6,18 +6,19 @@ import { cn } from "@/lib/utils"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { Message } from "@/lib/ai/client"
 import { ApiError } from "@/lib/api"
+import { useSessionIdentity } from "@/components/providers/SessionProvider"
 import { refreshSession } from "@/lib/session"
 
 const SESSION_KEY = "fulfillos_chat_session"
 const MAX_RETRIES = 3
 const RETRY_DELAY_MS = 1000
 
-function loadSessionId(): string {
+function loadSessionId(storageKey: string): string {
   if (typeof window === "undefined") return ""
-  let sid = window.localStorage.getItem(SESSION_KEY)
+  let sid = window.localStorage.getItem(storageKey)
   if (!sid) {
     sid = `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    window.localStorage.setItem(SESSION_KEY, sid)
+    window.localStorage.setItem(storageKey, sid)
   }
   return sid
 }
@@ -34,13 +35,15 @@ const suggestions = [
 ]
 
 export function AIAssistant({ initialContext }: { initialContext?: { name: string; role: string } | null }) {
+  const identity = useSessionIdentity()
+  const storageKey = identity === "guest" ? `${SESSION_KEY}_guest` : SESSION_KEY
   const [input, setInput] = useState(() => {
     if (initialContext) {
       return `Show me details about ${initialContext.name} (${initialContext.role})`
     }
     return ""
   })
-  const [sessionId, setSessionId] = useState<string>(loadSessionId)
+  const [sessionId, setSessionId] = useState<string>(() => loadSessionId(storageKey))
   const [messages, setMessages] = useState<Message[]>([])
   const [streaming, setStreaming] = useState(false)
   const [streamContent, setStreamContent] = useState("")
@@ -113,7 +116,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
 
   const clearChat = () => {
     const fresh = `s-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-    window.localStorage.setItem(SESSION_KEY, fresh)
+    window.localStorage.setItem(storageKey, fresh)
     setSessionId(fresh)
     setMessages([{ id: "0", role: "assistant", content: "Chat cleared. Send a message to start a new conversation." }])
     idCounter.current = 1
@@ -128,7 +131,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, sessionId, confirmationToken }),
+        body: JSON.stringify({ message: text, sessionId, confirmationToken, history: messages.filter(m => m.role === "user" || m.role === "assistant").slice(-6).map(m => ({ role: m.role, content: m.content.slice(0, 500) })) }),
       })
 
       if (!res.ok) {
@@ -175,7 +178,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
       const { reply, sessionId: newSessionId, confirmation } = await sendWithRetry(text, MAX_RETRIES, confirmationToken)
       setPendingAction(confirmation || null)
       if (newSessionId) {
-        window.localStorage.setItem(SESSION_KEY, newSessionId)
+        window.localStorage.setItem(storageKey, newSessionId)
         setSessionId(newSessionId)
       }
       idCounter.current += 1
@@ -189,7 +192,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
       setStreamContent("")
       setRetryAttempt(0)
     }
-  }, [streaming, sendWithRetry])
+  }, [streaming, sendWithRetry, storageKey])
 
   return (
     <div className="flex flex-col h-full bg-card/95 backdrop-blur-2xl">

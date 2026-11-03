@@ -1,0 +1,8 @@
+{
+  "baseline": "Existing original production dashboard on b726603 with intercepted isolated sample DTOs",
+  "method": "Playwright screenshots at matching 1440x1000 viewport, visually inspected side by side",
+  "source_unchanged_vs_b726603": true,
+  "original_page_and_style_file_count": 16,
+  "intentional_visual_change": "Topbar Admin identity becomes Demo Guest; original dropdown gains Owner sign in. No page/layout/style rewrite.",
+  "mobile_limitation": "Existing fixed 240px sidebar and wide content are preserved; 390px view clips content as the original did. Navigation remains available. No responsive redesign was introduced."
+}

@@ -47,3 +47,9 @@ it("never redirects the isolated public demo because a production cookie expired
   render(<SessionExpiryGuard />)
   expect(refreshSession).not.toHaveBeenCalled()
 })
+
+it("keeps the original dashboard accessible with a scoped guest session", () => {
+  setSession({ data: { demoGuest: true, accessToken: "guest-only" }, status: "authenticated" })
+  render(<SessionExpiryGuard />)
+  expect(refreshSession).not.toHaveBeenCalled()
+})

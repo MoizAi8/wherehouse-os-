@@ -1,0 +1,10 @@
+{
+  "passed": true,
+  "real_provider": "Existing production Gemini Free-tier",
+  "expected": "42",
+  "actual": "42",
+  "path": "Built original UI → restricted local guest handler → QA-only relay → existing public Gemini endpoint",
+  "calls": 1,
+  "key_retrieved": false,
+  "new_code_deployed": false
+}

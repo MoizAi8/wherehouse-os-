@@ -136,8 +136,8 @@ class RateLimitMiddleware:
         self._prune(now)
 
         if is_demo:
-            key = f"demo-chat:{client_ip}" if path == "/api/demo/chat" else f"demo-read:{client_ip}"
-            limit_str = "10/minute" if path == "/api/demo/chat" else "120/minute"
+            key = f"demo-chat:{client_ip}" if path in ("/api/demo/chat", "/api/demo/guest/chat") else f"demo-read:{client_ip}"
+            limit_str = "10/minute" if path in ("/api/demo/chat", "/api/demo/guest/chat") else "120/minute"
         elif _AUTH_PATH.match(path):
             key = f"auth:{client_ip}"
             limit_str = settings.rate_limit_auth

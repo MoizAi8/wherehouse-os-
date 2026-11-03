@@ -1,5 +1,6 @@
 "use client"
 
+import { useSession, signIn } from "next-auth/react"
 import { motion } from "framer-motion"
 import { usePathname, useRouter } from "next/navigation"
 import { Bell, Search, ChevronRight, Maximize2, ChevronDown } from "lucide-react"
@@ -26,6 +27,8 @@ const breadcrumbMap: Record<string, string> = {
 }
 
 export function Topbar() {
+  const { data: session } = useSession()
+  const displayName = session?.demoGuest ? "Demo Guest" : "Admin"
   const pathname = usePathname()
   const router = useRouter()
   const segments = pathname.split("/").filter(Boolean)
@@ -83,19 +86,20 @@ export function Topbar() {
                 <AvatarImage src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=64&h=64&fit=crop&crop=face" />
                 <AvatarFallback className="text-[10px]">AD</AvatarFallback>
               </Avatar>
-              <span className="text-xs font-medium">Admin</span>
+              <span className="text-xs font-medium">{displayName}</span>
               <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 glass-card-strong border-border/60">
             <div className="px-2.5 py-2">
-              <p className="text-sm font-medium">Admin</p>
-              <p className="text-xs text-muted-foreground">admin@warehouse.io</p>
+              <p className="text-sm font-medium">{displayName}</p>
+              <p className="text-xs text-muted-foreground">{session?.demoGuest ? "Read-only sample workspace" : "admin@warehouse.io"}</p>
             </div>
             <DropdownMenuSeparator className="bg-border/30" />
             <DropdownMenuItem className="text-xs" onSelect={() => router.push("/dashboard/profile")}>Profile</DropdownMenuItem>
             <DropdownMenuItem className="text-xs">Preferences</DropdownMenuItem>
             <DropdownMenuItem className="text-xs">API Keys</DropdownMenuItem>
+            {session?.demoGuest && <DropdownMenuItem className="text-xs" onSelect={() => void signIn(undefined, { callbackUrl: "/dashboard" })}>Owner sign in</DropdownMenuItem>}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

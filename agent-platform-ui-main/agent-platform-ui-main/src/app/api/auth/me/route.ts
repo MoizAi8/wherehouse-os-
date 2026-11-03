@@ -1,3 +1,4 @@
+import { guestFetch } from "@/lib/demo-guest"
 import { backendUrl, getAuthHeaders } from "@/lib/backend"
 
 export async function GET() {
@@ -11,6 +12,7 @@ export async function GET() {
 
   try {
     const authHeaders = await getAuthHeaders()
+    if (!authHeaders.Authorization) return guestFetch("data?path=%2Fapi%2Fauth%2Fme")
 
     const backendRes = await fetch(`${base}/api/auth/me`, {
       headers: { ...authHeaders },

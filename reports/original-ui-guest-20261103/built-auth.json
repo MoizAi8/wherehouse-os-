@@ -1,0 +1,31 @@
+{
+  "status": "passed",
+  "checks": [
+    "credentials provider discovery",
+    "first-visit sign-in form is reachable without a sign-out POST",
+    "anonymous session/provider reads do not initialize form cookies",
+    "late anonymous responses preserve first-visit form CSRF and dashboard callback",
+    "anonymous session has no backend token",
+    "missing CSRF cannot reach credential verification",
+    "mismatched CSRF remains rejected before credential verification",
+    "invalid credentials create no session",
+    "session reads preserve authenticated session-cookie renewal",
+    "valid credentials persist JWT and session callbacks",
+    "authenticated profile forwards backend bearer token",
+    "cookie-authenticated chat and history forward backend bearer token",
+    "anonymous chat and history fail closed",
+    "tampered session rejected",
+    "expired session rejected",
+    "legacy NextAuth cookie cannot forward an expired backend JWT",
+    "unexpired legacy cookie remains compatible",
+    "malformed Bearer token returns null without throwing",
+    "signout clears the session",
+    "real browser first-visit protected-page sign-in 1",
+    "real browser first-visit protected-page sign-in 2",
+    "real browser first-visit protected-page sign-in 3",
+    "enabled guest mode issues a separate HTTP-only restricted session without credentials",
+    "original profile and chat use only the restricted guest backend",
+    "owner login takes precedence over a guest cookie while guest mode is enabled",
+    "disabling guest mode revokes existing guest access and restores normal authentication"
+  ]
+}

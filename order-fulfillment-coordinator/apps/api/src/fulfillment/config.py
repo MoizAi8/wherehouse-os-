@@ -94,6 +94,7 @@ class Settings(BaseSettings):
     chat_provider: str = "openai-compatible"
     chat_timeout_seconds: float = 25.0
     chat_max_output_tokens: int = 500
+    demo_guest_enabled: bool = False
     teacher_demo_mode: bool = False
     teacher_demo_llm_max_requests: int = 100
     embedding_model: str = "text-embedding-3-small"

@@ -41,6 +41,7 @@ export async function refreshSession(): Promise<boolean> {
 export async function ensureValidSession(): Promise<boolean> {
   const { getSession } = await import("next-auth/react")
   const session = await getSession()
+  if (session?.demoGuest) return true
   if (!session?.accessToken) {
     return refreshSession()
   }

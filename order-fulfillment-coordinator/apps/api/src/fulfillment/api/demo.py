@@ -20,7 +20,7 @@ VIEWS = ("dashboard", "orders", "inventory", "agents", "monitoring", "workflows"
 
 
 def require_demo() -> None:
-    if not settings.teacher_demo_mode:
+    if not (settings.teacher_demo_mode or settings.demo_guest_enabled):
         raise HTTPException(404, "Teacher demo is unavailable; normal login remains available")
 
 
