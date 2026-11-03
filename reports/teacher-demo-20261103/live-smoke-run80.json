@@ -1,0 +1,201 @@
+{
+  "checked_at": "2026-11-02T22:21:04.321184+00:00",
+  "origin": "https://140-245-218-97.sslip.io",
+  "paid_inference": false,
+  "private_response_bodies_stored": false,
+  "customer_mutations_performed": false,
+  "results": [
+    {
+      "name": "trusted TLS 140-245-218-97.sslip.io",
+      "passed": true,
+      "SAN": [
+        [
+          "DNS",
+          "140-245-218-97.sslip.io"
+        ]
+      ],
+      "expires": "Jan 31 12:36:40 2027 GMT"
+    },
+    {
+      "name": "trusted TLS 140.245.218.97",
+      "passed": true,
+      "SAN": [
+        [
+          "IP Address",
+          "140.245.218.97"
+        ]
+      ],
+      "expires": "Nov  9 13:18:50 2026 GMT"
+    },
+    {
+      "name": "canonical IP redirect http://140.245.218.97",
+      "passed": true,
+      "http": 308
+    },
+    {
+      "name": "canonical IP redirect https://140.245.218.97",
+      "passed": true,
+      "http": 308
+    },
+    {
+      "name": "anonymous root enters public demo",
+      "passed": true,
+      "http": 307
+    },
+    {
+      "name": "public teacher HTML",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "manual demo stays enabled without expiry",
+      "passed": true
+    },
+    {
+      "name": "production Gemini configured",
+      "passed": true,
+      "model": "gemini-3.5-flash-lite"
+    },
+    {
+      "name": "isolated public dashboard",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "isolated public orders",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "isolated public inventory",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "isolated public agents",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "isolated public monitoring",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "isolated public workflows",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "isolated public analytics",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "real Gemini arithmetic",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "reply": "27"
+    },
+    {
+      "name": "real Gemini Roman Urdu",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "reply": "Assalam-o-alaikum! Kya madad kar sakta hoon aapki?"
+    },
+    {
+      "name": "sample inventory database answer",
+      "passed": true,
+      "http": 200,
+      "mode": "database",
+      "model": null,
+      "reply": null
+    },
+    {
+      "name": "public destructive request refused",
+      "passed": true,
+      "http": 200,
+      "mode": "safety",
+      "model": null,
+      "reply": null
+    },
+    {
+      "name": "public tab memory",
+      "passed": true,
+      "http": 200,
+      "mode": "llm",
+      "model": "gemini-3.5-flash-lite",
+      "reply": "You mentioned that your favourite fruit is mango."
+    },
+    {
+      "name": "anonymous rejected /api/v1/orders",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "name": "anonymous rejected /api/v1/analytics/kpis",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "name": "anonymous rejected /api/v1/agents/status",
+      "passed": true,
+      "http": 401
+    },
+    {
+      "name": "anonymous protected chat rejected",
+      "passed": true
+    },
+    {
+      "name": "malformed bearer rejected",
+      "passed": true
+    },
+    {
+      "name": "existing teacher NextAuth login",
+      "passed": true
+    },
+    {
+      "name": "authenticated /api/v1/orders",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "authenticated /api/v1/analytics/kpis",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "authenticated /api/v1/agents/status",
+      "passed": true,
+      "http": 200
+    },
+    {
+      "name": "authenticated cookie profile bridge",
+      "passed": true
+    },
+    {
+      "name": "authenticated frontend chat bridge",
+      "passed": true,
+      "http": 200,
+      "action": "list_orders",
+      "mode": "database"
+    },
+    {
+      "name": "production dependency readiness",
+      "passed": true,
+      "backends": {
+        "postgres": true,
+        "celery": true,
+        "qdrant": true
+      }
+    },
+    {
+      "name": "signout removes protected session",
+      "passed": true
+    }
+  ]
+}

@@ -1,11 +1,11 @@
 {
-  "current_release": "/home/ubuntu/fulfillment/releases/78b98ea89e8de530690bbec0f0fb931668d9f382-41534406364-1/order-fulfillment-coordinator",
-  "previous_release": "/home/ubuntu/fulfillment/releases/00ecaa93c31d5cea8eab7c86ef27a84c9dee9b06-41515031459-1/order-fulfillment-coordinator",
+  "current_release": "/home/ubuntu/fulfillment/releases/b7266035270efbca545bf028aa64814c9e42e6ce-41539083186-1/order-fulfillment-coordinator",
+  "previous_release": "/home/ubuntu/fulfillment/releases/78b98ea89e8de530690bbec0f0fb931668d9f382-41534406364-1/order-fulfillment-coordinator",
   "services": {
     "api": {
       "running": true,
       "health": "healthy",
-      "image": "ghcr.io/moizai8/fulfillment-api@sha256:3e59426cef8a39a6a1b444c8dfabc21bbbe50158f187101e63051c2d41c80bfe",
+      "image": "ghcr.io/moizai8/fulfillment-api@sha256:67832dc17cf2bcb8fe71054677fc1a42098787f8160c65bb3144b9ee94c051a1",
       "runtime_configuration": {
         "demo_mode": "true",
         "provider": "gemini-free",
@@ -19,7 +19,7 @@
     "frontend": {
       "running": true,
       "health": null,
-      "image": "ghcr.io/moizai8/fulfillment-ui@sha256:3700025ffe7db74fc75f9fcb14581805f61c3fd33690e1034129b37b627adee6"
+      "image": "ghcr.io/moizai8/fulfillment-ui@sha256:e25ca84d8c85ad4d2303c35cb24d90bc28450f42f899aaa3fc4b3a8225240e77"
     },
     "caddy": {
       "running": true,
@@ -44,12 +44,12 @@
     "celery-worker": {
       "running": true,
       "health": "healthy",
-      "image": "ghcr.io/moizai8/fulfillment-api@sha256:3e59426cef8a39a6a1b444c8dfabc21bbbe50158f187101e63051c2d41c80bfe"
+      "image": "ghcr.io/moizai8/fulfillment-api@sha256:67832dc17cf2bcb8fe71054677fc1a42098787f8160c65bb3144b9ee94c051a1"
     },
     "celery-beat": {
       "running": true,
       "health": null,
-      "image": "ghcr.io/moizai8/fulfillment-api@sha256:3e59426cef8a39a6a1b444c8dfabc21bbbe50158f187101e63051c2d41c80bfe"
+      "image": "ghcr.io/moizai8/fulfillment-api@sha256:67832dc17cf2bcb8fe71054677fc1a42098787f8160c65bb3144b9ee94c051a1"
     }
   },
   "database": {
@@ -59,9 +59,9 @@
   },
   "caddy_version": "v2.11.4 h1:XKxkMTgNSizEvKG6QHue6cAsFOteU2qA61w2tKkCWi0=",
   "release_env": {
-    "TAG": "78b98ea89e8de530690bbec0f0fb931668d9f382",
+    "TAG": "b7266035270efbca545bf028aa64814c9e42e6ce",
     "IMAGE_OWNER": "moizai8",
-    "API_IMAGE_REF": "ghcr.io/moizai8/fulfillment-api@sha256:3e59426cef8a39a6a1b444c8dfabc21bbbe50158f187101e63051c2d41c80bfe",
-    "FRONTEND_IMAGE_REF": "ghcr.io/moizai8/fulfillment-ui@sha256:3700025ffe7db74fc75f9fcb14581805f61c3fd33690e1034129b37b627adee6"
+    "API_IMAGE_REF": "ghcr.io/moizai8/fulfillment-api@sha256:67832dc17cf2bcb8fe71054677fc1a42098787f8160c65bb3144b9ee94c051a1",
+    "FRONTEND_IMAGE_REF": "ghcr.io/moizai8/fulfillment-ui@sha256:e25ca84d8c85ad4d2303c35cb24d90bc28450f42f899aaa3fc4b3a8225240e77"
   }
 }

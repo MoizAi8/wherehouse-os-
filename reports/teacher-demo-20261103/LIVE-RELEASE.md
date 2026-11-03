@@ -1,55 +1,31 @@
-# Live release â€” November 3, 2026 (Asia/Karachi)
+# Live release — November 3, 2026 (Asia/Karachi)
 
-**The public teacher demo is deployed and working.**
+**The public teacher demo and corrected private login are deployed and verified.**
 
 - [Public teacher demo](https://140-245-218-97.sslip.io/demo)
-- [Direct OCI HTTPS IP](https://140.245.218.97/) â€” trusted TLS, then canonical redirect.
-- [Explicit protected sign-in](https://140-245-218-97.sslip.io/api/auth/signin?callbackUrl=%2Fdashboard)
+- [Direct OCI HTTPS IP](https://140.245.218.97/) — trusted TLS, then canonical redirect.
+- [Protected sign-in](https://140-245-218-97.sslip.io/api/auth/signin?callbackUrl=%2Fdashboard)
 
-Release **78b98ea89e8de530690bbec0f0fb931668d9f382** deployed successfully through
-[run #80](https://github.com/MoizAi8/wherehouse-os-/actions/runs/41534406364), after
-[main CI #79](https://github.com/MoizAi8/wherehouse-os-/actions/runs/41533545040)
-and both Docker builds passed. Exactly one authorized OCI deployment was used.
-No second deployment or manual service restart was performed.
+Production release **b7266035270efbca545bf028aa64814c9e42e6ce** was already deployed successfully through [run #82](https://github.com/MoizAi8/wherehouse-os-/actions/runs/41539083186), after [CI #81](https://github.com/MoizAi8/wherehouse-os-/actions/runs/41538210260) and both Docker image builds passed. It supersedes run #80. The user's one further deployment authorization was consumed by run #82. Final acceptance triggered no deployment, restart or application changes.
 
-Live settings: TEACHER_DEMO_MODE=true, no demo expiration, DEBUG=false,
-Gemini Free-tier chat configured, no legacy OpenAI/embedding key. All eight
-containers run. API, worker, PostgreSQL and Redis are healthy; dependency
-readiness confirms PostgreSQL, Celery and Qdrant. Migration d5e8f1a2b3c4 is
-applied and the previous release is retained. `live-host-state.json` records
-exact release paths and immutable image digests.
+## Final live acceptance
 
-All **33 live HTTP checks passed** (`live-smoke.json`): anonymous root/demo,
-all seven isolated sample views, real Gemini arithmetic/Roman Urdu/history,
-sample inventory, refusal of public destructive requests, actual teacher login,
-cookie forwarding, authenticated Chat/Agents/Orders/Dashboard APIs, anonymous
-and malformed-token rejection, logout, dependency readiness and trusted TLS.
-The IP certificate has IP SAN 140.245.218.97 and expires November 9, 2026 at
-13:18:50 UTC. Caddy's shortlived ACME policy manages renewal; future renewal has
-not yet occurred. The working hostname certificate remains valid.
+All **33 HTTP checks**, **13 Edge browser checks** and **nine CSRF checks** passed. Three additional independent fresh-browser visits to the private dashboard successfully signed in with matching form/cookie CSRF tokens. Desktop and mobile public screenshots were inspected.
 
-Real Edge verified public navigation, sample filtering/chat, trusted IP TLS,
-expired-cookie public access and the private sign-in form. Its longer sequence
-then exposed a reproducible **first-visit private login CSRF-cookie race**.
-A fresh direct browser sign-in succeeded. Initial browser failures remain in
-`live-browser-initial.json` and `live-browser.json`; a complete browser pass is
-not claimed. The tested local correction is in `CSRF-CORRECTION.md` and needs
-renewed release authorization.
+Verified: no-login demo entry; all seven sample data views and chat; filtering; backend readiness; real Gemini arithmetic, Roman Urdu and supplied conversational memory; sample inventory facts; public destructive-operation refusal; private dashboard, Orders and Chat browser access; authenticated Chat, Agents, Orders and Dashboard API reads; logout; rejection of anonymous/malformed bearer requests and missing/mismatched CSRF tokens; trusted hostname and direct-IP TLS; preservation of path/query during the canonical IP redirect.
 
-Controlled 500-case results remain **498 passed, two local-Qwen quality failures,
-none blocked**. Deployed Gemini separately passed ten CI checks and three live
-conversational checks. No paid inference, billing or infrastructure purchases
-were performed. See `REPORT.md` for detailed evaluation and quota limitations.
+The prior cookie race affected first-visit **private login**, while the public demo remained accessible. Late anonymous NextAuth session/provider responses could overwrite the form cookie. The deployed correction suppresses only those form-cookie initializations; session cookies and all POST CSRF validation remain active. See CSRF-CORRECTION.md.
 
-To restore the normal landing/login flow, change one repository variable and
-redeploy through the existing pipeline:
+All eight services are running. PostgreSQL, Celery and Qdrant readiness is green. Runtime remains TEACHER_DEMO_MODE=true, DEBUG=false, Gemini Free-tier provider, with no legacy OpenAI embedding key. Migration d5e8f1a2b3c4 is unchanged by this correction. The prior release remains available. Exact immutable images and release paths are recorded in live-host-state.json. No production customer records were created, modified or deleted by acceptance checks; warehouse write paths were tested with isolated fixtures in the earlier suite.
+
+CI passed 1,197 backend tests, 66 frontend tests, 19 built authentication checks, lint/types and production image builds. Earlier controlled evaluation remains **498/500 passed**, with two local-Qwen quality failures and no blocked scenarios. That evaluation is distinct from bounded real Gemini CI/live calls. Free-tier quotas may limit AI responses; no paid inference, billing or infrastructure purchases were performed.
+
+The public demo is intentionally isolated and read-only: sample workflows are simulations, and private production operations remain protected. It does not expire automatically. To restore the normal landing/login flow, set the existing repository variable and obtain authorization for a normal redeployment:
 
 ```powershell
 gh variable set TEACHER_DEMO_MODE --repo MoizAi8/wherehouse-os- --body false
 ```
 
-The variable applies on redeployment; it does not itself restart the app. There
-is no automatic demo time limit. Public inference quotas do not expire the demo.
-The private PostgreSQL backup has a validated archive manifest and SHA-256.
-No dump, credentials, JWTs or private response bodies were committed. Smoke
-tests performed no customer-record mutations.
+Changing the variable alone does not restart production. IP TLS uses Caddy's configured short-lived ACME renewal policy; future certificate renewal was not tested by advancing time. Validated pre-release and pre-correction database backups remain on the server. No dump, credentials, JWTs or private response bodies were committed.
+
+Evidence: live-smoke.json, live-browser.json, live-csrf-regression.json, live-first-visit-{1,2,3}.json, live-host-state.json and csrf-correction-backup.json. Historical run-80 state and initial race diagnostics remain preserved separately.

@@ -1,0 +1,42 @@
+{
+  "production": true,
+  "token_values_stored": false,
+  "results": [
+    {
+      "name": "fresh anonymous session does not write form cookies",
+      "passed": true
+    },
+    {
+      "name": "fresh anonymous providers does not write form cookies",
+      "passed": true
+    },
+    {
+      "name": "missing CSRF remains rejected",
+      "passed": true
+    },
+    {
+      "name": "missing CSRF creates no session",
+      "passed": true
+    },
+    {
+      "name": "mismatched CSRF remains rejected",
+      "passed": true
+    },
+    {
+      "name": "mismatched CSRF creates no session",
+      "passed": true
+    },
+    {
+      "name": "explicit CSRF cookie remains secure HTTP-only and host-only",
+      "passed": true
+    },
+    {
+      "name": "explicit sign-in sets matching secure CSRF pair",
+      "passed": true
+    },
+    {
+      "name": "read-only requests preserve form token and callback",
+      "passed": true
+    }
+  ]
+}

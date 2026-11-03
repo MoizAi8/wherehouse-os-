@@ -36,10 +36,24 @@
       "passed": true
     },
     {
-      "name": "browser execution",
-      "passed": false,
-      "error_type": "TimeoutError",
-      "message": "page.waitForURL: Timeout 60000ms exceeded.\n=========================== logs ===========================\nwaiting for navigation until \"domcontentloaded\"\n============================================================"
+      "name": "first-visit sign-in form retains matching CSRF cookie",
+      "passed": true
+    },
+    {
+      "name": "teacher can still sign in through real browser",
+      "passed": true
+    },
+    {
+      "name": "protected orders page loads after login",
+      "passed": true
+    },
+    {
+      "name": "protected chat page remains available",
+      "passed": true
+    },
+    {
+      "name": "live mobile demo renders stock view",
+      "passed": true
     }
   ]
 }

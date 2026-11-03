@@ -1,0 +1,67 @@
+{
+  "outcome": {
+    "authenticated": true,
+    "path": "/dashboard"
+  },
+  "events": [
+    {
+      "path": "/dashboard",
+      "status": 200
+    },
+    {
+      "navigation": "/dashboard",
+      "error": null
+    },
+    {
+      "navigation": "/dashboard",
+      "error": null
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 200
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 200
+    },
+    {
+      "path": "/api/auth/providers",
+      "status": 200
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 200
+    },
+    {
+      "path": "/api/auth/signin",
+      "status": 200
+    },
+    {
+      "navigation": "/api/auth/signin",
+      "error": null
+    },
+    {
+      "csrf_form_matches_cookie": true
+    },
+    {
+      "path": "/api/auth/callback/credentials",
+      "status": 302
+    },
+    {
+      "path": "/dashboard",
+      "status": 200
+    },
+    {
+      "navigation": "/dashboard",
+      "error": null
+    },
+    {
+      "navigation": "/dashboard",
+      "error": null
+    },
+    {
+      "path": "/api/auth/session",
+      "status": 200
+    }
+  ]
+}

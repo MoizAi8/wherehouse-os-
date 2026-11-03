@@ -1,5 +1,5 @@
 {
-  "checked_at": "2026-11-02T22:21:04.321184+00:00",
+  "checked_at": "2026-11-03T09:43:04.913152+00:00",
   "origin": "https://140-245-218-97.sslip.io",
   "paid_inference": false,
   "private_response_bodies_stored": false,
@@ -105,7 +105,7 @@
       "http": 200,
       "mode": "llm",
       "model": "gemini-3.5-flash-lite",
-      "reply": "Assalam-o-alaikum! Kya madad kar sakta hoon aapki?"
+      "reply": "Assalam-o-alaikum! Kaisay hain aap?"
     },
     {
       "name": "sample inventory database answer",
@@ -129,7 +129,7 @@
       "http": 200,
       "mode": "llm",
       "model": "gemini-3.5-flash-lite",
-      "reply": "You mentioned that your favourite fruit is mango."
+      "reply": "You mentioned the mango."
     },
     {
       "name": "anonymous rejected /api/v1/orders",

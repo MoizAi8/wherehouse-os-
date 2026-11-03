@@ -1,0 +1,7 @@
+{
+  "path": "/home/ubuntu/fulfillment/recovery/pre-csrf-correction-20261102T223535Z/postgres.dump",
+  "bytes": 28699,
+  "sha256": "49cc62ca0700c25c669aebda50b3c4ce2d83195435a90bdcdceded2033438b6a",
+  "archive_manifest_valid": true,
+  "restore_performed": false
+}

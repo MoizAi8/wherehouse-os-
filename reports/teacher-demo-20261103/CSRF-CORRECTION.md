@@ -30,6 +30,6 @@ Verification:
   built app and isolated auth fixture. Form/cookie pairing is checked before
   each submission. These are additional regressions, not AI inference claims.
 
-Run 80 consumed the authorized deployment. This correction needs a renewed main
-push and exactly one further OCI deployment, conditional on CI/image builds.
-Then repeat real protected-page entry and public demo/Gemini/TLS verification.
+The user renewed authorization. Commit b726603 was pushed to main, passed CI 81 and both image builds, and deployed successfully through OCI run 82. That authorization is consumed.
+
+Final production checks: 33 HTTP, 13 browser and nine CSRF checks passed. Three additional fresh-browser dashboard sign-ins each retained a matching form/cookie pair and authenticated successfully. Missing and mismatched CSRF submissions still fail. Public demo, real Gemini, backend APIs and trusted IP/hostname TLS remain working. See LIVE-RELEASE.md and the live JSON evidence.
