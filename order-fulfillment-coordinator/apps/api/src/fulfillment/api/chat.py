@@ -1168,13 +1168,12 @@ async def chat_history(
     result = await db.execute(
         select(ChatMessageRecord)
         .where(ChatMessageRecord.session_id == _owned_session_key(_user, session_id))
-        .order_by(ChatMessageRecord.id.asc())
+        .order_by(ChatMessageRecord.id.desc())
         .limit(200)
     )
-    rows = list(result.scalars().all())
     messages = [
         ChatHistoryMessage(id=r.id, role=r.role, content=r.content)
-        for r in rows
+        for r in reversed(result.scalars().all())
     ]
     return ChatHistoryResponse(session_id=session_id, messages=messages)
 

@@ -58,3 +58,35 @@ def test_chat_refuses_missing_authenticated_identity(chat_client):
         return {"role": "admin"}
     client.app.dependency_overrides[get_current_user] = missing_identity
     assert client.post("/api/chat", json={"message": "hello"}).status_code == 401
+
+@pytest.mark.asyncio
+async def test_history_restores_latest_ordered_messages_after_database_reopen(tmp_path):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    url = f"sqlite+aiosqlite:///{tmp_path.joinpath('history.db').as_posix()}"
+    owner = SimpleNamespace(id="owner")
+    key = module._owned_session_key(owner, "conversation")
+    engine = create_async_engine(url)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(module.ChatMessageRecord.__table__.create)
+        async with async_sessionmaker(engine)() as db:
+            db.add_all(
+                module.ChatMessageRecord(session_id=key, role="user", content=str(i))
+                for i in range(205)
+            )
+            await db.commit()
+    finally:
+        await engine.dispose()
+
+    reopened = create_async_engine(url)
+    try:
+        async with async_sessionmaker(reopened)() as db:
+            restored = await module.chat_history(session_id="conversation", db=db, _user=owner)
+            assert [message.content for message in restored.messages] == [str(i) for i in range(5, 205)]
+            other = await module.chat_history(
+                session_id="conversation", db=db, _user=SimpleNamespace(id="other")
+            )
+            assert other.messages == []
+    finally:
+        await reopened.dispose()

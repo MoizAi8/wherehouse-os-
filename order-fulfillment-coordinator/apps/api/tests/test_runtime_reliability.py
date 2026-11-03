@@ -67,3 +67,31 @@ async def test_monitor_task_retries_input_failure_and_disposes_before_loop_close
         assert await task._run_monitor_cycle_async() == {"shipments_checked": 1}
         db.commit.assert_awaited_once()
     dispose.assert_awaited_once()
+
+@pytest.mark.asyncio
+async def test_agent_status_reads_completed_monitor_cycle(monkeypatch):
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from fulfillment.agents.orchestrator import FulfillmentOrchestrator
+    from fulfillment.api.v1.agents import agent_status
+    from fulfillment.models.agent_event import AgentEvent
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(AgentEvent.__table__.create)
+        factory = async_sessionmaker(engine)
+        async with factory() as db:
+            orchestrator = FulfillmentOrchestrator(db)
+            monkeypatch.setattr(orchestrator.monitor, "get_active_shipments", AsyncMock(return_value=[]))
+            monkeypatch.setattr(orchestrator.cost_optimizer, "analyze_cycle", AsyncMock(return_value=None))
+            cycle = await orchestrator.run_monitor_cycle()
+            await db.commit()
+        async with factory() as db:
+            status = await agent_status(db=db, _user=object())
+            assert status["recorded"] is True
+            assert status["cycle_id"] == cycle.cycle_id
+            assert status["completed_at"] is not None
+            assert status["shipments_checked"] == 0
+    finally:
+        await engine.dispose()

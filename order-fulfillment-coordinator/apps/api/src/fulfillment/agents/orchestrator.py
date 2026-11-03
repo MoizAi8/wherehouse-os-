@@ -225,18 +225,15 @@ class FulfillmentOrchestrator:
                 level=logging.ERROR
             )
 
-        log_agent_event(
-            "FulfillmentOrchestrator",
-            "cycle_complete",
-            entity_id=cycle_id,
-            details={
-                "shipments_checked": checked,
-                "delays_detected": delays,
-                "reroutes_initiated": reroutes,
-                "notifications_sent": notifications,
-                "anomalies_found": anomalies,
-            }
-        )
+        summary = {
+            "shipments_checked": checked,
+            "delays_detected": delays,
+            "reroutes_initiated": reroutes,
+            "notifications_sent": notifications,
+            "anomalies_found": anomalies,
+        }
+        await self._log_event("FulfillmentOrchestrator", "cycle_complete", cycle_id, summary)
+        log_agent_event("FulfillmentOrchestrator", "cycle_complete", entity_id=cycle_id, details=summary)
 
         return MonitorResponse(
             cycle_id=cycle_id,
