@@ -94,3 +94,26 @@ export async function GET(req: NextRequest) {
     return new Response(JSON.stringify({ error: errMsg }), { status: 500 })
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const base = backendUrl()
+  if (!base) return Response.json({ error: "Chat backend unavailable" }, { status: 503 })
+  if (req.headers.get("sec-fetch-site") === "cross-site") {
+    return Response.json({ error: "Cross-site request rejected" }, { status: 403 })
+  }
+
+  const id = req.nextUrl.searchParams.get("sessionId")
+  if (!id || id.length > 64) return Response.json({ error: "Invalid conversation ID" }, { status: 400 })
+
+  try {
+    const headers = await getAuthHeaders()
+    if (!headers.Authorization) return Response.json({ error: "Sign in to delete saved history" }, { status: 401 })
+    const result = await fetch(`${base}/api/chat/history?session_id=${encodeURIComponent(id)}`, {
+      method: "DELETE", headers, signal: AbortSignal.timeout(15000),
+    })
+    return result.ok ? new Response(null, { status: 204 })
+      : Response.json({ error: "Could not delete conversation" }, { status: result.status })
+  } catch {
+    return Response.json({ error: "Chat backend unavailable" }, { status: 503 })
+  }
+}

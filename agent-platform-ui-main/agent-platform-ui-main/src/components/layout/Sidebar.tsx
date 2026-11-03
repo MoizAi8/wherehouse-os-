@@ -56,7 +56,7 @@ export function Sidebar() {
               initial={{ opacity: 0, width: 0 }}
               animate={{ opacity: 1, width: "auto" }}
               exit={{ opacity: 0, width: 0 }}
-              className="flex items-center gap-2 overflow-hidden"
+              data-chat-compact-hide className="flex items-center gap-2 overflow-hidden"
             >
               <span className="text-sm font-semibold tracking-tight text-foreground whitespace-nowrap">
                 FulfillOS
@@ -71,6 +71,7 @@ export function Sidebar() {
 
       {!collapsed && (
         <button
+          data-chat-compact-hide
           onClick={() => setWorkspaceOpen(!workspaceOpen)}
           className="mx-3 mt-2 flex items-center gap-3 rounded-lg border border-border/30 px-3 py-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
         >
@@ -89,6 +90,7 @@ export function Sidebar() {
             <motion.div key={item.href} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.03 }}>
               <Link
                 href={item.href}
+                aria-label={item.label}
                 className={cn(
                   "group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
                   isActive
@@ -115,7 +117,7 @@ export function Sidebar() {
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
-                      className="relative z-10"
+                      data-chat-compact-hide className="relative z-10"
                     >
                       {item.label}
                     </motion.span>
@@ -123,7 +125,7 @@ export function Sidebar() {
                 </AnimatePresence>
                 {isActive && !collapsed && (
                   <motion.div
-                    layoutId="sidebar-indicator"
+                    data-chat-compact-hide layoutId="sidebar-indicator"
                     className="absolute right-2 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-accent"
                   />
                 )}
@@ -138,6 +140,7 @@ export function Sidebar() {
           <Link
             key={item.href}
             href={item.href}
+                aria-label={item.label}
             className={cn(
               "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
               pathname === item.href
@@ -146,18 +149,20 @@ export function Sidebar() {
             )}
           >
             <item.icon className="h-4 w-4 shrink-0" />
-            {!collapsed && <span>{item.label}</span>}
+            {!collapsed && <span data-chat-compact-hide>{item.label}</span>}
           </Link>
         ))}
         <button
+          aria-label={isDark ? "Light Mode" : "Dark Mode"}
           onClick={() => updateSetting("theme", isDark ? "light" : "dark")}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-muted hover:text-foreground"
           suppressHydrationWarning
         >
           {isDark ? <Sun className="h-4 w-4 shrink-0" /> : <Moon className="h-4 w-4 shrink-0" />}
-          {!collapsed && <span>{isDark ? "Light Mode" : "Dark Mode"}</span>}
+          {!collapsed && <span data-chat-compact-hide>{isDark ? "Light Mode" : "Dark Mode"}</span>}
         </button>
         <button
+          data-chat-compact-hide
           onClick={() => setCollapsed(!collapsed)}
           className="mt-1 flex w-full items-center justify-center rounded-lg px-3 py-2 text-sidebar-foreground transition-colors hover:bg-muted"
           suppressHydrationWarning

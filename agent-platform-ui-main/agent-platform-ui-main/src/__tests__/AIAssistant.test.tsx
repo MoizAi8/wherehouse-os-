@@ -24,6 +24,7 @@ describe("Category 5: Chat & AI Assistant", () => {
 
     render(<AIAssistant />)
     const input = screen.getByPlaceholderText("Ask anything about your warehouse...")
+    await waitFor(() => expect(input).toBeEnabled())
     fireEvent.change(input, { target: { value: "Hello" } })
     fireEvent.submit(input.closest("form")!)
 
@@ -60,7 +61,7 @@ describe("Category 5: Chat & AI Assistant", () => {
     global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ messages: [] }) })
     render(<AIAssistant />)
     await waitFor(() => expect(global.fetch).toHaveBeenCalledWith("/health", expect.anything()))
-    expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/chat\?sessionId=/))
+    expect(global.fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/chat\?sessionId=/), { cache: "no-store" })
     expect(global.fetch).not.toHaveBeenCalledWith(expect.stringContaining("/api/chat/history"))
   })
 
@@ -69,6 +70,7 @@ describe("Category 5: Chat & AI Assistant", () => {
       ? { ok: false, status: 401 } : { ok: true, json: async () => ({ messages: [] }) })
     render(<AIAssistant />)
     const input = screen.getByPlaceholderText("Ask anything about your warehouse...")
+    await waitFor(() => expect(input).toBeEnabled())
     fireEvent.change(input, { target: { value: "Show orders" } })
     fireEvent.submit(input.closest("form")!)
     await waitFor(() => expect(screen.getByText(/Your session expired/)).toBeInTheDocument())

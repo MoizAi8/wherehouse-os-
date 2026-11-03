@@ -80,13 +80,36 @@ def _take_demo_model_quota() -> None:
         raise HTTPException(503, "Demo quota storage unavailable; inference refused") from None
 
 
-def _facts(view: str) -> str:
+def _facts(view: str, order_status: str | None = None) -> str:
+    sample = demo_data()
     if view in ("dashboard", "analytics"):
-        data = demo_data().metrics()
-        return (f"Sample database: {data['total_orders']} orders; {data['pending_orders']} pending; "
-            f"{data['delivered_orders']} delivered; {data['delayed_shipments']} delayed shipment. "
-            f"Sample shipping cost: PKR {data['shipping_cost_pkr']:.2f}. These are demonstration records.")
-    return "Sample database (read-only): " + json.dumps(demo_data().view(view), ensure_ascii=False)
+        data = sample.metrics()
+        return (f"Sample warehouse: {data['total_orders']} orders, including {data['pending_orders']} pending "
+                f"and {data['delivered_orders']} delivered. There are {data['delayed_shipments']} delayed "
+                f"shipments. Sample shipping cost is PKR {data['shipping_cost_pkr']:.2f}.")
+    if view == "agents":
+        agents = sample.query("SELECT * FROM agents ORDER BY name")
+        roles = "\n".join(f"• {row['name']}: {row['responsibility']}" for row in agents)
+        return f"The sample roster has {len(agents)} agent roles. Individual runtime activity is unverified.\n\n{roles}"
+    if view == "inventory":
+        stock = "\n".join(
+            f"• {row['name']} ({row['sku']}): {row['quantity']} units at {row['location']} "
+            f"(reorder at {row['reorder_level']})" for row in sample.inventory()
+        )
+        return f"Sample inventory\n\n{stock}"
+    if view == "workflows":
+        return ("Sample workflow: receive and validate the order, obtain operator confirmation, "
+                "evaluate carrier and fulfillment center, then monitor delivery. Guest access is read-only.")
+    rows = sample.orders(status=order_status) if view == "orders" else sample.query(
+        "SELECT * FROM orders WHERE status='shipped' OR delayed=1 ORDER BY id"
+    )
+    label = f"Sample {order_status or 'warehouse'} orders" if view == "orders" else "Sample shipments"
+    lines = "\n".join(
+        f"• {row['id']} to {row['city']}: {row['status']}{' (delayed)' if row['delayed'] else ''}. "
+        f"{row['weight_kg']:g} kg, {row['carrier']}, PKR {row['shipping_cost']:.2f} shipping."
+        for row in rows
+    )
+    return f"{label} ({len(rows)})" + (f"\n\n{lines}" if lines else ".")
 
 
 @router.post("/chat")
@@ -107,8 +130,9 @@ async def demo_chat(body: DemoChatRequest) -> dict:
         ("analytics", ("metrics", "analytics", "kpi", "shipping cost", "kitne orders")),
     ] if any(word in text for word in words)), None)
     if view:
-        return {"reply": _facts(view), "mode": "database", "sample": True,
-            "data": demo_data().view(view), "action_executed": False}
+        order_status = "pending" if view == "orders" and "pending" in text else None
+        return {"reply": _facts(view, order_status), "mode": "database", "sample": True,
+            "data": demo_data().view(view, status=order_status), "action_executed": False}
     client = chat_client()
     if client is None:
         return {"reply": "A real language model is not configured. This is a deterministic demonstration, "

@@ -59,7 +59,7 @@ export function Topbar() {
       </div>
 
       <div className="flex items-center gap-3">
-        <div className="relative">
+        <div data-chat-compact-hide className="relative">
           <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground/60" />
           <input
             type="text"
@@ -86,7 +86,7 @@ export function Topbar() {
                 <AvatarImage src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=64&h=64&fit=crop&crop=face" />
                 <AvatarFallback className="text-[10px]">AD</AvatarFallback>
               </Avatar>
-              <span className="text-xs font-medium">{displayName}</span>
+              <span data-chat-compact-hide className="text-xs font-medium">{displayName}</span>
               <ChevronDown className="h-3 w-3 text-muted-foreground/60" />
             </Button>
           </DropdownMenuTrigger>

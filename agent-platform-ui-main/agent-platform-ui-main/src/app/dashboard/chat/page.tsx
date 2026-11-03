@@ -10,7 +10,7 @@ import { Suspense } from "react"
 export default function ChatPage() {
   return (
     <ErrorBoundary fallbackMessage="Chat page failed to load">
-      <div className="flex flex-1 flex-col p-6 h-full overflow-hidden">
+      <div data-chat-layout className="flex flex-1 flex-col p-3 sm:p-6 h-full overflow-hidden">
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}

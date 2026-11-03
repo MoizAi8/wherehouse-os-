@@ -51,6 +51,14 @@ def test_chat_history_is_scoped_to_user_even_for_identical_public_session_ids(ch
             user_messages = [m["content"] for m in response.json()["messages"] if m["role"] == "user"]
             assert user_messages == [f"Hello {identity}"]
 
+        identity = "alice"
+        assert client.delete("/api/chat/history", params={"session_id": "same-session"}).status_code == 204
+        assert client.get("/api/chat/history", params={"session_id": "same-session"}).json()["messages"] == []
+        identity = "bob"
+        remaining = client.get("/api/chat/history", params={"session_id": "same-session"}).json()["messages"]
+        assert remaining[0]["content"] == "Hello bob"
+
+
 
 def test_chat_refuses_missing_authenticated_identity(chat_client):
     client, _ = chat_client

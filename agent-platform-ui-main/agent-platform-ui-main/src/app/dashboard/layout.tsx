@@ -7,8 +7,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <SearchProvider>
       <DashboardShell>
         <AuthBootstrap>
-          <div className="min-h-full bg-grid-subtle bg-ambient">
-            <div id="dashboard-content" className="outline-none" tabIndex={-1}>
+          <div className="min-h-full has-[[data-chat-layout]]:h-full bg-grid-subtle bg-ambient">
+            <div id="dashboard-content" className="outline-none has-[[data-chat-layout]]:h-full" tabIndex={-1}>
               {children}
             </div>
           </div>

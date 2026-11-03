@@ -92,7 +92,7 @@ export default function DashboardPage() {
 
   return (
     <ErrorBoundary fallbackMessage="Dashboard failed to load">
-      <div className="flex flex-1 flex-col p-6 h-full overflow-hidden">
+      <div data-chat-layout className="flex flex-1 flex-col p-3 sm:p-6 h-full overflow-hidden">
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -108,7 +108,7 @@ export default function DashboardPage() {
           </div>
         </motion.div>
 
-        <div className="grid grid-cols-4 gap-4 mb-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {kpisLoading || !kpis ? (
             metrics.map((_, i) => <MetricSkeleton key={`skeleton-${i}`} index={i} />)
           ) : (
@@ -138,7 +138,7 @@ export default function DashboardPage() {
         </motion.div>
 
         <div className="flex-1 flex overflow-hidden min-h-0 rounded-xl border border-border/30 glass-card">
-          <div className="w-[380px] border-r border-border/20 flex flex-col min-h-0 shrink-0">
+          <div className="hidden md:flex w-[min(380px,34%)] border-r border-border/20 flex-col min-h-0 shrink-0">
             <div className="flex items-center gap-2 px-5 pt-5 pb-3 shrink-0">
               <Sparkles className="h-3.5 w-3.5 text-accent" />
               <h2 className="text-xs font-semibold text-foreground uppercase tracking-wider">Agent Status</h2>

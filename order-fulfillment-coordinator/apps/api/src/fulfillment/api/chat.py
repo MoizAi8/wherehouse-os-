@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from openai import AsyncOpenAI, APIConnectionError, APITimeoutError
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func as sqlfunc
+from sqlalchemy import delete, select, func as sqlfunc
 
 from fulfillment.api.deps import get_current_user, get_db
 from fulfillment.agents.intent_analyzer import IntentAnalyzer
@@ -434,14 +434,14 @@ async def chat(
         logger.info("LLM request sent | intent=greeting")
         if _openai_client:
             r = await _generate_llm_reply(
-                system_prompt,
-                f"The user said: \"{message}\"\n\nRespond with a warm, professional greeting. Ask how you can help with their warehouse operations today.",
+                conversation_instructions(message),
+                message,
                 max_tokens=100,
             )
             if "trouble" not in r and "not configured" not in r:
                 return await _respond(reply=r, action="greeting")
         return await _respond(
-            reply="Hello! I'm your Warehouse OS assistant. How can I help you with your warehouse operations today?",
+            reply="Hello! I'm Warehouse OS, your AI-powered warehouse management assistant. How can I help you today?",
             action="greeting"
         )
 
@@ -1157,6 +1157,17 @@ async def chat(
         ),
     )
     return await _respond(reply=reply, action="help")
+
+
+@router.delete("/history", status_code=204)
+async def delete_chat_history(
+    session_id: str = Query(min_length=1, max_length=64),
+    db: AsyncSession = Depends(get_db),
+    _user: dict[str, str] = Depends(get_current_user),
+) -> None:
+    key = _owned_session_key(_user, session_id)
+    await db.execute(delete(ChatMessageRecord).where(ChatMessageRecord.session_id == key))
+    await db.commit()
 
 
 @router.get("/history", response_model=ChatHistoryResponse)
