@@ -15,7 +15,7 @@ AGENT_OUTCOMES = {
     "RoutingAgent": {"route_selected"},
     "MonitorAgent": {"scan_complete", "delay_detected", "delay_check_failed"},
     "PredictionAgent": {"failure_prediction", "prediction_failed"},
-    "ReroutingAgent": {"reroute_evaluated", "reroute_recommended", "evaluate_failed", "execute_failed"},
+    "ReroutingAgent": {"reroute_evaluated", "reroute_recommended", "reroute_executed", "evaluate_failed", "execute_failed"},
     "CommunicationAgent": {"provider_accepted", "delivery_failed", "delivery_unknown", "delivery_uncertain"},
     "CostOptimizer": {"cost_analysis", "analysis_failed"},
     "FulfillmentOrchestrator": {"cycle_complete", "cycle_failed"},

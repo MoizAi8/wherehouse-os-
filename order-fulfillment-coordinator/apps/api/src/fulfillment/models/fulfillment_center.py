@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timezone
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Float, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, Float, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fulfillment.database import Base
@@ -33,6 +33,7 @@ class FulfillmentCenter(Base):
     capacity_pct: Mapped[float] = mapped_column(Float, default=0.0)
     max_daily_orders: Mapped[int] = mapped_column(default=1000)
     current_daily_orders: Mapped[int] = mapped_column(default=0)
+    capacity_day: Mapped[date] = mapped_column(Date, default=lambda: datetime.now(timezone.utc).date(), server_default=func.current_date())
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

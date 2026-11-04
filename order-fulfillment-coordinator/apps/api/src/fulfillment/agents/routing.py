@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.models.agent_event import AgentEvent
@@ -32,7 +32,9 @@ class RoutingAgent:
         query = (
             select(FulfillmentCenter)
             .where(FulfillmentCenter.is_active)
-            .where(FulfillmentCenter.current_daily_orders < FulfillmentCenter.max_daily_orders)
+            .where(FulfillmentCenter.max_daily_orders > 0)
+            .where(or_(FulfillmentCenter.current_daily_orders < FulfillmentCenter.max_daily_orders,
+                       FulfillmentCenter.capacity_day < datetime.now(timezone.utc).date()))
             .where(eligible_rates.exists())
             .order_by(FulfillmentCenter.capacity_pct.asc(), FulfillmentCenter.id)
             .limit(1)
@@ -41,7 +43,11 @@ class RoutingAgent:
         if center_id is not None:
             query = query.where(FulfillmentCenter.id == center_id)
         result = await self.db.execute(query)
-        return result.scalar_one_or_none()
+        center = result.scalar_one_or_none()
+        if center is not None and center.capacity_day != datetime.now(timezone.utc).date():
+            center.current_daily_orders = 0
+            center.capacity_day = datetime.now(timezone.utc).date()
+        return center
 
     @staticmethod
     def _eligible_rates(

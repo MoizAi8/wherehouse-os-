@@ -96,6 +96,7 @@ class ReroutingAgent:
                 new_carrier_name=reroute_data["alternative_carrier"],
                 reason="Automatic reroute under configured policy",
             ),
+            actor_id="automatic-policy",
         )
         return {
             "previous_carrier": result.previous_carrier,

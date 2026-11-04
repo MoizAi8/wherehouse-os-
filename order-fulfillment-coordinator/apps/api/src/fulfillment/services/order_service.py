@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import timezone
+
 import json
 import logging
 from uuid import uuid4
@@ -322,15 +324,18 @@ class OrderService:
         ))
         if any(reservation.status == "consumed" for reservation in reservations):
             raise InventoryConflict("Consumed inventory requires reconciliation before cancellation")
-        if order.fulfillment_center_id:
-            await self.db.execute(update(FulfillmentCenter).where(
-                FulfillmentCenter.id == order.fulfillment_center_id,
-                FulfillmentCenter.current_daily_orders > 0,
-            ).values(current_daily_orders=FulfillmentCenter.current_daily_orders - 1))
         inventory = InventoryService(self.db)
         for reservation in reservations:
             if reservation.status == "reserved":
                 await inventory.transition(reservation.id, "released", reason, actor_id, whole_order=True)
+        if order.fulfillment_center_id and shipments:
+            routed_at = shipments[0].created_at
+            routed_day = (routed_at.replace(tzinfo=timezone.utc) if routed_at.tzinfo is None else routed_at).astimezone(timezone.utc).date()
+            await self.db.execute(update(FulfillmentCenter).where(
+                FulfillmentCenter.id == order.fulfillment_center_id,
+                FulfillmentCenter.current_daily_orders > 0,
+                FulfillmentCenter.capacity_day == routed_day,
+            ).values(current_daily_orders=FulfillmentCenter.current_daily_orders - 1))
         for shipment in shipments:
             shipment.status = ShipmentStatus.CANCELLED
         order.status = OrderStatus.CANCELLED

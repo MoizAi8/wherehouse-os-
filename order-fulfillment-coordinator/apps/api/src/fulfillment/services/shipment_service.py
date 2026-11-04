@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -9,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.models.carrier_rate import CarrierRate
+from fulfillment.models.agent_event import AgentEvent
 from fulfillment.models.inventory import OrderLine
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment, ShipmentStatus
@@ -56,6 +58,7 @@ class ShipmentService:
         self,
         shipment_id: str,
         payload: ShipmentRerouteRequest,
+        *, actor_id: str = "system",
     ) -> ShipmentRerouteResponse:
         result = await self.db.execute(select(Shipment).where(Shipment.id == shipment_id))
         shipment = result.scalar_one_or_none()
@@ -67,6 +70,10 @@ class ShipmentService:
             raise InventoryConflict("Cancelled shipments cannot be rerouted")
         if shipment.status in (ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED):
             raise InventoryConflict("A terminal shipment cannot be rerouted")
+        if shipment.last_polled_at is not None or shipment.status not in (
+            ShipmentStatus.LABEL_CREATED, ShipmentStatus.DELAYED,
+        ) or (order is not None and order.status in (OrderStatus.SHIPPED, OrderStatus.DELIVERED)):
+            raise InventoryConflict("Carrier handoff requires reconciliation before rerouting")
         if order is not None and await self.db.scalar(
             select(OrderLine.id).where(OrderLine.order_id == order.id).limit(1)
         ):
@@ -77,6 +84,9 @@ class ShipmentService:
                 raise InventoryConflict("Carrier handoff requires reconciliation before rerouting")
 
         previous_carrier = shipment.carrier_name
+        previous_tracking = shipment.tracking_number
+        if previous_carrier == payload.new_carrier_name:
+            raise InventoryConflict("Shipment already uses the requested carrier")
 
         rate_result = await self.db.execute(
             select(CarrierRate)
@@ -114,6 +124,19 @@ class ShipmentService:
             order.tracking_number = shipment.tracking_number
             order.shipping_cost = shipment.shipping_cost
             order.estimated_delivery = shipment.estimated_delivery
+
+        self.db.add(AgentEvent(
+            agent_name="ReroutingAgent", event_type="reroute_executed", entity_id=shipment.id,
+            summary="Changed an internal shipment route before carrier handoff",
+            created_at=datetime.now(timezone.utc),
+            details_json=json.dumps({
+                "actor_id": actor_id, "reason": payload.reason,
+                "previous_carrier": previous_carrier, "previous_tracking": previous_tracking,
+                "new_carrier": shipment.carrier_name, "new_tracking": shipment.tracking_number,
+                "rate_id": new_rate.id, "shipping_cost": shipment.shipping_cost,
+                "provider_booking_verified": False,
+            }),
+        ))
 
         await self.db.flush()
         await self.db.refresh(shipment)

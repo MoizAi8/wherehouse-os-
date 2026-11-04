@@ -7,6 +7,7 @@ from fulfillment.api.deps import get_current_user, get_db, require_operator_or_a
 from fulfillment.schemas.shipment import ShipmentRead, ShipmentRerouteRequest, ShipmentRerouteResponse
 from fulfillment.services.shipment_service import ShipmentService
 from fulfillment.services.inventory import InventoryConflict
+from fulfillment.models.user import User
 
 router = APIRouter()
 
@@ -41,11 +42,11 @@ async def reroute_shipment(
     shipment_id: str,
     payload: ShipmentRerouteRequest,
     db: AsyncSession = Depends(get_db),
-    _user: dict[str, str] = Depends(require_operator_or_admin),
+    _user: User = Depends(require_operator_or_admin),
 ) -> ShipmentRerouteResponse:
     service = ShipmentService(db)
     try:
-        return await service.reroute_shipment(shipment_id, payload)
+        return await service.reroute_shipment(shipment_id, payload, actor_id=_user.id)
     except InventoryConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:

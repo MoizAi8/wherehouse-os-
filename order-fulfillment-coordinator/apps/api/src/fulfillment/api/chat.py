@@ -800,10 +800,11 @@ async def chat(
         processing = await svc.count_orders(status_filter="processing")
         pending_count = await svc.count_orders(status_filter="pending")
         from fulfillment.models.fulfillment_center import FulfillmentCenter
+        from fulfillment.tools.fulfillment import daily_count
         fc_result = await db.execute(select(FulfillmentCenter))
         fcs = list(fc_result.scalars().all())
         fc_lines = [
-            f"{fc.name} — {fc.city}, {fc.state} ({fc.current_daily_orders}/{fc.max_daily_orders} orders)"
+            f"{fc.name} — {fc.city}, {fc.state} ({daily_count(fc)}/{fc.max_daily_orders} orders)"
             for fc in fcs
         ]
         from fulfillment.models import carrier_rate
