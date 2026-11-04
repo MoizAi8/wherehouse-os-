@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -33,7 +34,8 @@ artifact = Path(os.environ["WAREHOUSE_ACCEPTANCE_OUTPUT"]).resolve()
 artifact.mkdir(parents=True, exist_ok=True)
 
 if len(sys.argv) > 1 and sys.argv[1] == "worker":
-    celery_app.worker_main(["worker", "--pool=solo", "-Q", "monitoring", "-l", "INFO", "-n", "warehouse-recovery@localhost"])
+    pool = "solo" if os.name == "nt" else "prefork"
+    celery_app.worker_main(["worker", f"--pool={pool}", "--concurrency=2", "-Q", "monitoring", "-l", "INFO", "-n", "warehouse-recovery@localhost"])
     sys.exit()
 if len(sys.argv) > 1 and sys.argv[1] == "beat":
     celery_app.conf.beat_schedule["monitor-cycle-every-15-min"]["schedule"] = 2
@@ -75,7 +77,7 @@ def start(log, mode="worker"):
     flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
     return subprocess.Popen(
         [sys.executable, __file__, mode], stdout=log, stderr=subprocess.STDOUT,
-        creationflags=flags,
+        creationflags=flags, start_new_session=os.name != "nt",
     )
 
 
@@ -111,7 +113,10 @@ async def main():
                 await connection.execute(text("LOCK TABLE public.agent_events IN ACCESS EXCLUSIVE MODE"))
                 recovery = run_monitor_cycle.delay()
                 await wait_for(recovery, {"STARTED"}, 30)
-                worker.kill()
+                if os.name == "nt":
+                    worker.kill()
+                else:
+                    os.killpg(worker.pid, signal.SIGKILL)
                 worker.wait(timeout=10)
             await asyncio.sleep(6)
             worker = start(second)
