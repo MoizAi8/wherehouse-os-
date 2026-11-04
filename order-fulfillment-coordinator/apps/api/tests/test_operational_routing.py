@@ -84,12 +84,15 @@ async def test_configured_route_survives_monitor_and_duplicate_dispatch(tmp_path
                 estimated_delivery=datetime.now(timezone.utc) + timedelta(days=1 if reported_delay else -1),
             ))
             if reported_delay:
-                db.add(CarrierRate(
-                    carrier_name="Sandbox Alternative", service_name="Express",
-                    origin_zip="90210", destination_zip="10001",
-                    weight_kg_min=0, weight_kg_max=20, base_rate=11, rate_per_kg=2,
-                    estimated_days_min=2, estimated_days_max=3,
-                ))
+                for carrier, base_rate, per_kg in (
+                    ("Sandbox Alternative", 11, 2), ("Low Base", 1, 20), ("sandbox carrier", 0, 1),
+                ):
+                    db.add(CarrierRate(
+                        carrier_name=carrier, service_name="Express",
+                        origin_zip="90210", destination_zip="10001",
+                        weight_kg_min=0, weight_kg_max=20, base_rate=base_rate, rate_per_kg=per_kg,
+                        estimated_days_min=2, estimated_days_max=3,
+                    ))
 
         async with sessions.begin() as db:
             delayed = await FulfillmentOrchestrator(db).run_monitor_cycle()
@@ -97,10 +100,15 @@ async def test_configured_route_survives_monitor_and_duplicate_dispatch(tmp_path
             assert delayed.reroutes_initiated == delayed.notifications_sent == 0
             assert any(event["type"] == "cost_analysis" for event in delayed.events)
             assert any(event["type"] == "reroute_recommended" for event in delayed.events) == reported_delay
+            if reported_delay:
+                recommendation = next(event["detail"] for event in delayed.events if event["type"] == "reroute_recommended")
+                assert recommendation["alternative_carrier"] == "Sandbox Alternative"
+                assert recommendation["new_cost"] == 21
 
         async with sessions.begin() as db:
             shipment = await db.scalar(select(Shipment))
             assert shipment is not None and shipment.status == ShipmentStatus.DELAYED
+            assert shipment.last_polled_at is not None
             agents = set(await db.scalars(select(AgentEvent.agent_name).where(
                 AgentEvent.entity_id == shipment.id,
             )))
@@ -125,7 +133,7 @@ async def test_configured_route_survives_monitor_and_duplicate_dispatch(tmp_path
             await db.flush()
             await service.update_order(pending.id, OrderUpdate(shipping_zip="10001"))
             with pytest.raises(ValueError, match="No suitable"):
-                await service.route_order(pending.id, OrderRouteRequest(max_cost=15))
+                await service.route_order(pending.id, OrderRouteRequest(max_cost=4))
             with pytest.raises(ValueError, match="No suitable"):
                 await service.route_order(pending.id, OrderRouteRequest(max_days=2))
             assert await db.scalar(select(func.count()).select_from(Shipment)) == 1

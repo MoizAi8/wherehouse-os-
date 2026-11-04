@@ -115,7 +115,7 @@ class InventoryService:
 
     async def transition(
         self, reservation_id: str, target: Literal["released", "consumed"], reason: str, actor_id: str,
-        *, order_dispatch: bool = False,
+        *, whole_order: bool = False,
     ) -> Reservation:
         reservation = await self.db.get(Reservation, reservation_id)
         if reservation is None:
@@ -127,8 +127,8 @@ class InventoryService:
         await self.db.refresh(reservation)
         if reservation.status == target:
             return reservation
-        if reservation.order_line_id is not None and not (order_dispatch and target == "consumed"):
-            raise InventoryConflict("Use order-level dispatch for typed reservations")
+        if reservation.order_line_id is not None and not whole_order:
+            raise InventoryConflict("Use an order-level operation for typed reservations")
         if target == "consumed" and order.status not in (
             OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED,
         ):

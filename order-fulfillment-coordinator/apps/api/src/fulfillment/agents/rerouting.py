@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -36,20 +36,22 @@ class ReroutingAgent:
             .where(CarrierRate.weight_kg_min <= shipment.weight_kg)
             .where(CarrierRate.weight_kg_max >= shipment.weight_kg)
             .where(CarrierRate.carrier_name != shipment.carrier_name)
-            .order_by(CarrierRate.base_rate.asc())
+            .order_by(
+                CarrierRate.base_rate + CarrierRate.rate_per_kg * shipment.weight_kg,
+                CarrierRate.estimated_days_max, CarrierRate.id,
+            )
         )
         alternatives = list(rates_result.scalars().all())
 
         if not alternatives:
             return {"should_reroute": False, "reason": "No alternative carriers available"}
 
-        best_alternative = alternatives[0]
-
-        if not carrier_diversity(shipment.carrier_name, best_alternative.carrier_name):
-            if len(alternatives) > 1:
-                best_alternative = alternatives[1]
-            else:
-                return {"should_reroute": False, "reason": "Carrier diversity constraint"}
+        best_alternative = next(
+            (rate for rate in alternatives if carrier_diversity(shipment.carrier_name, rate.carrier_name)),
+            None,
+        )
+        if best_alternative is None:
+            return {"should_reroute": False, "reason": "Carrier diversity constraint"}
 
         current_cost = shipment.shipping_cost or 0
         new_cost = best_alternative.base_rate + (best_alternative.rate_per_kg * shipment.weight_kg)
@@ -94,8 +96,8 @@ class ReroutingAgent:
         shipment.is_delayed = False
         shipment.delay_reason = None
         shipment.shipping_cost = reroute_data["new_cost"]
-        shipment.estimated_delivery = datetime.now(timezone.utc)
-        shipment.last_polled_at = datetime.now(timezone.utc)
+        shipment.estimated_delivery = datetime.now(timezone.utc) + timedelta(days=reroute_data["estimated_days_max"])
+        shipment.last_polled_at = None
 
         return {
             "previous_carrier": previous_carrier,

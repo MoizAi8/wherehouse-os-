@@ -21,7 +21,9 @@ def _active_shipment() -> ColumnElement[bool]:
         .where(Order.id == Shipment.order_id, Order.status == OrderStatus.PROCESSING)
         .exists()
     )
-    return Shipment.status.notin_([ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED]) & ~awaiting_dispatch
+    return Shipment.status.notin_([
+        ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED, ShipmentStatus.CANCELLED,
+    ]) & ~awaiting_dispatch
 
 
 def _ensure_aware(dt: datetime | None) -> datetime | None:
@@ -81,8 +83,6 @@ class MonitorAgent:
             shipment.is_delayed = True
             shipment.delay_reason = reason
             shipment.status = ShipmentStatus.DELAYED
-
-        shipment.last_polled_at = now
 
         return {
             "is_delayed": is_delayed,

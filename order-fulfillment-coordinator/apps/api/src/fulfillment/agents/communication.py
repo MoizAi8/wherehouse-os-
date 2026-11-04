@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from fulfillment.models.order import Order
 from fulfillment.models.shipment import Shipment
 
 logger = logging.getLogger(__name__)
+PROVIDER_TIMEOUT_SECONDS = 10
 
 
 class CommunicationAgent:
@@ -102,7 +104,9 @@ class CommunicationAgent:
                 subject=subject,
                 plain_text_content=Content("text/plain", body),
             )
-            response = sg.client.mail.send.post(request_body=mail.get())
+            response = await asyncio.to_thread(
+                sg.client.mail.send.post, request_body=mail.get(), timeout=PROVIDER_TIMEOUT_SECONDS,
+            )
             if not 200 <= response.status_code < 300:
                 raise RuntimeError("SendGrid rejected the notification")
             provider_id = str(response.status_code)
@@ -148,10 +152,15 @@ class CommunicationAgent:
             return {"channel": "sms", "status": "skipped", "notification_id": notif.id}
 
         try:
+            from twilio.http.http_client import TwilioHttpClient
             from twilio.rest import Client
 
-            client = Client(settings.twilio_account_sid, settings.twilio_auth_token)
-            message = client.messages.create(
+            client = Client(
+                settings.twilio_account_sid, settings.twilio_auth_token,
+                http_client=TwilioHttpClient(timeout=PROVIDER_TIMEOUT_SECONDS),
+            )
+            message = await asyncio.to_thread(
+                client.messages.create,
                 body=body,
                 from_=settings.twilio_phone_number,
                 to=recipient,

@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fulfillment.models.shipment import Shipment
+from fulfillment.models.shipment import Shipment, ShipmentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ class CostOptimizer:
                 func.max(Shipment.shipping_cost).label("max_cost"),
                 func.sum(Shipment.shipping_cost).label("total_cost"),
                 func.count(Shipment.id).label("total_shipments"),
-            )
+            ).where(Shipment.status != ShipmentStatus.CANCELLED)
         )
         stats = result.one()
 
@@ -54,6 +54,7 @@ class CostOptimizer:
                 func.avg(Shipment.shipping_cost).label("avg_carrier_cost"),
                 func.count(Shipment.id).label("carrier_count"),
             )
+            .where(Shipment.status != ShipmentStatus.CANCELLED)
             .group_by(Shipment.carrier_name)
             .order_by(func.avg(Shipment.shipping_cost).desc())
         )

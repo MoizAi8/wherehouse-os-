@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Float, String, Text, func
+from sqlalchemy import JSON, DateTime, Float, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from fulfillment.database import Base
@@ -30,3 +30,11 @@ class AgentEvent(Base):
 
     def __repr__(self) -> str:
         return f"<AgentEvent {self.agent_name} {self.event_type}>"
+
+
+class MonitorTaskResult(Base):
+    __tablename__ = "monitor_task_results"
+
+    task_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    result: Mapped[dict] = mapped_column(JSON)
+    completed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

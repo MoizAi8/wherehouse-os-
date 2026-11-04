@@ -5,11 +5,13 @@ import logging
 
 from celery import Celery
 from celery.signals import worker_ready, worker_shutdown, task_failure, task_retry
+from sqlalchemy import text
 
 from fulfillment.config import settings
 from fulfillment.database import async_session_factory, engine
 from fulfillment.agents.orchestrator import FulfillmentOrchestrator
 from fulfillment.logging_config import log_agent_event, setup_logging
+from fulfillment.models.agent_event import MonitorTaskResult
 
 logger = logging.getLogger(__name__)
 
@@ -91,18 +93,30 @@ def on_task_retry(sender=None, reason=None, **kwargs):
     logger.warning("Task %s retry: %s", sender.name if sender else "unknown", reason)
 
 
-async def _run_monitor_cycle_async() -> dict:
+async def _run_monitor_cycle_async(task_id: str | None = None) -> dict:
     """Async implementation of monitor cycle with proper error handling."""
     try:
         async with async_session_factory() as db:
+            if task_id:
+                if db.get_bind().dialect.name == "postgresql":
+                    await db.execute(
+                        text("SELECT pg_advisory_xact_lock(hashtextextended(:task_id, 0))"),
+                        {"task_id": task_id},
+                    )
+                previous = await db.get(MonitorTaskResult, task_id)
+                if previous is not None:
+                    return previous.result
             orchestrator = FulfillmentOrchestrator(db)
             result = await orchestrator.run_monitor_cycle()
             # A failed initial DB read is returned as a cycle_error by the
             # orchestrator. A queued job must fail so Celery can retry it.
             if any(event.get("type") == "cycle_error" for event in result.events):
                 raise RuntimeError("Monitor cycle could not load its input state")
+            payload = result.model_dump(mode="json") if task_id else result.model_dump()
+            if task_id:
+                db.add(MonitorTaskResult(task_id=task_id, result=payload))
             await db.commit()
-            return result.model_dump()
+            return payload
     finally:
         # Each synchronous Celery invocation owns a new asyncio loop. Do not
         # carry asyncpg connections into the next task's different loop.
@@ -133,7 +147,7 @@ def run_monitor_cycle(self) -> dict:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            result = loop.run_until_complete(_run_monitor_cycle_async())
+            result = loop.run_until_complete(_run_monitor_cycle_async(self.request.id))
         finally:
             # Clean up pending tasks
             pending = asyncio.all_tasks(loop)

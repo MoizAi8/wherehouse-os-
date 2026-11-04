@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fulfillment.api.deps import get_current_user, get_db, require_operator_or_admin
 from fulfillment.schemas.shipment import ShipmentRead, ShipmentRerouteRequest, ShipmentRerouteResponse
 from fulfillment.services.shipment_service import ShipmentService
+from fulfillment.services.inventory import InventoryConflict
 
 router = APIRouter()
 
@@ -43,4 +44,9 @@ async def reroute_shipment(
     _user: dict[str, str] = Depends(require_operator_or_admin),
 ) -> ShipmentRerouteResponse:
     service = ShipmentService(db)
-    return await service.reroute_shipment(shipment_id, payload)
+    try:
+        return await service.reroute_shipment(shipment_id, payload)
+    except InventoryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc

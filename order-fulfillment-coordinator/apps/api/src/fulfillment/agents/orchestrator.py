@@ -229,6 +229,7 @@ class FulfillmentOrchestrator:
                 retry_exceptions=(Exception,),
             )  # type: ignore[assignment]
             if analysis:
+                await self._log_event("CostOptimizer", "cost_analysis", cycle_id, analysis)
                 events.append({"type": "cost_analysis", "detail": analysis})
         except Exception as exc:
             logger.error("Cost analysis failed for cycle %s: %s", cycle_id, exc)

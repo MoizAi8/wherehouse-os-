@@ -253,6 +253,20 @@ function InventoryWorkspace() {
             {line.center_id && ` · ${centers.data?.find(center => center.id === line.center_id)?.name ?? line.center_id}`}
           </li>)}
         </ul>}
+        {canWrite && orderLines.length > 0 && (orderRecord?.status === "pending" || orderRecord?.status === "processing") && (
+          <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
+            if (!window.confirm("Cancel this order and release its reserved stock?")) {
+              event.preventDefault()
+              return
+            }
+            void submit(event, data => api.post("/api/v1/orders/" + encodeURIComponent(lookedUpOrder) + "/cancel", {
+              reason: data.get("reason"),
+            }))
+          }}>
+            <Field title="Cancellation reason"><Input name="reason" maxLength={250} required /></Field>
+            <Button variant="outline" disabled={busy}>Cancel order</Button>
+          </form>
+        )}
         {canWrite && orderLines.length > 0 && orderRecord?.status === "processing" && (
           <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
             if (!window.confirm("Record dispatch of every reserved line on this order?")) {

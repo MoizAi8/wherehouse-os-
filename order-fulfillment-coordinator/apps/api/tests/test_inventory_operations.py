@@ -225,10 +225,10 @@ async def test_inventory_order_lifecycle(database, tmp_path, monkeypatch):
             async with sessions() as db:
                 assert await MonitorAgent(db).count_active_shipments([shipment["id"]]) == 0
 
-            async def shipment_event(status):
+            async def shipment_event(status, target=shipment):
                 body = json.dumps({
-                    "tracking_number": shipment["tracking_number"],
-                    "carrier": shipment["carrier_name"], "status": status,
+                    "tracking_number": target["tracking_number"],
+                    "carrier": target["carrier_name"], "status": status,
                 }).encode()
                 return await client.post("/api/v1/webhooks/shipment-event", content=body, headers={
                     "Content-Type": "application/json",
@@ -253,6 +253,57 @@ async def test_inventory_order_lifecycle(database, tmp_path, monkeypatch):
             final = {row["id"]: row for row in (await client.get(f"{base}/stock")).json()}
             for stock in (stock_id, second_stock):
                 assert (final[stock]["on_hand"], final[stock]["reserved"], final[stock]["available"]) == (3, 3, 0)
+
+            to_cancel = next(
+                item.json() for item in outcomes
+                if item.json()["status"] == "processing" and item.json()["id"] != allocated_order["id"]
+            )
+            cancellation_shipment = next(row for row in (await client.get("/api/v1/shipments")).json()
+                                         if row["order_id"] == to_cancel["id"])
+            reroute_payload = {"new_carrier_name": f"Missing-{suffix}", "reason": "No contract available"}
+            assert (await client.post(f"/api/v1/shipments/{uuid4()}/reroute", json=reroute_payload)).status_code == 404
+            assert (await client.post(
+                f"/api/v1/shipments/{cancellation_shipment['id']}/reroute", json=reroute_payload,
+            )).status_code == 409
+            cancel_path = f"/api/v1/orders/{to_cancel['id']}"
+            reason = {"reason": "Customer cancelled before dispatch"}
+            assert (await client.post(f"{cancel_path}/cancel", headers=viewer_headers, json=reason)).status_code == 403
+            assert (await client.post(f"{typed_path}/cancel", json=reason)).status_code == 409
+            cancellations = [client.post(f"{cancel_path}/cancel", json=reason) for _ in range(2)]
+            cancelled = await asyncio.gather(*cancellations) if database == "postgresql" else [
+                await request for request in cancellations
+            ]
+            assert all(item.status_code == 200 and item.json()["status"] == "cancelled" for item in cancelled)
+            cancelled_shipment = next(row for row in (await client.get("/api/v1/shipments?status=cancelled")).json()
+                                      if row["order_id"] == to_cancel["id"])
+            assert (await client.post(f"/api/v1/shipments/{cancelled_shipment['id']}/reroute", json={
+                "new_carrier_name": "Sandbox", "reason": "Invalid cancelled reroute",
+            })).status_code == 409
+            assert (await shipment_event("picked_up", cancelled_shipment)).status_code == 409
+            assert (await client.post(f"{cancel_path}/dispatch", json=reason)).status_code == 409
+            cancelled_lines = (await client.get(f"{cancel_path}/lines")).json()
+            assert [line["reservation_status"] for line in cancelled_lines] == ["released", "released"]
+            async with sessions() as db:
+                assert await MonitorAgent(db).count_active_shipments([cancelled_shipment["id"]]) == 0
+            released = {row["id"]: row for row in (await client.get(f"{base}/stock")).json()}
+            for stock in (stock_id, second_stock):
+                assert (released[stock]["on_hand"], released[stock]["reserved"], released[stock]["available"]) == (3, 0, 3)
+
+            if database == "postgresql":
+                race_order = await client.post("/api/v1/orders", json=typed)
+                assert race_order.status_code == 201 and race_order.json()["status"] == "processing"
+                race_path = f"/api/v1/orders/{race_order.json()['id']}"
+                cancel, dispatch = await asyncio.gather(
+                    client.post(f"{race_path}/cancel", json=reason),
+                    client.post(f"{race_path}/dispatch", json={"reason": "Concurrent dispatch"}),
+                )
+                assert sorted([cancel.status_code, dispatch.status_code]) == [200, 409]
+                cancelled_first = cancel.status_code == 200
+                assert (await client.get(race_path)).json()["status"] == ("cancelled" if cancelled_first else "shipped")
+                race_lines = (await client.get(f"{race_path}/lines")).json()
+                assert {row["reservation_status"] for row in race_lines} == {
+                    "released" if cancelled_first else "consumed",
+                }
     finally:
         if prior_override is None:
             app.dependency_overrides.pop(get_db, None)

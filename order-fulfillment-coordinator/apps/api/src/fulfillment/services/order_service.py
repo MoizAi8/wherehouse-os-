@@ -13,7 +13,7 @@ from fulfillment.models.carrier_rate import CarrierRate
 from fulfillment.models.fulfillment_center import FulfillmentCenter
 from fulfillment.models.inventory import OrderLine, Product, Reservation, Stock
 from fulfillment.models.order import Order, OrderStatus
-from fulfillment.models.shipment import Shipment
+from fulfillment.models.shipment import Shipment, ShipmentStatus
 from fulfillment.schemas.carrier import CarrierRateRequest, CarrierRateResponse
 from fulfillment.schemas.order import (
     OrderCreate,
@@ -253,8 +253,14 @@ class OrderService:
                 await self.db.refresh(order)
         raise ValueError("No single fulfillment center has both sufficient inventory and a suitable route")
 
+    async def _lock_order_for_transition(self, order_id: str) -> Order | None:
+        if self.db.get_bind().dialect.name == "sqlite":
+            await self.db.execute(update(Order).where(Order.id == order_id).values(updated_at=Order.updated_at))
+        result = await self.db.execute(select(Order).where(Order.id == order_id).with_for_update())
+        return result.scalar_one_or_none()
+
     async def dispatch_order(self, order_id: str, reason: str, actor_id: str) -> OrderRead | None:
-        order = await self.db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+        order = await self._lock_order_for_transition(order_id)
         if order is None:
             return None
         records = (await self.db.execute(
@@ -282,12 +288,56 @@ class OrderService:
             raise InventoryConflict("The order does not have a complete allocation")
         inventory = InventoryService(self.db)
         for _, reservation, _ in records:
-            await inventory.transition(reservation.id, "consumed", reason, actor_id, order_dispatch=True)
+            await inventory.transition(reservation.id, "consumed", reason, actor_id, whole_order=True)
         order.status = OrderStatus.SHIPPED
         self.db.add(AgentEvent(
             agent_name="WarehouseOperator", event_type="order_dispatch_recorded", entity_id=order_id,
             summary="Operator recorded dispatch of all allocated order lines",
             details_json=json.dumps({"actor_id": actor_id, "line_count": len(records), "reason": reason}),
+        ))
+        await self.db.flush()
+        await self.db.refresh(order)
+        return OrderRead.model_validate(order)
+
+    async def cancel_order(self, order_id: str, reason: str, actor_id: str) -> OrderRead | None:
+        order = await self._lock_order_for_transition(order_id)
+        if order is None:
+            return None
+        if not await self.db.scalar(select(OrderLine.id).where(OrderLine.order_id == order_id).limit(1)):
+            raise InventoryConflict("Use order-level cancellation only for typed orders")
+        if order.status == OrderStatus.CANCELLED:
+            return OrderRead.model_validate(order)
+        if order.status not in (OrderStatus.PENDING, OrderStatus.PROCESSING):
+            raise InventoryConflict("An order cannot be cancelled after dispatch")
+        shipments = list(await self.db.scalars(
+            select(Shipment).where(Shipment.order_id == order_id).with_for_update()
+        ))
+        if any(
+            shipment.status != ShipmentStatus.LABEL_CREATED or shipment.last_polled_at is not None
+            for shipment in shipments
+        ):
+            raise InventoryConflict("Reconcile carrier activity before cancelling this order")
+        reservations = list(await self.db.scalars(
+            select(Reservation).where(Reservation.order_id == order_id).order_by(Reservation.stock_id)
+        ))
+        if any(reservation.status == "consumed" for reservation in reservations):
+            raise InventoryConflict("Consumed inventory requires reconciliation before cancellation")
+        if order.fulfillment_center_id:
+            await self.db.execute(update(FulfillmentCenter).where(
+                FulfillmentCenter.id == order.fulfillment_center_id,
+                FulfillmentCenter.current_daily_orders > 0,
+            ).values(current_daily_orders=FulfillmentCenter.current_daily_orders - 1))
+        inventory = InventoryService(self.db)
+        for reservation in reservations:
+            if reservation.status == "reserved":
+                await inventory.transition(reservation.id, "released", reason, actor_id, whole_order=True)
+        for shipment in shipments:
+            shipment.status = ShipmentStatus.CANCELLED
+        order.status = OrderStatus.CANCELLED
+        self.db.add(AgentEvent(
+            agent_name="WarehouseOperator", event_type="order_cancelled", entity_id=order_id,
+            summary="Operator cancelled the order before dispatch",
+            details_json=json.dumps({"actor_id": actor_id, "reason": reason}),
         ))
         await self.db.flush()
         await self.db.refresh(order)

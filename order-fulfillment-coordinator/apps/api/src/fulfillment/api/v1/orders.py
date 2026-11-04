@@ -143,3 +143,14 @@ async def dispatch_order(order_id: str, payload: ReservationTransition, db: DbDe
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
+
+
+@router.post("/{order_id}/cancel", response_model=OrderRead)
+async def cancel_order(order_id: str, payload: ReservationTransition, db: DbDep, user: MutateDep) -> OrderRead:
+    try:
+        order = await OrderService(db).cancel_order(order_id, payload.reason, user.id)
+    except InventoryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order

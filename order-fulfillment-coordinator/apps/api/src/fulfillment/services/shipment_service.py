@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 from sqlalchemy import select
@@ -60,6 +60,20 @@ class ShipmentService:
         shipment = result.scalar_one_or_none()
         if shipment is None:
             raise ValueError("Shipment not found")
+        order = await self.db.scalar(select(Order).where(Order.id == shipment.order_id).with_for_update())
+        await self.db.refresh(shipment)
+        if shipment.status == ShipmentStatus.CANCELLED or (order and order.status == OrderStatus.CANCELLED):
+            raise InventoryConflict("Cancelled shipments cannot be rerouted")
+        if shipment.status in (ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED):
+            raise InventoryConflict("A terminal shipment cannot be rerouted")
+        if order is not None and await self.db.scalar(
+            select(OrderLine.id).where(OrderLine.order_id == order.id).limit(1)
+        ):
+            if (
+                order.status != OrderStatus.PROCESSING or shipment.status != ShipmentStatus.LABEL_CREATED
+                or shipment.last_polled_at is not None
+            ):
+                raise InventoryConflict("Carrier handoff requires reconciliation before rerouting")
 
         previous_carrier = shipment.carrier_name
 
@@ -71,12 +85,15 @@ class ShipmentService:
             .where(CarrierRate.destination_zip == shipment.destination_zip)
             .where(CarrierRate.weight_kg_min <= shipment.weight_kg)
             .where(CarrierRate.weight_kg_max >= shipment.weight_kg)
-            .order_by(CarrierRate.base_rate.asc())
+            .order_by(
+                CarrierRate.base_rate + CarrierRate.rate_per_kg * shipment.weight_kg,
+                CarrierRate.estimated_days_max, CarrierRate.id,
+            )
             .limit(1)
         )
         new_rate = rate_result.scalar_one_or_none()
         if new_rate is None:
-            raise ValueError(f"No rates available for carrier: {payload.new_carrier_name}")
+            raise InventoryConflict("No configured rate matches the requested carrier and shipment")
 
         new_tracking = f"TRK-{uuid4().hex[:12].upper()}"
         additional_cost = (new_rate.base_rate + new_rate.rate_per_kg * shipment.weight_kg) - (shipment.shipping_cost or 0)
@@ -84,11 +101,16 @@ class ShipmentService:
         shipment.carrier_name = payload.new_carrier_name
         shipment.tracking_number = new_tracking
         shipment.status = ShipmentStatus.LABEL_CREATED
-        shipment.estimated_delivery = datetime.now(timezone.utc)
+        shipment.estimated_delivery = datetime.now(timezone.utc) + timedelta(days=new_rate.estimated_days_max)
         shipment.shipping_cost = new_rate.base_rate + new_rate.rate_per_kg * shipment.weight_kg
         shipment.is_delayed = False
         shipment.delay_reason = None
-        shipment.last_polled_at = datetime.now(timezone.utc)
+        shipment.last_polled_at = None
+        if order is not None:
+            order.carrier_id = new_rate.id
+            order.tracking_number = shipment.tracking_number
+            order.shipping_cost = shipment.shipping_cost
+            order.estimated_delivery = shipment.estimated_delivery
 
         await self.db.flush()
         await self.db.refresh(shipment)
@@ -122,6 +144,8 @@ class ShipmentService:
         await self.db.refresh(shipment)
         if shipment.tracking_number != payload.tracking_number or shipment.carrier_name != payload.carrier:
             raise InventoryConflict("Shipment route changed before applying the event")
+        if shipment.status == ShipmentStatus.CANCELLED or (order and order.status == OrderStatus.CANCELLED):
+            raise InventoryConflict("Cancelled shipments cannot accept carrier events")
         if order is not None:
             if payload.status == "delivered" or order.status == OrderStatus.DELIVERED:
                 typed = await self.db.scalar(select(OrderLine.id).where(OrderLine.order_id == order.id).limit(1))
@@ -144,6 +168,9 @@ class ShipmentService:
         if payload.status == "delayed":
             shipment.is_delayed = True
             shipment.delay_reason = payload.status_detail
+        elif payload.status != "exception":
+            shipment.is_delayed = False
+            shipment.delay_reason = None
 
         shipment.last_polled_at = datetime.now(timezone.utc)
         await self.db.flush()

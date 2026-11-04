@@ -23,6 +23,7 @@ class ShipmentStatus(str, enum.Enum):
     EXCEPTION = "exception"
     DELAYED = "delayed"
     RETURNED = "returned"
+    CANCELLED = "cancelled"
 
 
 class Shipment(Base):
