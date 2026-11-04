@@ -139,6 +139,22 @@ async def main():
                     beat.terminate()
                     beat.wait(timeout=10)
 
+            async with engine.begin() as connection:
+                await connection.execute(text("ALTER TABLE public.shipments RENAME TO shipments_test_unavailable"))
+            try:
+                exhausted = run_monitor_cycle.delay()
+                await wait_for(exhausted, {"RETRY"}, 30)
+                await wait_for(exhausted, {"FAILURE"}, 100)
+                async with async_session_factory() as db:
+                    assert await db.get(MonitorTaskResult, exhausted.id) is None
+                evidence["exhausted"] = {"task_id": exhausted.id, "state": exhausted.state}
+            finally:
+                async with engine.begin() as connection:
+                    await connection.execute(text("ALTER TABLE public.shipments_test_unavailable RENAME TO shipments"))
+            restored = run_monitor_cycle.delay()
+            await wait_for(restored, {"SUCCESS"}, 30)
+            evidence["after_exhaustion"] = {"task_id": restored.id, "cycle_id": restored.result["cycle_id"]}
+
             async with async_session_factory() as db:
                 for result in (duplicate, retry, recovery):
                     rows = list(await db.scalars(select(AgentEvent).where(AgentEvent.entity_id == result.result["cycle_id"])))
