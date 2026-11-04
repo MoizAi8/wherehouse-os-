@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -106,6 +107,8 @@ class ShipmentService:
         shipment.is_delayed = False
         shipment.delay_reason = None
         shipment.last_polled_at = None
+        shipment.carrier_event_at = None
+        shipment.carrier_event_hash = None
         if order is not None:
             order.carrier_id = new_rate.id
             order.tracking_number = shipment.tracking_number
@@ -146,6 +149,24 @@ class ShipmentService:
             raise InventoryConflict("Shipment route changed before applying the event")
         if shipment.status == ShipmentStatus.CANCELLED or (order and order.status == OrderStatus.CANCELLED):
             raise InventoryConflict("Cancelled shipments cannot accept carrier events")
+        event_at = payload.timestamp
+        event_hash = None
+        if event_at is not None:
+            if event_at.tzinfo is None:
+                event_at = event_at.replace(tzinfo=timezone.utc)
+            if event_at > datetime.now(timezone.utc) + timedelta(minutes=5):
+                raise InventoryConflict("Carrier event timestamp is too far in the future")
+            event_hash = hashlib.sha256(payload.model_dump_json().encode()).hexdigest()
+            previous_at = shipment.carrier_event_at
+            if previous_at is not None:
+                if previous_at.tzinfo is None:
+                    previous_at = previous_at.replace(tzinfo=timezone.utc)
+                if event_at == previous_at and event_hash == shipment.carrier_event_hash:
+                    return shipment
+                if event_at <= previous_at:
+                    raise InventoryConflict("Carrier event is older than or conflicts with the last event")
+        elif shipment.carrier_event_at is not None:
+            raise InventoryConflict("Carrier event timestamp is required after a timestamped event")
         if order is not None:
             if payload.status == "delivered" or order.status == OrderStatus.DELIVERED:
                 typed = await self.db.scalar(select(OrderLine.id).where(OrderLine.order_id == order.id).limit(1))
@@ -173,6 +194,8 @@ class ShipmentService:
             shipment.delay_reason = None
 
         shipment.last_polled_at = datetime.now(timezone.utc)
+        shipment.carrier_event_at = event_at
+        shipment.carrier_event_hash = event_hash
         await self.db.flush()
         await self.db.refresh(shipment)
         return shipment

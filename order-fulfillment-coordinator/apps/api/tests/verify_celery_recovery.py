@@ -10,14 +10,18 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
 from sqlalchemy.engine import make_url
+from fulfillment.agents.communication import CommunicationAgent
+from fulfillment.config import settings
 from fulfillment.models.agent_event import AgentEvent, MonitorTaskResult
 from fulfillment.models.carrier_rate import CarrierRate
 from fulfillment.models.fulfillment_center import FulfillmentCenter
+from fulfillment.models.notification import Notification
 from fulfillment.models.shipment import Shipment
 from fulfillment.database import async_session_factory, engine
 from fulfillment.schemas.order import OrderCreate
 from fulfillment.services.order_service import OrderService
 from fulfillment.tasks import celery_app, run_monitor_cycle
+from fulfillment.tasks.monitor_cycle import drain_notification_outbox
 
 database = make_url(os.environ["DATABASE_URL"])
 assert (database.drivername, database.host, database.port, database.database) == (
@@ -82,6 +86,7 @@ def start(log, mode="worker"):
 
 
 async def main():
+    assert not settings.sendgrid_api_key and not settings.twilio_auth_token
     await seed()
     evidence = {}
     with (artifact / "warehouse-celery-first.log").open("w") as first, (artifact / "warehouse-celery-restarted.log").open("w") as second:
@@ -160,6 +165,25 @@ async def main():
             await wait_for(restored, {"SUCCESS"}, 30)
             evidence["after_exhaustion"] = {"task_id": restored.id, "cycle_id": restored.result["cycle_id"]}
 
+            async with async_session_factory.begin() as db:
+                shipment = await db.scalar(select(Shipment).order_by(Shipment.created_at.desc()).limit(1))
+                settings.sendgrid_api_key = "queue-only-test-placeholder"
+                try:
+                    notice = await CommunicationAgent(db).send_delay_alert(shipment, "Sandbox carrier delay")
+                finally:
+                    settings.sendgrid_api_key = ""
+                assert notice is not None and notice["notifications_queued"] == 1
+                notification_id = notice["channels"][0]["notification_id"]
+            delivery = drain_notification_outbox.delay()
+            await wait_for(delivery, {"SUCCESS"}, 30)
+            async with async_session_factory() as db:
+                stored = await db.get(Notification, notification_id)
+                assert stored.status == "failed" and stored.delivery_attempts == 1
+                assert stored.provider_message_id is None
+            evidence["notification_worker"] = {
+                "task_id": delivery.id, "notification_id": notification_id, "status": "failed",
+            }
+
             redis_container = os.environ.get("WAREHOUSE_ACCEPTANCE_REDIS_CONTAINER")
             if redis_container:
                 labels = subprocess.check_output([
@@ -181,11 +205,11 @@ async def main():
                     assert len(rows) == 2
                 evidence["persisted_agents"] = sorted(set(await db.scalars(select(AgentEvent.agent_name))))
         finally:
+            (artifact / "warehouse-celery-evidence.json").write_text(json.dumps(evidence, indent=2))
             if worker.poll() is None:
                 worker.terminate()
                 worker.wait(timeout=10)
     await engine.dispose()
-    (artifact / "warehouse-celery-evidence.json").write_text(json.dumps(evidence, indent=2))
     print(json.dumps(evidence))
 
 

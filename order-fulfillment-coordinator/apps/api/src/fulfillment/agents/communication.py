@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from uuid import uuid4
@@ -12,6 +13,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from fulfillment.config import settings
+from fulfillment.models.agent_event import AgentEvent
 from fulfillment.models.notification import Notification
 from fulfillment.models.order import Order
 from fulfillment.models.shipment import Shipment
@@ -114,10 +116,12 @@ async def deliver_due_notifications(sessions: async_sessionmaker[AsyncSession], 
     for _ in range(limit):
         now = datetime.now(timezone.utc)
         async with sessions.begin() as db:
-            await db.execute(update(Notification).where(
+            expired = await db.scalars(update(Notification).where(
                 Notification.status == "sending", Notification.delivery_key.is_not(None),
                 Notification.delivery_due_at <= now,
-            ).values(status="unknown", delivery_due_at=None))
+            ).values(status="unknown", delivery_due_at=None).returning(Notification.id))
+            for notice_id in expired:
+                db.add(_delivery_event(notice_id, "delivery_uncertain"))
             due = select(Notification.id).where(
                 Notification.status.in_(["queued", "retry"]), Notification.delivery_due_at <= now,
             ).order_by(Notification.delivery_due_at, Notification.id).limit(1)
@@ -127,6 +131,8 @@ async def deliver_due_notifications(sessions: async_sessionmaker[AsyncSession], 
                 status="sending", delivery_due_at=now + timedelta(minutes=5),
                 delivery_attempts=Notification.delivery_attempts + 1,
             ).returning(Notification))).scalar_one_or_none()
+            if notice is not None:
+                db.add(_delivery_event(notice.id, "delivery_claimed", notice.delivery_attempts))
         if notice is None:
             break
         status, provider_id = await _submit_notice(notice)
@@ -135,8 +141,18 @@ async def deliver_due_notifications(sessions: async_sessionmaker[AsyncSession], 
             status = "failed"
         next_due = datetime.now(timezone.utc) + timedelta(seconds=60 * 2 ** (attempts - 1)) if status == "retry" else None
         async with sessions.begin() as db:
-            await db.execute(update(Notification).where(
+            updated = await db.scalar(update(Notification).where(
                 Notification.id == notice.id, Notification.status == "sending",
-            ).values(status=status, provider_message_id=provider_id, delivery_due_at=next_due))
+            ).values(status=status, provider_message_id=provider_id, delivery_due_at=next_due).returning(Notification.id))
+            if updated is not None:
+                event_type = "provider_accepted" if status == "sent" else f"delivery_{status}"
+                db.add(_delivery_event(notice.id, event_type, attempts))
         processed += 1
     return processed
+
+
+def _delivery_event(notice_id: str, event_type: str, attempt: int | None = None) -> AgentEvent:
+    return AgentEvent(
+        agent_name="CommunicationAgent", event_type=event_type, entity_id=notice_id,
+        summary=event_type.replace("_", " "), details_json=json.dumps({"attempt": attempt}),
+    )

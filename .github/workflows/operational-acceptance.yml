@@ -72,6 +72,8 @@ jobs:
           WAREHOUSE_ACCEPTANCE_OUTPUT: ${{ runner.temp }}/warehouse-evidence
         run: |
           uv sync --frozen --python 3.12
+          uv run --no-sync ruff check .
+          uv run --no-sync mypy src
           export WAREHOUSE_ACCEPTANCE_REDIS_CONTAINER="$(cd ../.. && docker compose ps -q redis)"
           test -n "$WAREHOUSE_ACCEPTANCE_REDIS_CONTAINER"
           uv run --no-sync python tests/verify_celery_recovery.py
@@ -85,6 +87,9 @@ jobs:
           docker compose ps -a > "$RUNNER_TEMP/warehouse-evidence/compose-status.txt"
           docker compose logs --no-color > "$RUNNER_TEMP/warehouse-evidence/compose-logs.txt"
           docker compose down -v
+      - name: Generate operational evidence ledger
+        if: always()
+        run: python3 apps/api/tests/write_operational_evidence.py "$RUNNER_TEMP/warehouse-evidence"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

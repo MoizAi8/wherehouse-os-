@@ -98,6 +98,8 @@ class ReroutingAgent:
         shipment.shipping_cost = reroute_data["new_cost"]
         shipment.estimated_delivery = datetime.now(timezone.utc) + timedelta(days=reroute_data["estimated_days_max"])
         shipment.last_polled_at = None
+        shipment.carrier_event_at = None
+        shipment.carrier_event_hash = None
 
         return {
             "previous_carrier": previous_carrier,

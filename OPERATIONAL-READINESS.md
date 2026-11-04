@@ -1,5 +1,15 @@
 # Warehouse OS operational readiness audit
 
+## Isolated Linux and notification acceptance
+
+The development-only workflow builds both production Dockerfiles locally on an Ubuntu runner, boots the production Compose services with disposable configuration, checks strict backend readiness and frontend-to-backend connectivity, and exercises the pinned PostgreSQL and Redis images with Celery prefork. It does not log into a registry or use production secrets. Run 41845863352 verified image builds, container startup and seven worker scenarios. Its later PostgreSQL regression command failed due to the Compose working directory. The workflow now runs Compose commands from the coordinator directory.
+
+Notification intents are persisted with the warehouse transaction and deduplicated per shipment, tracking number and channel. The scheduled outbox worker commits its claim before contacting the provider. Explicit throttling retries with bounded backoff. A permanent rejection is terminal. A timeout, ambiguous provider response or expired worker claim is recorded as unknown for reconciliation and is never automatically resent. Provider acceptance is recorded separately from physical delivery in the audit trail. No live communications are used in acceptance.
+
+Timestamped signed carrier events use the existing order lock to enforce event order. Exact replay of the last event is idempotent. Older, conflicting, implausibly future and subsequent untimestamped updates are rejected. Legacy integrations can submit untimestamped events until they opt into timestamped updates. A route change clears its old event cursor.
+
+The Linux workflow uploads an operational evidence ledger from actual worker artifacts and selected warehouse regression cases. The 500-scenario gate remains open. External carrier booking and live delivery need authorized provider access, and ambiguous notification outcomes still need provider-side reconciliation.
+
 ## Cancellation and worker recovery checkpoint
 
 Routed typed orders can be cancelled before dispatch or carrier activity. Cancellation locks the order, releases its reservations, restores center capacity, records the shipment as cancelled, and preserves the route and ledger history. Viewer writes, later carrier events, and dispatch of a cancelled order are rejected. Cancelled shipments are excluded from monitoring and cost totals. The shipment enum migration blocks database downgrade when cancelled shipments exist. Any application rollback after recording a cancellation must use an image that understands the new shipment status.

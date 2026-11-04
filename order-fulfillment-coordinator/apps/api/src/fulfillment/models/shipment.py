@@ -57,6 +57,8 @@ class Shipment(Base):
     is_delayed: Mapped[bool] = mapped_column(default=False)
     delay_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     last_polled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    carrier_event_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    carrier_event_hash: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

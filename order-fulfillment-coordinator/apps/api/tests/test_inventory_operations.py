@@ -1,6 +1,7 @@
 import asyncio
 import hmac
 import json
+from datetime import datetime, timedelta, timezone
 import os
 from uuid import uuid4
 
@@ -225,11 +226,14 @@ async def test_inventory_order_lifecycle(database, tmp_path, monkeypatch):
             async with sessions() as db:
                 assert await MonitorAgent(db).count_active_shipments([shipment["id"]]) == 0
 
-            async def shipment_event(status, target=shipment):
-                body = json.dumps({
+            async def shipment_event(status, target=shipment, timestamp=None):
+                event = {
                     "tracking_number": target["tracking_number"],
                     "carrier": target["carrier_name"], "status": status,
-                }).encode()
+                }
+                if timestamp is not None:
+                    event["timestamp"] = timestamp.isoformat()
+                body = json.dumps(event).encode()
                 return await client.post("/api/v1/webhooks/shipment-event", content=body, headers={
                     "Content-Type": "application/json",
                     "X-Webhook-Signature": hmac.digest(settings.webhook_secret.encode(), body, "sha256").hex(),
@@ -246,9 +250,16 @@ async def test_inventory_order_lifecycle(database, tmp_path, monkeypatch):
             assert all(item.status_code == 200 and item.json()["status"] == "shipped" for item in dispatched)
             async with sessions() as db:
                 assert await MonitorAgent(db).count_active_shipments([shipment["id"]]) == 1
-            assert (await shipment_event("delivered")).status_code == 200
-            assert (await shipment_event("delivered")).status_code == 200
-            assert (await shipment_event("in_transit")).status_code == 409
+            event_time = datetime.now(timezone.utc)
+            assert (await shipment_event("in_transit", timestamp=event_time + timedelta(hours=1))).status_code == 409
+            assert (await shipment_event("in_transit", timestamp=event_time)).status_code == 200
+            assert (await shipment_event("picked_up", timestamp=event_time - timedelta(seconds=1))).status_code == 409
+            assert (await shipment_event("picked_up", timestamp=event_time)).status_code == 409
+            assert (await shipment_event("picked_up")).status_code == 409
+            delivered_at = event_time + timedelta(seconds=1)
+            assert (await shipment_event("delivered", timestamp=delivered_at)).status_code == 200
+            assert (await shipment_event("delivered", timestamp=delivered_at)).status_code == 200
+            assert (await shipment_event("in_transit", timestamp=delivered_at + timedelta(seconds=1))).status_code == 409
             assert (await client.get(typed_path)).json()["status"] == "delivered"
             final = {row["id"]: row for row in (await client.get(f"{base}/stock")).json()}
             for stock in (stock_id, second_stock):
