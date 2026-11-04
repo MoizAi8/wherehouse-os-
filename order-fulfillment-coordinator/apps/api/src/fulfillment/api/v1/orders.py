@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.api.deps import get_current_user, get_db, require_operator_or_admin
@@ -16,6 +17,7 @@ from fulfillment.schemas.order import (
     OrderUpdate,
 )
 from fulfillment.services.order_service import OrderService
+from fulfillment.services.inventory import InventoryConflict
 
 router = APIRouter()
 
@@ -45,7 +47,17 @@ async def create_order(
     _user: MutateDep,
 ) -> OrderRead:
     service = OrderService(db)
-    return await service.create_order(payload)
+    try:
+        return await service.create_order(payload)
+    except IntegrityError as exc:
+        original = exc.orig
+        postgres = getattr(original, "__cause__", None)
+        if (
+            getattr(postgres, "constraint_name", None) == "orders_external_order_id_key"
+            or str(original) == "UNIQUE constraint failed: orders.external_order_id"
+        ):
+            raise HTTPException(409, "Order reference already exists") from exc
+        raise
 
 
 @router.get("/{order_id}", response_model=OrderRead)
@@ -69,7 +81,10 @@ async def update_order(
     _user: MutateDep,
 ) -> OrderRead:
     service = OrderService(db)
-    order = await service.update_order(order_id, payload)
+    try:
+        order = await service.update_order(order_id, payload)
+    except InventoryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     return order
@@ -82,7 +97,10 @@ async def delete_order(
     _user: MutateDep,
 ) -> None:
     service = OrderService(db)
-    deleted = await service.delete_order(order_id)
+    try:
+        deleted = await service.delete_order(order_id)
+    except InventoryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 

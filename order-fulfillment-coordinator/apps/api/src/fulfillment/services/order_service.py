@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.agents.routing import RoutingAgent, RoutingError
 from fulfillment.models.carrier_rate import CarrierRate
+from fulfillment.models.inventory import Reservation
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment
 from fulfillment.schemas.carrier import CarrierRateRequest, CarrierRateResponse
@@ -19,6 +20,7 @@ from fulfillment.schemas.order import (
     OrderUpdate,
 )
 from fulfillment.schemas.webhook import OrderPlacedWebhook
+from fulfillment.services.inventory import InventoryConflict, InventoryService
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +77,7 @@ class OrderService:
             shipping_state=payload.shipping_state,
             shipping_country=payload.shipping_country,
             items_json=payload.items_json,
+            requires_stock=payload.defer_routing,
             total_weight_kg=payload.total_weight_kg,
             notes=payload.notes,
             status=OrderStatus.PENDING,
@@ -82,7 +85,8 @@ class OrderService:
         self.db.add(order)
         await self.db.flush()
         await self.db.refresh(order)
-        await self._try_autonomous_routing(order.id)
+        if not payload.defer_routing:
+            await self._try_autonomous_routing(order.id)
         return OrderRead.model_validate(order)
 
     async def get_order(self, order_id: str) -> OrderRead | None:
@@ -93,13 +97,19 @@ class OrderService:
         return OrderRead.model_validate(order)
 
     async def update_order(self, order_id: str, payload: OrderUpdate) -> OrderRead | None:
-        result = await self.db.execute(select(Order).where(Order.id == order_id))
+        result = await self.db.execute(select(Order).where(Order.id == order_id).with_for_update())
         order = result.scalar_one_or_none()
         if order is None:
             return None
         update_data = payload.model_dump(exclude_unset=True)
         if not update_data:
             return OrderRead.model_validate(order)
+        if payload.status == OrderStatus.CANCELLED and await self.db.scalar(
+            select(Reservation.id).where(
+                Reservation.order_id == order.id, Reservation.status != "released",
+            ).limit(1)
+        ):
+            raise InventoryConflict("Release active reservations before cancelling. Consumed stock requires reconciliation.")
         for key, value in update_data.items():
             setattr(order, key, value)
         await self.db.flush()
@@ -107,10 +117,12 @@ class OrderService:
         return OrderRead.model_validate(order)
 
     async def delete_order(self, order_id: str) -> bool:
-        result = await self.db.execute(select(Order).where(Order.id == order_id))
+        result = await self.db.execute(select(Order).where(Order.id == order_id).with_for_update())
         order = result.scalar_one_or_none()
         if order is None:
             return False
+        if await self.db.scalar(select(Reservation.id).where(Reservation.order_id == order_id).limit(1)):
+            raise InventoryConflict("Orders with inventory history cannot be deleted")
         await self.db.delete(order)
         await self.db.flush()
         return True
@@ -130,8 +142,11 @@ class OrderService:
             raise ValueError("Order is already routed")
         if order.status != OrderStatus.PENDING:
             raise ValueError("Only pending orders can be routed")
+        center_id = await InventoryService(self.db).active_center(order.id)
+        if order.requires_stock and center_id is None:
+            raise ValueError("Reserve inventory before routing this order")
         try:
-            decision = await RoutingAgent(self.db).route_order(order, payload)
+            decision = await RoutingAgent(self.db).route_order(order, payload, center_id=center_id)
         except RoutingError as exc:
             raise ValueError(str(exc)) from exc
 

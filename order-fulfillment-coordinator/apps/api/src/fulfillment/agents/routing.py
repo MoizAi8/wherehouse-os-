@@ -24,12 +24,12 @@ class RoutingAgent:
         self.db = db
 
     async def select_fulfillment_center(
-        self, order: Order, request: OrderRouteRequest
+        self, order: Order, request: OrderRouteRequest, center_id: str | None = None
     ) -> FulfillmentCenter | None:
         eligible_rates = self._eligible_rates(
             order.shipping_zip, order.total_weight_kg, request.max_cost, request.max_days,
         ).where(CarrierRate.origin_zip == FulfillmentCenter.zip_code)
-        result = await self.db.execute(
+        query = (
             select(FulfillmentCenter)
             .where(FulfillmentCenter.is_active)
             .where(FulfillmentCenter.current_daily_orders < FulfillmentCenter.max_daily_orders)
@@ -38,6 +38,9 @@ class RoutingAgent:
             .limit(1)
             .with_for_update()
         )
+        if center_id is not None:
+            query = query.where(FulfillmentCenter.id == center_id)
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
     @staticmethod
@@ -79,9 +82,11 @@ class RoutingAgent:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def route_order(self, order: Order, request: OrderRouteRequest | None = None) -> dict:
+    async def route_order(
+        self, order: Order, request: OrderRouteRequest | None = None, *, center_id: str | None = None
+    ) -> dict:
         request = request or OrderRouteRequest()
-        fc = await self.select_fulfillment_center(order, request)
+        fc = await self.select_fulfillment_center(order, request, center_id)
         if fc is None:
             raise RoutingError("No suitable route from an available fulfillment center")
 

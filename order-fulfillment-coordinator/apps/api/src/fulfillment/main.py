@@ -18,6 +18,7 @@ from fulfillment.api.v1 import (
     carriers,
     fulfillment_centers,
     integrations,
+    inventory,
     orders,
     shipments,
     webhooks,
@@ -92,6 +93,7 @@ app.include_router(chat.router)
 app.include_router(demo.router)
 app.include_router(demo_guest.router)
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
+app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventory"])
 app.include_router(shipments.router, prefix="/api/v1/shipments", tags=["shipments"])
 app.include_router(carriers.router, prefix="/api/v1/carriers", tags=["carriers"])
 app.include_router(agents.router, prefix="/api/v1/agents", tags=["agents"])

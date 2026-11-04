@@ -7,6 +7,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 
 
 class OrderCreate(BaseModel):
+    defer_routing: bool = False
     external_order_id: str | None = None
     customer_email: EmailStr
     customer_phone: str | None = None

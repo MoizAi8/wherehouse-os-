@@ -1,5 +1,36 @@
 # Warehouse OS operational readiness audit
 
+## Inventory and order allocation milestone
+
+**Commercial status remains NOT READY.** This branch now supports a single-business inventory workflow. The existing admin and operator roles may write inventory. Viewers may read it, and public guest tokens cannot access business inventory.
+
+- The Inventory page uses the existing dashboard and supports SKU creation, stocking at a fulfillment center, receipts, adjustments, low-stock display, order reservations, and stock movement history. Operators can create a pending order for allocation, route it from its reserved center, and explicitly record dispatch of reserved units. The existing order workflow still accepts orders without an inventory allocation requirement.
+- The balance and append-only movement record change in one database transaction. The database enforces nonnegative balances with reservations bounded by on-hand stock. PostgreSQL order and stock row locks serialize order allocation and balance changes. Repeating a stock movement with the same operation ID or retrying an existing reservation does not add stock or reserve it twice. Orders with reservation history are retained for audit.
+- A pending order created for allocation cannot route without an active reservation. An order cannot reserve inventory from a different center after assignment. Cancellation requires active reservations to be released first. Consumed stock requires reconciliation. The operator still specifies SKUs and quantities during allocation. The application does not yet reconcile reservations against typed order line items.
+- Migration `e4f71ab892cd` adds inventory tables. Migration `f3a84d6720b1` adds a false-by-default stock requirement to existing orders. Downgrade guards stop removal when inventory or allocation-dependent orders exist. Use the repository's image rollback mechanism and preserve the database schema and inventory data for investigation. If rolling back to software that predates allocation, suspend inventory operations until a compatible release is restored.
+
+### Priority for the remaining release
+
+1. Add typed order lines and reconcile required quantities before routing. Complete dispatch, cancellation, replenishment, and shipment-event transitions with durable business keys.
+2. Verify populated PostgreSQL, Redis, Celery, and Beat together in an isolated environment. Exercise retries, worker loss, event replay, and per-agent evidence.
+3. Verify sandbox carrier and notification adapters, then require provider confirmation before recording an external handoff or delivery. Complete cost alternatives and validate prediction behavior with representative data.
+4. Keep deployments single-business until tenant isolation is implemented across queries, workers, and AI tools. Verify role provisioning, business workflows at representative volume, both Docker images, and the full operational release gates.
+
+### Repeat the inventory exercise
+
+Use a disposable deployment with the current migrations and an operator and viewer account. Configure a synthetic fulfillment center and a matching carrier rate. Sign in as the operator, open **Inventory**, add a product and location, and receive ten units. Create a pending order for allocation. Reserving eleven units should fail, and reserving four should display six available. Route the order, then record dispatch of the four reserved units. The page should show six on hand and zero reserved. Reload and inspect the movement history. Sign in as a viewer to confirm read access and absence of write controls. In a fresh guest session, the Inventory page should require a business account.
+
+The repository API test `tests/test_inventory_operations.py` runs with SQLite by default. Set `WAREHOUSE_INVENTORY_TEST_DATABASE` to a migrated, disposable loopback PostgreSQL database named `inventory_test` to enable the PostgreSQL case. It inserts synthetic records and must run in a dedicated test database.
+
+### Verification results
+
+- The backend regression suite ran 1,228 tests, all passing with zero skips. Ruff and mypy passed. The two inventory cases exercised the authenticated FastAPI routes on SQLite and PostgreSQL 17. In PostgreSQL, four simultaneous four-unit reservations against ten units returned two successes and two conflicts. The final balance and movement deltas reconciled to six on hand and zero reserved.
+- Six browser checks passed against built Next.js, the actual FastAPI application and local PostgreSQL. They covered operator sign-in, product and location creation, receipts, insufficient stock, order allocation, routing and dispatch persistence across reload, viewer write rejection, and guest read rejection. The frontend suite passed 74 tests and 23 built authentication checks. Lint, TypeScript and the production frontend build passed.
+- PostgreSQL upgraded from an empty database, downgraded to the live schema revision while empty, and upgraded again. Downgrade stopped on the populated test database and retained the current revision.
+- The 500 operational-scenario target remains open. This milestone adds two API workflow cases and the six browser checks. Redis and Celery recovery, both Docker image builds, production external adapters and representative throughput remain unverified. No live inference was needed.
+
+## Baseline routing and agent audit at b57a250
+
 ## Release decision
 
 **NOT READY for commercial release or a public writable instructor exercise.**

@@ -27,3 +27,4 @@ __all__ = [
     "ChatMessageRecord",
 ]
 from fulfillment.models.chat_approval import ChatApproval  # noqa: F401
+from fulfillment.models.inventory import Product, Reservation, Stock, StockMovement  # noqa: F401

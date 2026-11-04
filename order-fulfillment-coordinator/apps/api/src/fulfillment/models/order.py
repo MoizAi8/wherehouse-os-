@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Text, func
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, String, Text, false, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from fulfillment.database import Base
@@ -41,6 +41,7 @@ class Order(Base):
     shipping_state: Mapped[str] = mapped_column(String(100), nullable=False)
     shipping_country: Mapped[str] = mapped_column(String(100), default="US")
     items_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    requires_stock: Mapped[bool] = mapped_column(default=False, server_default=false())
     total_weight_kg: Mapped[float] = mapped_column(Float, default=0.0)
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, name="order_status", values_callable=lambda x: [e.value for e in x]),

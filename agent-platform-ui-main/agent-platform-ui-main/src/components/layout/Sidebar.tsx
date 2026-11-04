@@ -3,11 +3,12 @@
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useSession } from "next-auth/react"
 import { motion, AnimatePresence } from "framer-motion"
 import {
   LayoutDashboard, Bot, GitBranch, Activity, Settings,
   ChevronLeft, ChevronRight, Package, BarChart3, Users,
-  Sun, Moon, Bell, MessageSquare, ChevronDown, Puzzle,
+  Sun, Moon, Bell, MessageSquare, ChevronDown, Puzzle, Boxes,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSettings } from "@/contexts/SettingsContext"
@@ -28,9 +29,12 @@ const bottomItems = [
   { icon: Bell, label: "Notifications", href: "/dashboard/notifications" },
   { icon: Settings, label: "Settings", href: "/dashboard/settings" },
 ]
+const inventoryItem = { icon: Boxes, label: "Inventory", href: "/dashboard/inventory" }
 
 export function Sidebar() {
   const pathname = usePathname()
+  const { data: session } = useSession()
+  const items = session?.accessToken && !session.demoGuest ? [...navItems, inventoryItem] : navItems
   const [collapsed, setCollapsed] = useState(false)
   const { settings, updateSetting } = useSettings()
   const isDark = settings.theme === "dark"
@@ -84,7 +88,7 @@ export function Sidebar() {
       )}
 
       <nav className="flex-1 space-y-0.5 px-3 py-3 overflow-y-auto">
-        {navItems.map((item, i) => {
+        {items.map((item, i) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
           return (
             <motion.div key={item.href} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 + i * 0.03 }}>
