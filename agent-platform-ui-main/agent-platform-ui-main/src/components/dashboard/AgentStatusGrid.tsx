@@ -4,14 +4,15 @@ import { useMemo } from "react"
 import { AgentCard } from "./AgentCard"
 import { SkeletonCard } from "@/components/ui/SkeletonCard"
 import { ErrorDisplay } from "@/components/ui/ErrorDisplay"
-import { useAgentMonitor } from "@/hooks/use-agents"
+import { type AgentRuntimeStatus, useAgentMonitor } from "@/hooks/use-agents"
 import { useSearch } from "@/contexts/SearchContext"
 
 export interface AgentInfo {
   id: string
   name: string
   role: string
-  status: "active" | "idle" | "error" | "processing" | "unknown"
+  status: AgentRuntimeStatus
+  evidence?: string
   uptime: string
   tasksCompleted: number
   workload: number | null
@@ -24,12 +25,12 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
 
   const agents = useMemo<AgentInfo[]>(() => {
     if (loading) return []
-    return [
+    const roster: AgentInfo[] = [
       {
         id: "routing",
         name: "RoutingAgent",
         role: "Order Router",
-        status: "unknown",
+        status: "UNVERIFIED",
         uptime: "--",
         tasksCompleted: 0,
         workload: null,
@@ -39,7 +40,7 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
         id: "monitor",
         name: "MonitorAgent",
         role: "Shipment Monitor",
-        status: "unknown",
+        status: "UNVERIFIED",
         uptime: "--",
         tasksCompleted: monitorData?.shipments_checked ?? 0,
         workload: null,
@@ -49,7 +50,7 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
         id: "prediction",
         name: "PredictionAgent",
         role: "Failure Predictor",
-        status: "unknown",
+        status: "UNVERIFIED",
         uptime: "--",
         tasksCompleted: 0,
         workload: null,
@@ -59,7 +60,7 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
         id: "rerouting",
         name: "ReroutingAgent",
         role: "Reroute Handler",
-        status: "unknown",
+        status: "UNVERIFIED",
         uptime: "--",
         tasksCompleted: monitorData?.reroutes_initiated ?? 0,
         workload: null,
@@ -69,15 +70,20 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
         id: "communication",
         name: "CommunicationAgent",
         role: "Notification Relay",
-        status: "unknown",
+        status: "UNVERIFIED",
         uptime: "--",
         tasksCompleted: monitorData?.notifications_sent ?? 0,
         workload: null,
         accuracy: null,
       },
-      { id: "cost", name: "CostOptimizer", role: "Cost Comparison", status: "unknown", uptime: "--", tasksCompleted: 0, workload: null, accuracy: null },
-      { id: "orchestrator", name: "FulfillmentOrchestrator", role: "Workflow Coordination", status: "unknown", uptime: "--", tasksCompleted: 0, workload: null, accuracy: null },
+      { id: "cost", name: "CostOptimizer", role: "Cost Comparison", status: "UNVERIFIED", uptime: "--", tasksCompleted: 0, workload: null, accuracy: null },
+      { id: "orchestrator", name: "FulfillmentOrchestrator", role: "Workflow Coordination", status: "UNVERIFIED", uptime: "--", tasksCompleted: 0, workload: null, accuracy: null },
     ]
+    return roster.map(agent => {
+      const evidence = monitorData?.agents?.find(item => item.name === agent.name)
+      return { ...agent, status: evidence?.status ?? "UNVERIFIED",
+        evidence: evidence ? `${evidence.reason}${evidence.observed_at ? ` (${evidence.observed_at})` : ""}` : "No execution evidence" }
+    })
   }, [loading, monitorData])
 
   const filtered = useMemo(() => {
@@ -100,7 +106,7 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
 
   return (
     <div className="space-y-2" role="list" aria-label="Agent status list">
-      <p className="text-xs text-muted-foreground">Component roster. Runtime state, workload and accuracy are unverified.</p>
+      <p className="text-xs text-muted-foreground">Status reflects recorded execution evidence. Live workload and accuracy are not measured.</p>
       {filtered.map((agent, i) => (
         <AgentCard key={agent.id} agent={agent} index={i} onSelect={onAgentSelect} />
       ))}

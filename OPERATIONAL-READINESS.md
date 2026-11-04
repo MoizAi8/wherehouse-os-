@@ -1,5 +1,17 @@
 # Warehouse OS operational readiness audit
 
+## Commercial execution continuation (November 5, 2026)
+
+Recovered the clean local and remote branch at `e299b6d`, including all three commits after `fdd9903`. Ubuntu acceptance run `41846818365` succeeded at that exact baseline; its Docker builds and Redis/prefork recovery artifacts were downloaded and preserved. Production's latest successful deployment record remains `41704609945` at `d91dc27`; no production deployment has been performed in this continuation.
+
+The candidate connects the original agent cards to authenticated, committed per-agent evidence. Recent completed work is IDLE, a recorded failure is FAILED, and missing or stale evidence is UNVERIFIED. IDLE is explicitly not a worker heartbeat. READY/RUNNING are not inferred from historical events. Workload and prediction accuracy remain unmeasured. Terminal worker failures are appended to the event ledger when PostgreSQL is available.
+
+Monitor batches now rotate by a separate local check timestamp, preserving carrier-event timestamps, and use the same order locks as dispatch and carrier updates. Migration `d106e54b8732` adds the nullable local monitor timestamp. Delay notification intents no longer depend on enabling automatic rerouting. Failed reroute evaluation no longer suppresses prediction. Automatic reroute execution reuses operator safeguards and synchronizes the order with its shipment. Cost analysis now compares full configured quotes for internal labels against the existing delivery deadline and persists approval-required savings recommendations.
+
+Local evidence: the new 500-case matrix passed against PostgreSQL and a real Celery solo worker with a loopback Redis-compatible broker. It is five lifecycle outcomes (delivery, cancellation, shortage, replenishment, delay) × five quantities × five parcel weights × four basket sizes, not 500 separate product features. Each checks committed state and ledger conservation; the 100 delayed cases include queued task and cycle IDs. The carrier inputs remain sandbox events. Separate recovery acceptance verified successful SDK/provider handoff through an actual outbox worker, with one HTTP request across duplicate drain tasks, and persisted execution records for all seven agents. Current Linux validation is pending; local results do not replace that gate.
+
+Commercial readiness remains unapproved. Live carrier booking, physical handoff/rerouting, production provider delivery and prediction calibration are not established by sandbox execution. Final candidate CI, browser, migration and regression results will be recorded after validation.
+
 ## Isolated Linux and notification acceptance
 
 The development-only workflow builds both production Dockerfiles locally on an Ubuntu runner, boots the production Compose services with disposable configuration, checks strict backend readiness and frontend-to-backend connectivity, and exercises the pinned PostgreSQL and Redis images with Celery prefork. It does not log into a registry or use production secrets. Run 41845863352 verified image builds, container startup and seven worker scenarios. Its later PostgreSQL regression command failed due to the Compose working directory. The workflow now runs Compose commands from the coordinator directory.

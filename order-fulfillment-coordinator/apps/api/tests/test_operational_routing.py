@@ -113,7 +113,7 @@ async def test_configured_route_survives_monitor_and_duplicate_dispatch(tmp_path
                 AgentEvent.entity_id == shipment.id,
             )))
             assert {"MonitorAgent", "PredictionAgent"} <= agents
-            assert ("ReroutingAgent" in agents) == reported_delay
+            assert "ReroutingAgent" in agents
             assert shipment.carrier_name == "Sandbox Carrier"
             alert = await CommunicationAgent(db).send_delay_alert(shipment, "Sandbox delay")
             assert alert is not None and alert["notifications_sent"] == 0

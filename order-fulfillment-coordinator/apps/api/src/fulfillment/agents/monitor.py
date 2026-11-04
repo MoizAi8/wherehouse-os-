@@ -39,11 +39,21 @@ class MonitorAgent:
     async def get_active_shipments(
         self, entity_ids: list[str] | None = None, offset: int = 0
     ) -> list[Shipment]:
-        query = select(Shipment).where(_active_shipment())
+        query = select(Order.id).join(Shipment, Shipment.order_id == Order.id).where(_active_shipment())
         if entity_ids:
             query = query.where(Shipment.id.in_(entity_ids))
-        query = query.order_by(Shipment.updated_at.asc()).offset(offset).limit(MAX_SHIPMENTS_PER_CYCLE)
-        result = await self.db.execute(query)
+        query = query.order_by(Shipment.last_monitored_at.asc().nullsfirst(), Shipment.id).offset(offset).limit(MAX_SHIPMENTS_PER_CYCLE)
+        # Use the same order lock as dispatch, cancellation and carrier events.
+        # Refresh the shipment in a second statement after waiting for that lock.
+        order_ids = list((await self.db.execute(query.with_for_update(of=Order))).scalars().all())
+        if not order_ids:
+            return []
+        refreshed = select(Shipment).where(Shipment.order_id.in_(order_ids), _active_shipment())
+        if entity_ids:
+            refreshed = refreshed.where(Shipment.id.in_(entity_ids))
+        result = await self.db.execute(refreshed.order_by(
+            Shipment.last_monitored_at.asc().nullsfirst(), Shipment.id,
+        ).limit(MAX_SHIPMENTS_PER_CYCLE).execution_options(populate_existing=True))
         return list(result.scalars().all())
 
     async def count_active_shipments(self, entity_ids: list[str] | None = None) -> int:
@@ -55,6 +65,8 @@ class MonitorAgent:
 
     async def check_delay(self, shipment: Shipment) -> dict:
         now = datetime.now(timezone.utc)
+        # Rotate bounded batches without pretending a carrier supplied a new event.
+        shipment.last_monitored_at = now
         is_delayed = False
         reason = None
         risk_score = 0.0

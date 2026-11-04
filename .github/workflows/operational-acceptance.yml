@@ -81,6 +81,20 @@ jobs:
           export WAREHOUSE_INVENTORY_TEST_DATABASE="${DATABASE_URL%/*}/inventory_test"
           DATABASE_URL="$WAREHOUSE_INVENTORY_TEST_DATABASE" uv run --no-sync alembic upgrade head
           env -u DATABASE_URL uv run --no-sync pytest -q tests --junitxml="$WAREHOUSE_ACCEPTANCE_OUTPUT/backend-regression.xml"
+      - name: 500 PostgreSQL warehouse scenarios with real prefork worker
+        working-directory: order-fulfillment-coordinator/apps/api
+        env:
+          DATABASE_URL: postgresql+asyncpg://acceptance:disposable-acceptance-password@127.0.0.1:55471/matrix_acceptance
+          CELERY_BROKER_URL: redis://127.0.0.1:56379/11
+          CELERY_RESULT_BACKEND: redis://127.0.0.1:56379/12
+          ALLOW_AUTOMATIC_REROUTING: "false"
+        run: |
+          (cd ../.. && docker compose exec -T postgres createdb -U acceptance matrix_acceptance)
+          uv run --no-sync alembic upgrade head
+          uv run --no-sync celery -A fulfillment.tasks.monitor_cycle worker --pool=prefork --concurrency=2 -Q monitoring -n matrix@localhost -l WARNING > "$RUNNER_TEMP/warehouse-evidence/matrix-worker.log" 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid"; wait "$worker_pid" || true' EXIT
+          uv run --no-sync pytest -q tests/verify_operational_matrix.py --junitxml="$RUNNER_TEMP/warehouse-evidence/warehouse-matrix.xml" -o junit_family=legacy
       - name: Capture container evidence
         if: always()
         run: |

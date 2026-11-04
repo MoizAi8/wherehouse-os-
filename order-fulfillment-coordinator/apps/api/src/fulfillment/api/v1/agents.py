@@ -10,6 +10,7 @@ from fulfillment.models.agent_event import AgentEvent
 from sqlalchemy import select
 from fulfillment.schemas.agent import MonitorRequest, MonitorResponse
 from fulfillment.agents.orchestrator import FulfillmentOrchestrator
+from fulfillment.services.agent_runtime import agent_runtime_status
 
 router = APIRouter()
 
@@ -21,7 +22,7 @@ async def agent_status(db: AsyncSession = Depends(get_db), _user=Depends(get_cur
         AgentEvent.agent_name == "FulfillmentOrchestrator", AgentEvent.event_type == "cycle_complete"
     ).order_by(AgentEvent.created_at.desc()).limit(1))
     details = json.loads(event.details_json or "{}") if event else {}
-    return {"recorded": event is not None, "cycle_id": event.entity_id if event else "",
+    return {"agents": await agent_runtime_status(db), "recorded": event is not None, "cycle_id": event.entity_id if event else "",
         "completed_at": event.created_at if event else None, "events": [],
         **{key: int(details.get(key, 0)) for key in ("shipments_checked", "delays_detected",
             "reroutes_initiated", "notifications_sent", "anomalies_found")}}

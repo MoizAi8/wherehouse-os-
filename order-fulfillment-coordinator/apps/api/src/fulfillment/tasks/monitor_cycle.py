@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import json
+from datetime import datetime, timezone
 
 from celery import Celery
 from celery.signals import worker_ready, worker_shutdown, task_failure, task_retry
@@ -12,7 +14,7 @@ from fulfillment.database import async_session_factory, engine
 from fulfillment.agents.orchestrator import FulfillmentOrchestrator
 from fulfillment.agents.communication import deliver_due_notifications
 from fulfillment.logging_config import log_agent_event, setup_logging
-from fulfillment.models.agent_event import MonitorTaskResult
+from fulfillment.models.agent_event import AgentEvent, MonitorTaskResult
 
 logger = logging.getLogger(__name__)
 
@@ -102,8 +104,31 @@ def on_worker_shutdown(**kwargs):
     logger.info("Celery worker shutting down: %s", kwargs.get("sender"))
 
 @task_failure.connect
-def on_task_failure(sender=None, exception=None, **kwargs):
+def on_task_failure(sender=None, exception=None, task_id=None, **kwargs):
     logger.error("Task %s failed: %s", sender.name if sender else "unknown", exception)
+    names = {
+        "fulfillment.tasks.monitor_cycle.run_monitor_cycle": "FulfillmentOrchestrator",
+        "fulfillment.tasks.monitor_cycle.drain_notification_outbox": "CommunicationAgent",
+    }
+    agent = names.get(sender.name if sender else "")
+    if agent:
+        async def record_failure() -> None:
+            try:
+                async with async_session_factory.begin() as db:
+                    db.add(AgentEvent(
+                        agent_name=agent,
+                        event_type="cycle_failed" if agent == "FulfillmentOrchestrator" else "delivery_failed",
+                        entity_id=task_id, summary="Worker task reached terminal failure",
+                        details_json=json.dumps({"task_id": task_id, "error_type": type(exception).__name__}),
+                        created_at=datetime.now(timezone.utc),
+                    ))
+            finally:
+                await engine.dispose()
+        try:
+            asyncio.run(record_failure())
+        except Exception:
+            # A failed database cannot persist evidence; keep the task failed.
+            logger.exception("Could not persist terminal worker failure evidence")
 
 @task_retry.connect
 def on_task_retry(sender=None, reason=None, **kwargs):

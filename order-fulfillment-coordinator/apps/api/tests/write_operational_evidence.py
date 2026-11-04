@@ -18,6 +18,7 @@ for name, conditions, expected in (
     ("exhausted", "Hold the database fault through all retries", "Reach FAILURE with no completion receipt"),
     ("after_exhaustion", "Restore the shipment table and queue a new job", "Complete the new job"),
     ("notification_worker", "Queue a notification intent with provider access disabled in the worker", "Persist one failure without a provider ID"),
+    ("notification_accepted", "Real SDK and queued outbox worker against loopback HTTP sandbox", "Persist provider acceptance once despite duplicate drain tasks"),
     ("redis_restart", "Restart the isolated Redis container", "Existing worker reconnects and completes a new job"),
 ):
     result = worker.get(name)
@@ -45,6 +46,20 @@ if test_file.exists():
             "expected": "All asserted business transitions and persisted results match the fixture",
             "actual": "Assertions passed" if issue is None else issue.attrib.get("message"),
             "evidence": test_file.name, "status": status,
+        })
+matrix_file = directory / "warehouse-matrix.xml"
+if matrix_file.exists():
+    for case in ET.parse(matrix_file).iter("testcase"):
+        if not case.attrib["name"].startswith("test_warehouse_matrix["):
+            continue
+        issue = next((node for node in case if node.tag in {"failure", "error", "skipped"}), None)
+        scenarios.append({
+            "id": case.attrib["name"], "capability": "PostgreSQL warehouse lifecycle matrix",
+            "conditions": case.attrib["name"].partition("[")[2].rstrip("]"),
+            "expected": "Committed order, shipment, reservations and movement ledger reconcile",
+            "actual": {p.attrib["name"]: p.attrib.get("value") for p in case.iter("property")},
+            "status": "PASS" if issue is None else "SKIPPED" if issue.tag == "skipped" else "FAIL",
+            "evidence": matrix_file.name,
         })
 directory.mkdir(parents=True, exist_ok=True)
 (directory / "operational-scenarios.json").write_text(json.dumps(scenarios, indent=2) + "\n")

@@ -6,6 +6,9 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from threading import Thread
+from urllib.parse import urlsplit
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, text
@@ -24,9 +27,10 @@ from fulfillment.tasks import celery_app, run_monitor_cycle
 from fulfillment.tasks.monitor_cycle import drain_notification_outbox
 
 database = make_url(os.environ["DATABASE_URL"])
-assert (database.drivername, database.host, database.port, database.database) == (
-    "postgresql+asyncpg", "127.0.0.1", 55471, "worker_acceptance",
+assert (database.drivername, database.host, database.port) == (
+    "postgresql+asyncpg", "127.0.0.1", 55471,
 )
+assert database.database in {"worker_acceptance", "worker_release_acceptance"}
 assert os.environ["CELERY_BROKER_URL"] == "redis://127.0.0.1:56379/13"
 assert os.environ["CELERY_RESULT_BACKEND"] == "redis://127.0.0.1:56379/14"
 celery_app.conf.update(
@@ -38,6 +42,18 @@ artifact = Path(os.environ["WAREHOUSE_ACCEPTANCE_OUTPUT"]).resolve()
 artifact.mkdir(parents=True, exist_ok=True)
 
 if len(sys.argv) > 1 and sys.argv[1] == "worker":
+    sandbox_url = os.environ.get("WAREHOUSE_NOTIFICATION_SANDBOX")
+    if sandbox_url:
+        assert urlsplit(sandbox_url).hostname == "127.0.0.1"
+        from sendgrid import SendGridAPIClient
+        original_init = SendGridAPIClient.__init__
+
+        def local_sendgrid(self, *, api_key):
+            original_init(self, api_key=api_key, host=sandbox_url)
+
+        SendGridAPIClient.__init__ = local_sendgrid
+        settings.sendgrid_api_key = "sandbox-only"
+        settings.sendgrid_from_email = "sender@example.com"
     pool = "solo" if os.name == "nt" else "prefork"
     celery_app.worker_main(["worker", f"--pool={pool}", "--concurrency=2", "-Q", "monitoring", "-l", "INFO", "-n", "warehouse-recovery@localhost"])
     sys.exit()
@@ -184,6 +200,59 @@ async def main():
                 "task_id": delivery.id, "notification_id": notification_id, "status": "failed",
             }
 
+            # An external HTTP sandbox replaces only the provider, not the agent,
+            # outbox transaction, SDK, Redis broker or worker execution.
+            requests = []
+
+            class SandboxProvider(BaseHTTPRequestHandler):
+                def do_POST(self):
+                    assert self.path == "/v3/mail/send"
+                    requests.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                    self.send_response(202)
+                    self.send_header("X-Message-Id", "sandbox-accepted")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+
+                def log_message(self, *_args):
+                    pass
+
+            server = ThreadingHTTPServer(("127.0.0.1", 0), SandboxProvider)
+            server_thread = Thread(target=server.serve_forever, daemon=True)
+            server_thread.start()
+            worker.terminate()
+            worker.wait(timeout=10)
+            os.environ["WAREHOUSE_NOTIFICATION_SANDBOX"] = f"http://127.0.0.1:{server.server_port}"
+            worker = start(second)
+            try:
+                await seed()
+                async with async_session_factory.begin() as db:
+                    shipment = await db.scalar(select(Shipment).order_by(Shipment.created_at.desc()).limit(1))
+                    settings.sendgrid_api_key = "sandbox-only"
+                    try:
+                        notice = await CommunicationAgent(db).send_delay_alert(shipment, "Sandbox weather")
+                    finally:
+                        settings.sendgrid_api_key = ""
+                    assert notice and notice["notifications_queued"] == 1
+                    accepted_id = notice["channels"][0]["notification_id"]
+                accepted = drain_notification_outbox.delay()
+                await wait_for(accepted, {"SUCCESS"}, 45)
+                duplicate_delivery = drain_notification_outbox.delay()
+                await wait_for(duplicate_delivery, {"SUCCESS"}, 30)
+                async with async_session_factory() as db:
+                    stored = await db.get(Notification, accepted_id)
+                    assert stored.status == "sent" and stored.delivery_attempts == 1
+                    assert stored.provider_message_id == "sandbox-accepted"
+                assert len(requests) == 1
+                evidence["notification_accepted"] = {
+                    "task_id": accepted.id, "notification_id": accepted_id,
+                    "status": "provider_accepted", "external_provider": "loopback sandbox",
+                    "duplicate_task_id": duplicate_delivery.id, "http_requests": len(requests),
+                }
+            finally:
+                server.shutdown()
+                server.server_close()
+                server_thread.join(timeout=5)
+
             redis_container = os.environ.get("WAREHOUSE_ACCEPTANCE_REDIS_CONTAINER")
             if redis_container:
                 labels = subprocess.check_output([
@@ -201,9 +270,17 @@ async def main():
             async with async_session_factory() as db:
                 for result in (duplicate, retry, recovery):
                     rows = list(await db.scalars(select(AgentEvent).where(AgentEvent.entity_id == result.result["cycle_id"])))
-                    assert {row.agent_name for row in rows} == {"CostOptimizer", "FulfillmentOrchestrator"}
-                    assert len(rows) == 2
+                    assert {row.agent_name for row in rows} == {"MonitorAgent", "CostOptimizer", "FulfillmentOrchestrator"}
+                    assert len(rows) == 3
                 evidence["persisted_agents"] = sorted(set(await db.scalars(select(AgentEvent.agent_name))))
+                evidence["agent_executions"] = []
+                for name in evidence["persisted_agents"]:
+                    event = await db.scalar(select(AgentEvent).where(AgentEvent.agent_name == name).order_by(AgentEvent.created_at.desc()).limit(1))
+                    evidence["agent_executions"].append({
+                        "agent": name, "event_id": event.id, "entity_id": event.entity_id,
+                        "event_type": event.event_type, "timestamp": event.created_at.isoformat(),
+                        "result": json.loads(event.details_json or "{}"),
+                    })
         finally:
             (artifact / "warehouse-celery-evidence.json").write_text(json.dumps(evidence, indent=2))
             if worker.poll() is None:

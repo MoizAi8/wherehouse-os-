@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
-from uuid import uuid4
+from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.config import settings
 from fulfillment.models.carrier_rate import CarrierRate
-from fulfillment.models.shipment import Shipment, ShipmentStatus
+from fulfillment.models.shipment import Shipment
+from fulfillment.schemas.shipment import ShipmentRerouteRequest
+from fulfillment.services.shipment_service import ShipmentService
 from fulfillment.guardrails.carrier_diversity import carrier_diversity
 
 logger = logging.getLogger(__name__)
@@ -87,24 +88,19 @@ class ReroutingAgent:
         if not reroute_data.get("should_reroute"):
             return None
 
-        new_tracking = f"TRK-{uuid4().hex[:12].upper()}"
-        previous_carrier = shipment.carrier_name
-
-        shipment.carrier_name = reroute_data["alternative_carrier"]
-        shipment.tracking_number = new_tracking
-        shipment.status = ShipmentStatus.LABEL_CREATED
-        shipment.is_delayed = False
-        shipment.delay_reason = None
-        shipment.shipping_cost = reroute_data["new_cost"]
-        shipment.estimated_delivery = datetime.now(timezone.utc) + timedelta(days=reroute_data["estimated_days_max"])
-        shipment.last_polled_at = None
-        shipment.carrier_event_at = None
-        shipment.carrier_event_hash = None
-
+        # Reuse the order lock, dispatch guards, current quote validation and
+        # order/shipment synchronization used by the operator workflow.
+        previous_cost = shipment.shipping_cost
+        result = await ShipmentService(self.db).reroute_shipment(
+            shipment.id, ShipmentRerouteRequest(
+                new_carrier_name=reroute_data["alternative_carrier"],
+                reason="Automatic reroute under configured policy",
+            ),
+        )
         return {
-            "previous_carrier": previous_carrier,
-            "new_carrier": reroute_data["alternative_carrier"],
-            "new_tracking": new_tracking,
-            "new_cost": reroute_data["new_cost"],
-            "previous_cost": reroute_data["current_cost"],
+            "previous_carrier": result.previous_carrier,
+            "new_carrier": result.new_carrier,
+            "new_tracking": result.new_tracking_number,
+            "new_cost": shipment.shipping_cost,
+            "previous_cost": previous_cost,
         }

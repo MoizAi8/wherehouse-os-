@@ -5,23 +5,26 @@ import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { CheckCircle, AlertTriangle, PauseCircle, Loader2 } from "lucide-react"
 
+import type { AgentRuntimeStatus } from "@/hooks/use-agents"
+
 interface Agent {
-  id: string; name: string; role: string; status: "active" | "idle" | "error" | "processing" | "unknown"
+  id: string; name: string; role: string; status: AgentRuntimeStatus; evidence?: string
   uptime: string; tasksCompleted: number; workload: number | null; accuracy: number | null
 }
 
 interface AgentCardProps { agent: Agent; index: number; onSelect?: (agent: { name: string; role: string }) => void }
 
 const statusConfig: Record<string, { icon: React.ElementType; color: string; bg: string; spin?: boolean }> = {
-  active: { icon: CheckCircle, color: "text-accent", bg: "bg-accent/8" },
-  idle: { icon: PauseCircle, color: "text-muted-foreground", bg: "bg-muted/30" },
-  error: { icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/8" },
-  processing: { icon: Loader2, color: "text-info", bg: "bg-info/8", spin: true },
-  unknown: { icon: PauseCircle, color: "text-muted-foreground", bg: "bg-muted/30" },
+  READY: { icon: CheckCircle, color: "text-accent", bg: "bg-accent/8" },
+  IDLE: { icon: PauseCircle, color: "text-muted-foreground", bg: "bg-muted/30" },
+  FAILED: { icon: AlertTriangle, color: "text-destructive", bg: "bg-destructive/8" },
+  RUNNING: { icon: Loader2, color: "text-info", bg: "bg-info/8", spin: true },
+  UNAVAILABLE: { icon: AlertTriangle, color: "text-muted-foreground", bg: "bg-muted/30" },
+  UNVERIFIED: { icon: PauseCircle, color: "text-muted-foreground", bg: "bg-muted/30" },
 }
 
 export function AgentCard({ agent, index, onSelect }: AgentCardProps) {
-  const cfg = statusConfig[agent.status]
+  const cfg = statusConfig[agent.status] ?? statusConfig.UNVERIFIED
 
   return (
     <motion.div
@@ -37,7 +40,7 @@ export function AgentCard({ agent, index, onSelect }: AgentCardProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground truncate">{agent.name}</h3>
-          <span className={cn("text-[10px] font-medium uppercase tracking-wider", cfg.color)}>{agent.status === "unknown" ? "unverified" : agent.status}</span>
+          <span title={agent.evidence} className={cn("text-[10px] font-medium uppercase tracking-wider", cfg.color)}>{agent.status.toLowerCase()}</span>
         </div>
         <p className="text-xs text-muted-foreground truncate">{agent.role}</p>
       </div>

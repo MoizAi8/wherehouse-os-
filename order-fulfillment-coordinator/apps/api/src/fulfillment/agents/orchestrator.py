@@ -84,6 +84,8 @@ class FulfillmentOrchestrator:
 
         checked = len(shipments)  # type: ignore[arg-type]
 
+        await self._log_event("MonitorAgent", "scan_complete", cycle_id, {"shipments_checked": checked})
+
         for shipment in shipments:  # type: ignore[union-attr]
             try:
                 delay_result = await with_retry(
@@ -100,6 +102,7 @@ class FulfillmentOrchestrator:
                     details={"error": str(exc)},
                     level=logging.ERROR
                 )
+                await self._log_event("MonitorAgent", "delay_check_failed", shipment.id, {"error": type(exc).__name__})
                 anomalies += 1
                 continue
 
@@ -136,9 +139,12 @@ class FulfillmentOrchestrator:
                         details={"error": str(exc)},
                         level=logging.ERROR
                     )
+                    await self._log_event("ReroutingAgent", "evaluate_failed", shipment.id, {"error": type(exc).__name__})
                     anomalies += 1
-                    continue
+                    reroute_result = {"should_reroute": False, "error": type(exc).__name__}
 
+                if "error" not in cast(dict, reroute_result):
+                    await self._log_event("ReroutingAgent", "reroute_evaluated", shipment.id, reroute_result)
                 if reroute_result["should_reroute"]:
                     if not settings.allow_automatic_rerouting:
                         recommendation = {
@@ -167,28 +173,8 @@ class FulfillmentOrchestrator:
                                     "shipment_id": shipment.id,
                                     "detail": executed,
                                 })
-                                if await notification_frequency(shipment.order_id, self.db):
-                                    try:
-                                        notif_result = await with_retry(
-                                            lambda: _communication_breaker.call(self.communication.send_delay_alert, shipment=shipment, delay_reason=delay_result.get("reason", "Unknown")),
-                                            max_retries=2,
-                                            retry_exceptions=(Exception,),
-                                        )  # type: ignore[assignment]
-                                        if notif_result:
-                                            sent = notif_result["notifications_sent"]
-                                            notifications += sent
-                                            events.append({
-                                                "type": (
-                                                    "notification_sent" if sent else "notification_queued"
-                                                    if notif_result.get("notifications_queued") else "notification_not_sent"
-                                                ),
-                                                "shipment_id": shipment.id,
-                                                "detail": notif_result,
-                                            })
-                                    except Exception as exc:
-                                        logger.error("Notification failed for shipment %s: %s", shipment.id, exc)
-                                        anomalies += 1
                         except Exception as exc:
+                            await self._log_event("ReroutingAgent", "execute_failed", shipment.id, {"error": type(exc).__name__})
                             logger.error("Reroute execution failed for shipment %s: %s", shipment.id, exc)
                             log_agent_event(
                                 "ReroutingAgent",
@@ -198,6 +184,28 @@ class FulfillmentOrchestrator:
                                 level=logging.ERROR
                             )
                             anomalies += 1
+
+                if await notification_frequency(shipment.order_id, self.db):
+                    try:
+                        notif_result = await with_retry(
+                            lambda: _communication_breaker.call(self.communication.send_delay_alert, shipment=shipment, delay_reason=delay_result.get("reason", "Unknown")),
+                            max_retries=2,
+                            retry_exceptions=(Exception,),
+                        )  # type: ignore[assignment]
+                        if notif_result:
+                            sent = notif_result["notifications_sent"]
+                            notifications += sent
+                            events.append({
+                                "type": (
+                                    "notification_sent" if sent else "notification_queued"
+                                    if notif_result.get("notifications_queued") else "notification_not_sent"
+                                ),
+                                "shipment_id": shipment.id,
+                                "detail": notif_result,
+                            })
+                    except Exception as exc:
+                        await self._log_event("CommunicationAgent", "delivery_failed", shipment.id, {"error": type(exc).__name__})
+                        anomalies += 1
 
                 try:
                     pred = await with_retry(
@@ -214,6 +222,8 @@ class FulfillmentOrchestrator:
                         })
                     await self._log_event("PredictionAgent", "failure_prediction", shipment.id, pred)
                 except Exception as exc:
+                    await self._log_event("PredictionAgent", "prediction_failed", shipment.id, {"error": type(exc).__name__})
+                    anomalies += 1
                     logger.error("Prediction failed for shipment %s: %s", shipment.id, exc)
                     log_agent_event(
                         "PredictionAgent",
@@ -235,6 +245,8 @@ class FulfillmentOrchestrator:
                 await self._log_event("CostOptimizer", "cost_analysis", cycle_id, analysis)
                 events.append({"type": "cost_analysis", "detail": analysis})
         except Exception as exc:
+            await self._log_event("CostOptimizer", "analysis_failed", cycle_id, {"error": type(exc).__name__})
+            anomalies += 1
             logger.error("Cost analysis failed for cycle %s: %s", cycle_id, exc)
             log_agent_event(
                 "CostOptimizer",
@@ -274,6 +286,7 @@ class FulfillmentOrchestrator:
     ) -> None:
         event = AgentEvent(
             id=str(uuid4()),
+            created_at=datetime.now(timezone.utc),
             agent_name=agent_name,
             event_type=event_type,
             entity_id=entity_id,

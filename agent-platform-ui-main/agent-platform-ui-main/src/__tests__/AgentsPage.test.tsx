@@ -55,6 +55,17 @@ describe("Category 3: Agents Page", () => {
     expect(screen.getByLabelText("Loading agents")).toBeInTheDocument()
   })
 
+  it("Displays individual backend evidence without inferring other agents", () => {
+    mockMonitor.mockReturnValue({ data: { agents: [
+      { name: "RoutingAgent", status: "IDLE", reason: "Completed route" },
+      { name: "CommunicationAgent", status: "FAILED", reason: "Provider rejected" },
+    ] }, loading: false, error: null, refetch: vi.fn() })
+    render(<AgentsPage />)
+    expect(screen.getByText("idle")).toHaveAttribute("title", "Completed route")
+    expect(screen.getByText("failed")).toHaveAttribute("title", "Provider rejected")
+    expect(screen.getAllByText("unverified")).toHaveLength(5)
+  })
+
   it("Test 21: Error handling renders error display", () => {
     mockMonitor.mockReturnValue({ data: null, loading: false, error: "Backend unreachable", refetch: vi.fn() })
     render(<AgentsPage />)
