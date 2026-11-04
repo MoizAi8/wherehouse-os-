@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.api.deps import get_current_user, get_db, require_operator_or_admin
 from fulfillment.models.user import User
+from fulfillment.schemas.inventory import ReservationTransition
 from fulfillment.schemas.order import (
     OrderCreate,
+    OrderLineRead,
     OrderListResponse,
     OrderRead,
     OrderRouteRequest,
@@ -44,11 +46,13 @@ async def list_orders(
 async def create_order(
     payload: OrderCreate,
     db: DbDep,
-    _user: MutateDep,
+    user: MutateDep,
 ) -> OrderRead:
     service = OrderService(db)
     try:
-        return await service.create_order(payload)
+        return await service.create_order(payload, actor_id=user.id)
+    except InventoryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except IntegrityError as exc:
         original = exc.orig
         postgres = getattr(original, "__cause__", None)
@@ -71,6 +75,14 @@ async def get_order(
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     return order
+
+
+@router.get("/{order_id}/lines", response_model=list[OrderLineRead])
+async def list_order_lines(order_id: str, db: DbDep, _user: UserDep) -> list[OrderLineRead]:
+    service = OrderService(db)
+    if await service.get_order(order_id) is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return await service.list_lines(order_id)
 
 
 @router.patch("/{order_id}", response_model=OrderRead)
@@ -109,7 +121,7 @@ async def delete_order(
 async def route_order(
     order_id: str,
     db: DbDep,
-    _user: MutateDep,
+    user: MutateDep,
     payload: OrderRouteRequest | None = None,
 ) -> OrderRouteResponse:
     service = OrderService(db)
@@ -117,6 +129,17 @@ async def route_order(
     if order is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     try:
-        return await service.route_order(order_id, payload)
+        return await service.route_order(order_id, payload, actor_id=user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/{order_id}/dispatch", response_model=OrderRead)
+async def dispatch_order(order_id: str, payload: ReservationTransition, db: DbDep, user: MutateDep) -> OrderRead:
+    try:
+        order = await OrderService(db).dispatch_order(order_id, payload.reason, user.id)
+    except InventoryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if order is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return order

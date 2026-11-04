@@ -55,6 +55,7 @@ class ReservationRead(ReserveStock):
 
     id: str
     stock_id: str
+    order_line_id: str | None
     status: Literal["reserved", "released", "consumed"]
 
 

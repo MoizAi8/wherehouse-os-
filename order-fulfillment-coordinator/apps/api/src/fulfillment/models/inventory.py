@@ -30,6 +30,19 @@ class Stock(Base):
     low_stock_threshold: Mapped[int] = mapped_column(default=0)
 
 
+class OrderLine(Base):
+    __tablename__ = "order_lines"
+    __table_args__ = (
+        UniqueConstraint("order_id", "sku", name="uq_order_lines_sku"),
+        CheckConstraint("quantity > 0", name="ck_order_lines_quantity"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    order_id: Mapped[str] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"))
+    sku: Mapped[str] = mapped_column(ForeignKey("inventory_products.sku"))
+    quantity: Mapped[int]
+
+
 class Reservation(Base):
     __tablename__ = "inventory_reservations"
     __table_args__ = (
@@ -41,6 +54,7 @@ class Reservation(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
     stock_id: Mapped[str] = mapped_column(ForeignKey("inventory_stock.id"))
     order_id: Mapped[str] = mapped_column(ForeignKey("orders.id"), index=True)
+    order_line_id: Mapped[str | None] = mapped_column(ForeignKey("order_lines.id"), unique=True)
     quantity: Mapped[int]
     status: Mapped[str] = mapped_column(String(12), default="reserved")
 

@@ -15,7 +15,8 @@ type Product = { sku: string; name: string }
 type Center = { id: string; name: string }
 type Stock = { id: string; sku: string; center_id: string; on_hand: number; reserved: number; available: number; low_stock: boolean }
 type Movement = { id: string; kind: string; on_hand_delta: number; reserved_delta: number; reason: string; created_at: string }
-type Reservation = { id: string; stock_id: string; quantity: number; status: "reserved" | "released" | "consumed" }
+type Reservation = { id: string; stock_id: string; order_line_id: string | null; quantity: number; status: "reserved" | "released" | "consumed" }
+type OrderLine = { id: string; sku: string; quantity: number; center_id: string | null; reservation_status: string | null }
 type Order = { status: string; tracking_number: string | null }
 
 function Field({ title, children }: { title: string; children: ReactElement<{ id?: string }> }) {
@@ -30,6 +31,8 @@ function InventoryWorkspace() {
   const [stockId, setStockId] = useState("")
   const [orderId, setOrderId] = useState("")
   const [lookedUpOrder, setLookedUpOrder] = useState("")
+  const [lineKeys, setLineKeys] = useState<number[]>([])
+  const nextLineKey = useRef(0)
   const [revision, setRevision] = useState(0)
   const [error, setError] = useState("")
   const [busy, setBusy] = useState(false)
@@ -59,6 +62,11 @@ function InventoryWorkspace() {
     orderId: lookedUpOrder,
     record: lookedUpOrder ? await api.get<Order>("/api/v1/orders/" + encodeURIComponent(lookedUpOrder)) : null,
   }), [lookedUpOrder, revision])
+  const lines = useApi(async () => ({
+    orderId: lookedUpOrder,
+    rows: lookedUpOrder ? await api.get<OrderLine[]>("/api/v1/orders/" + encodeURIComponent(lookedUpOrder) + "/lines") : [],
+  }), [lookedUpOrder, revision])
+  const orderLines = lines.data?.orderId === lookedUpOrder ? lines.data.rows : []
   const orderRecord = order.data?.orderId === lookedUpOrder ? order.data.record : null
   const movements = history.data?.stockId === stockId ? history.data.rows : []
   const orderReservations = reservations.data?.orderId === lookedUpOrder ? reservations.data.rows : []
@@ -90,7 +98,7 @@ function InventoryWorkspace() {
     }
   }
 
-  const readError = profile.error || products.error || centers.error || stocks.error || history.error || reservations.error || order.error
+  const readError = profile.error || products.error || centers.error || stocks.error || history.error || reservations.error || order.error || lines.error
   return (
     <div className="space-y-6">
       <div>
@@ -129,13 +137,19 @@ function InventoryWorkspace() {
       </div>}
 
       {canWrite && <form className={panelStyle} onSubmit={event => void submit(event, async data => {
+        const quantities = data.getAll("lineQuantity")
+        const orderLines = data.getAll("lineSku").map((sku, index) => ({
+          sku, quantity: Number(quantities[index]),
+        }))
         const created = await api.post<{ id: string }>("/api/v1/orders", {
-          defer_routing: true, external_order_id: data.get("reference"), customer_email: data.get("email"),
+          defer_routing: orderLines.length === 0, lines: orderLines,
+          external_order_id: data.get("reference"), customer_email: data.get("email"),
           shipping_address: data.get("address"), shipping_zip: data.get("zip"), shipping_city: data.get("city"),
           shipping_state: data.get("state"), shipping_country: data.get("country"), total_weight_kg: Number(data.get("weight")),
         })
         setOrderId(created.id)
         setLookedUpOrder(created.id)
+        setLineKeys([])
       })}>
         <h2 className="font-medium">Create order for allocation</h2>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -148,7 +162,24 @@ function InventoryWorkspace() {
           <Field title="Shipping country"><Input name="country" required defaultValue="US" /></Field>
           <Field title="Total weight (kg)"><Input name="weight" type="number" min={0} step="any" required /></Field>
         </div>
-        <Button disabled={busy}>Create pending order</Button>
+        {lineKeys.map((key, index) => (
+          <div key={key} className="flex flex-wrap items-end gap-2">
+            <Field title={`Line ${index + 1} SKU`}><select name="lineSku" className={selectStyle} required defaultValue="">
+              <option value="" disabled>Select a SKU</option>
+              {products.data?.map(product => <option key={product.sku} value={product.sku}>{product.sku} · {product.name}</option>)}
+            </select></Field>
+            <Field title={`Line ${index + 1} quantity`}><Input name="lineQuantity" type="number" min={1} max={1000000000} required /></Field>
+            <Button type="button" variant="outline" onClick={() => setLineKeys(keys => keys.filter(item => item !== key))}>Remove line {index + 1}</Button>
+          </div>
+        ))}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={busy || lineKeys.length >= 100 || !products.data?.length}
+            onClick={() => {
+              const key = nextLineKey.current++
+              setLineKeys(keys => [...keys, key])
+            }}>Add order line</Button>
+          <Button disabled={busy}>{lineKeys.length ? "Create and allocate order" : "Create pending order"}</Button>
+        </div>
       </form>}
 
       <section className={panelStyle}>
@@ -216,18 +247,40 @@ function InventoryWorkspace() {
         {orderRecord && <p className="text-sm" aria-live="polite">
           Status {orderRecord.status}{orderRecord.tracking_number && ` · Internal tracking ${orderRecord.tracking_number}`}
         </p>}
+        {orderLines.length > 0 && <ul className="space-y-1 text-sm">
+          {orderLines.map(line => <li key={line.id}>
+            {line.sku} · {line.quantity} units · {line.reservation_status ?? "Awaiting allocation"}
+            {line.center_id && ` · ${centers.data?.find(center => center.id === line.center_id)?.name ?? line.center_id}`}
+          </li>)}
+        </ul>}
+        {canWrite && orderLines.length > 0 && orderRecord?.status === "processing" && (
+          <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
+            if (!window.confirm("Record dispatch of every reserved line on this order?")) {
+              event.preventDefault()
+              return
+            }
+            void submit(event, data => api.post("/api/v1/orders/" + encodeURIComponent(lookedUpOrder) + "/dispatch", {
+              reason: data.get("reason"),
+            }))
+          }}>
+            <Field title="Order dispatch reason"><Input name="reason" maxLength={250} required /></Field>
+            <Button disabled={busy}>Record order dispatch</Button>
+          </form>
+        )}
         {lookedUpOrder && !reservations.loading && !reservations.error && !orderReservations.length && <p className="text-sm text-muted-foreground">No reservations found.</p>}
-        {canWrite && orderRecord?.status === "pending" && orderReservations.some(item => item.status === "reserved") && (
+        {canWrite && orderRecord?.status === "pending" && (
+          orderLines.length > 0 || orderReservations.some(item => item.status === "reserved")
+        ) && (
           <form onSubmit={event => void submit(event, async () => {
             await api.post("/api/v1/orders/" + encodeURIComponent(lookedUpOrder) + "/route")
           })}>
-            <Button variant="outline" disabled={busy}>Route allocated order</Button>
+            <Button variant="outline" disabled={busy}>{orderLines.length ? "Retry allocation and routing" : "Route allocated order"}</Button>
           </form>
         )}
         {orderReservations.map(item => (
           <div key={item.id} className="space-y-2 border-t border-border/40 pt-2">
             <p className="text-sm">{stocks.data?.find(row => row.id === item.stock_id)?.sku ?? item.stock_id} · {item.quantity} units · {item.status}</p>
-            {canWrite && item.status === "reserved" && <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
+            {canWrite && !item.order_line_id && item.status === "reserved" && <form className="flex flex-wrap items-end gap-2" onSubmit={event => {
               const button = (event.nativeEvent as SubmitEvent).submitter
               const action = button?.getAttribute("value") === "consume" ? "consume" : "release"
               if (action === "consume" && !window.confirm("Record these reserved units as dispatched?")) {

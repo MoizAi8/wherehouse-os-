@@ -1,25 +1,30 @@
 from __future__ import annotations
 
+import json
 import logging
 from uuid import uuid4
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.agents.routing import RoutingAgent, RoutingError
+from fulfillment.models.agent_event import AgentEvent
 from fulfillment.models.carrier_rate import CarrierRate
-from fulfillment.models.inventory import Reservation
+from fulfillment.models.fulfillment_center import FulfillmentCenter
+from fulfillment.models.inventory import OrderLine, Product, Reservation, Stock
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment
 from fulfillment.schemas.carrier import CarrierRateRequest, CarrierRateResponse
 from fulfillment.schemas.order import (
     OrderCreate,
+    OrderLineRead,
     OrderRead,
     OrderRouteRequest,
     OrderRouteResponse,
     OrderUpdate,
 )
 from fulfillment.schemas.webhook import OrderPlacedWebhook
+from fulfillment.schemas.inventory import ReserveStock
 from fulfillment.services.inventory import InventoryConflict, InventoryService
 
 logger = logging.getLogger(__name__)
@@ -65,7 +70,12 @@ class OrderService:
         result = await self.db.execute(query)
         return result.scalar_one()
 
-    async def create_order(self, payload: OrderCreate) -> OrderRead:
+    async def create_order(self, payload: OrderCreate, *, actor_id: str = "system") -> OrderRead:
+        skus = {line.sku for line in payload.lines}
+        if skus:
+            found = set(await self.db.scalars(select(Product.sku).where(Product.sku.in_(skus))))
+            if missing := skus - found:
+                raise InventoryConflict(f"Unknown inventory SKU: {', '.join(sorted(missing))}")
         order = Order(
             id=str(uuid4()),
             external_order_id=payload.external_order_id,
@@ -77,17 +87,34 @@ class OrderService:
             shipping_state=payload.shipping_state,
             shipping_country=payload.shipping_country,
             items_json=payload.items_json,
-            requires_stock=payload.defer_routing,
+            requires_stock=payload.defer_routing or bool(payload.lines),
             total_weight_kg=payload.total_weight_kg,
             notes=payload.notes,
             status=OrderStatus.PENDING,
         )
         self.db.add(order)
         await self.db.flush()
+        self.db.add_all(
+            OrderLine(order_id=order.id, sku=line.sku, quantity=line.quantity) for line in payload.lines
+        )
+        await self.db.flush()
         await self.db.refresh(order)
         if not payload.defer_routing:
-            await self._try_autonomous_routing(order.id)
+            await self._try_autonomous_routing(order.id, actor_id=actor_id)
         return OrderRead.model_validate(order)
+
+    async def list_lines(self, order_id: str) -> list[OrderLineRead]:
+        rows = await self.db.execute(
+            select(OrderLine, Stock.center_id, Reservation.status)
+            .outerjoin(Reservation, Reservation.order_line_id == OrderLine.id)
+            .outerjoin(Stock, Stock.id == Reservation.stock_id)
+            .where(OrderLine.order_id == order_id).order_by(OrderLine.sku)
+        )
+        return [
+            OrderLineRead(id=line.id, sku=line.sku, quantity=line.quantity,
+                          center_id=center, reservation_status=status)
+            for line, center, status in rows
+        ]
 
     async def get_order(self, order_id: str) -> OrderRead | None:
         result = await self.db.execute(select(Order).where(Order.id == order_id))
@@ -104,6 +131,19 @@ class OrderService:
         update_data = payload.model_dump(exclude_unset=True)
         if not update_data:
             return OrderRead.model_validate(order)
+        if await self.db.scalar(select(OrderLine.id).where(OrderLine.order_id == order_id).limit(1)):
+            if "items_json" in update_data:
+                raise InventoryConflict("Typed order lines are immutable")
+            route_fields = {
+                "shipping_address", "shipping_zip", "shipping_city", "shipping_state",
+                "shipping_country", "total_weight_kg",
+            }
+            if order.status != OrderStatus.PENDING and route_fields.intersection(update_data):
+                raise InventoryConflict("Routed order shipping details require reconciliation")
+            if "status" in update_data and payload.status != order.status and not (
+                order.status == OrderStatus.PENDING and payload.status == OrderStatus.CANCELLED
+            ):
+                raise InventoryConflict("Use a fulfillment operation to change this order status")
         if payload.status == OrderStatus.CANCELLED and await self.db.scalar(
             select(Reservation.id).where(
                 Reservation.order_id == order.id, Reservation.status != "released",
@@ -121,6 +161,8 @@ class OrderService:
         order = result.scalar_one_or_none()
         if order is None:
             return False
+        if await self.db.scalar(select(OrderLine.id).where(OrderLine.order_id == order_id).limit(1)):
+            raise InventoryConflict("Cancel typed orders to retain their line history")
         if await self.db.scalar(select(Reservation.id).where(Reservation.order_id == order_id).limit(1)):
             raise InventoryConflict("Orders with inventory history cannot be deleted")
         await self.db.delete(order)
@@ -131,6 +173,8 @@ class OrderService:
         self,
         order_id: str,
         payload: OrderRouteRequest | None = None,
+        *,
+        actor_id: str = "system",
     ) -> OrderRouteResponse:
         result = await self.db.execute(select(Order).where(Order.id == order_id).with_for_update())
         order = result.scalar_one_or_none()
@@ -142,13 +186,17 @@ class OrderService:
             raise ValueError("Order is already routed")
         if order.status != OrderStatus.PENDING:
             raise ValueError("Only pending orders can be routed")
-        center_id = await InventoryService(self.db).active_center(order.id)
-        if order.requires_stock and center_id is None:
-            raise ValueError("Reserve inventory before routing this order")
-        try:
-            decision = await RoutingAgent(self.db).route_order(order, payload, center_id=center_id)
-        except RoutingError as exc:
-            raise ValueError(str(exc)) from exc
+        lines = list(await self.db.scalars(select(OrderLine).where(OrderLine.order_id == order_id)))
+        if lines:
+            decision = await self._allocate_and_route(order, lines, payload, actor_id)
+        else:
+            center_id = await InventoryService(self.db).active_center(order.id)
+            if order.requires_stock and center_id is None:
+                raise ValueError("Reserve inventory before routing this order")
+            try:
+                decision = await RoutingAgent(self.db).route_order(order, payload, center_id=center_id)
+            except RoutingError as exc:
+                raise ValueError(str(exc)) from exc
 
         await self.db.flush()
         await self.db.refresh(order)
@@ -167,6 +215,83 @@ class OrderService:
                 "estimated_days": decision["estimated_days"],
             },
         )
+
+    async def _allocate_and_route(
+        self, order: Order, lines: list[OrderLine], payload: OrderRouteRequest | None, actor_id: str,
+    ) -> dict:
+        order_id = order.id
+        candidates = await self.db.execute(
+            select(Stock.center_id, Stock.id, OrderLine)
+            .join(OrderLine, OrderLine.sku == Stock.sku)
+            .join(FulfillmentCenter, FulfillmentCenter.id == Stock.center_id)
+            .where(OrderLine.order_id == order_id, FulfillmentCenter.is_active,
+                   Stock.on_hand - Stock.reserved >= OrderLine.quantity)
+            .order_by(FulfillmentCenter.capacity_pct, Stock.center_id, Stock.id)
+        )
+        by_center: dict[str, list[tuple[str, OrderLine]]] = {}
+        for center_id, stock_id, line in candidates:
+            by_center.setdefault(center_id, []).append((stock_id, line))
+
+        # The SQLite legacy driver does not begin a transaction for a SELECT.
+        # Establish the outer write transaction before opening any savepoint.
+        if self.db.get_bind().dialect.name == "sqlite":
+            await self.db.execute(update(Order).where(Order.id == order_id).values(updated_at=Order.updated_at))
+
+        inventory = InventoryService(self.db)
+        for center_id, allocation in by_center.items():
+            if len(allocation) != len(lines):
+                continue
+            try:
+                async with self.db.begin_nested():
+                    decision = await RoutingAgent(self.db).route_order(order, payload, center_id=center_id)
+                    for stock_id, line in allocation:
+                        await inventory.reserve(
+                            stock_id, ReserveStock(order_id=order_id, quantity=line.quantity), actor_id, line=line,
+                        )
+                return decision
+            except (RoutingError, InventoryConflict):
+                await self.db.refresh(order)
+        raise ValueError("No single fulfillment center has both sufficient inventory and a suitable route")
+
+    async def dispatch_order(self, order_id: str, reason: str, actor_id: str) -> OrderRead | None:
+        order = await self.db.scalar(select(Order).where(Order.id == order_id).with_for_update())
+        if order is None:
+            return None
+        records = (await self.db.execute(
+            select(OrderLine, Reservation, Stock)
+            .outerjoin(Reservation, Reservation.order_line_id == OrderLine.id)
+            .outerjoin(Stock, Stock.id == Reservation.stock_id)
+            .where(OrderLine.order_id == order_id)
+            .order_by(Stock.id)
+        )).all()
+        if not records:
+            raise InventoryConflict("Order-level dispatch requires typed order lines")
+        if order.status in (OrderStatus.SHIPPED, OrderStatus.DELIVERED) and all(
+            reservation is not None and reservation.status == "consumed" for _, reservation, _ in records
+        ):
+            return OrderRead.model_validate(order)
+        if order.status != OrderStatus.PROCESSING or not order.fulfillment_center_id:
+            raise InventoryConflict("Only a routed order can be dispatched")
+        if not all(
+            reservation is not None and stock is not None
+            and reservation.order_id == order_id and reservation.quantity == line.quantity
+            and stock.sku == line.sku and stock.center_id == order.fulfillment_center_id
+            and reservation.status == "reserved"
+            for line, reservation, stock in records
+        ):
+            raise InventoryConflict("The order does not have a complete allocation")
+        inventory = InventoryService(self.db)
+        for _, reservation, _ in records:
+            await inventory.transition(reservation.id, "consumed", reason, actor_id, order_dispatch=True)
+        order.status = OrderStatus.SHIPPED
+        self.db.add(AgentEvent(
+            agent_name="WarehouseOperator", event_type="order_dispatch_recorded", entity_id=order_id,
+            summary="Operator recorded dispatch of all allocated order lines",
+            details_json=json.dumps({"actor_id": actor_id, "line_count": len(records), "reason": reason}),
+        ))
+        await self.db.flush()
+        await self.db.refresh(order)
+        return OrderRead.model_validate(order)
 
     async def get_all_carrier_rates(self) -> list[CarrierRateResponse]:
         result = await self.db.execute(
@@ -188,7 +313,7 @@ class OrderService:
         rates = list(result.scalars().all())
         return [CarrierRateResponse.model_validate(r) for r in rates]
 
-    async def _try_autonomous_routing(self, order_id: str) -> None:
+    async def _try_autonomous_routing(self, order_id: str, *, actor_id: str = "system") -> None:
         """Best-effort autonomous routing for a freshly created order.
 
         The order pipeline (order → FC → carrier → shipment) should progress
@@ -196,7 +321,7 @@ class OrderService:
         rate exists yet the order is left PENDING so order creation can succeed.
         """
         try:
-            await self.route_order(order_id)
+            await self.route_order(order_id, actor_id=actor_id)
             logger.info("Autonomous routing completed for order %s", order_id)
         except ValueError as exc:
             logger.info("Autonomous routing deferred for order %s: %s", order_id, exc)

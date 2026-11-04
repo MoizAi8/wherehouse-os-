@@ -3,11 +3,25 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from fulfillment.schemas.inventory import Quantity, Sku
+
+
+class OrderLineCreate(BaseModel):
+    sku: Sku
+    quantity: Quantity
+
+
+class OrderLineRead(OrderLineCreate):
+    id: str
+    center_id: str | None
+    reservation_status: str | None
 
 
 class OrderCreate(BaseModel):
     defer_routing: bool = False
+    lines: list[OrderLineCreate] = Field(default_factory=list, max_length=100)
     external_order_id: str | None = None
     customer_email: EmailStr
     customer_phone: str | None = None
@@ -19,6 +33,13 @@ class OrderCreate(BaseModel):
     items_json: str = "[]"
     total_weight_kg: float = 0.0
     notes: str | None = None
+
+    @field_validator("lines")
+    @classmethod
+    def validate_unique_skus(cls, lines: list[OrderLineCreate]) -> list[OrderLineCreate]:
+        if len({line.sku for line in lines}) != len(lines):
+            raise ValueError("Each SKU must appear once; combine quantities on one line")
+        return lines
 
     @field_validator("shipping_zip")
     @classmethod

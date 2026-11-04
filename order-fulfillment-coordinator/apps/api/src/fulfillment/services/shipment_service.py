@@ -8,10 +8,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.models.carrier_rate import CarrierRate
+from fulfillment.models.inventory import OrderLine
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment, ShipmentStatus
 from fulfillment.schemas.shipment import ShipmentRead, ShipmentRerouteRequest, ShipmentRerouteResponse
 from fulfillment.schemas.webhook import ShipmentEventWebhook
+from fulfillment.services.inventory import InventoryConflict
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +118,22 @@ class ShipmentService:
         if shipment is None:
             raise ValueError(f"Shipment not found for tracking: {payload.tracking_number}")
 
+        order = await self.db.scalar(select(Order).where(Order.id == shipment.order_id).with_for_update())
+        await self.db.refresh(shipment)
+        if shipment.tracking_number != payload.tracking_number or shipment.carrier_name != payload.carrier:
+            raise InventoryConflict("Shipment route changed before applying the event")
+        if order is not None:
+            if payload.status == "delivered" or order.status == OrderStatus.DELIVERED:
+                typed = await self.db.scalar(select(OrderLine.id).where(OrderLine.order_id == order.id).limit(1))
+                if typed and order.status == OrderStatus.DELIVERED:
+                    if payload.status == "delivered":
+                        return shipment
+                    raise InventoryConflict("Delivered typed shipments cannot return to an earlier state")
+                if payload.status == "delivered":
+                    if typed and order.status != OrderStatus.SHIPPED:
+                        raise InventoryConflict("Record order dispatch before accepting delivery")
+                    order.status = OrderStatus.DELIVERED
+
         shipment.status = ShipmentStatus(payload.status)
         shipment.carrier_status_detail = payload.status_detail
         if payload.estimated_delivery:
@@ -126,12 +144,6 @@ class ShipmentService:
         if payload.status == "delayed":
             shipment.is_delayed = True
             shipment.delay_reason = payload.status_detail
-
-        if payload.status == "delivered":
-            order_result = await self.db.execute(select(Order).where(Order.id == shipment.order_id))
-            order = order_result.scalar_one_or_none()
-            if order is not None:
-                order.status = OrderStatus.DELIVERED
 
         shipment.last_polled_at = datetime.now(timezone.utc)
         await self.db.flush()

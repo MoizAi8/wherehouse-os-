@@ -13,6 +13,7 @@ from fulfillment.config import settings
 from fulfillment.schemas.webhook import OrderPlacedWebhook, ShipmentEventWebhook, WebhookResponse
 from fulfillment.services.order_service import OrderService
 from fulfillment.services.shipment_service import ShipmentService
+from fulfillment.services.inventory import InventoryConflict
 
 logger = logging.getLogger("fulfillment.webhooks")
 
@@ -73,6 +74,8 @@ async def webhook_shipment_event(
             message="Shipment event processed",
             order_id=str(shipment.id),
         )
+    except InventoryConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except Exception as exc:  # pragma: no cover

@@ -1,4 +1,6 @@
 import asyncio
+import hmac
+import json
 import os
 from uuid import uuid4
 
@@ -7,6 +9,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from fulfillment.agents.monitor import MonitorAgent
 from fulfillment.config import settings
 from fulfillment.database import Base, get_db
 from fulfillment.main import app
@@ -14,6 +17,7 @@ from fulfillment.models.carrier_rate import CarrierRate
 from fulfillment.models.fulfillment_center import FulfillmentCenter
 from fulfillment.models.user import User, UserRole
 from fulfillment.security import create_access_token
+from fulfillment.services.inventory import InventoryConflict, InventoryService
 
 
 @pytest.mark.asyncio
@@ -29,6 +33,7 @@ async def test_inventory_order_lifecycle(database, tmp_path, monkeypatch):
     else:
         url = f"sqlite+aiosqlite:///{tmp_path / 'inventory.db'}"
     monkeypatch.setattr(settings, "debug", False)
+    monkeypatch.setattr(settings, "webhook_secret", uuid4().hex)
     engine = create_async_engine(url)
     sessions = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -66,7 +71,10 @@ async def test_inventory_order_lifecycle(database, tmp_path, monkeypatch):
             center_id, other_center_id = center.id, other_center.id
 
         base = "/api/v1/inventory"
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
+        client_address = ("192.0.2.20" if database == "sqlite" else "192.0.2.21", 12345)
+        async with AsyncClient(
+            transport=ASGITransport(app=app, client=client_address), base_url="http://testserver",
+        ) as client:
             product = {"sku": sku, "name": "Packing boxes"}
             assert (await client.get(f"{base}/stock")).status_code == 401
             assert (await client.post(f"{base}/products", headers=viewer_headers, json=product)).status_code == 403
@@ -145,6 +153,106 @@ async def test_inventory_order_lifecycle(database, tmp_path, monkeypatch):
             assert sorted(row["kind"] for row in movement_rows) == ["consume", "receipt", "release", "reserve", "reserve"]
             assert sum(row["on_hand_delta"] for row in movement_rows) == 6
             assert sum(row["reserved_delta"] for row in movement_rows) == 0
+
+            second_sku = f"WRAP-{suffix}"
+            assert (await client.post(f"{base}/products", json={"sku": second_sku, "name": "Packing wrap"})).status_code == 201
+            result = await client.post(f"{base}/stock", json={"sku": second_sku, "center_id": center_id})
+            second_stock = result.json()["id"]
+            assert (await client.post(f"{base}/stock/{second_stock}/movements", json={
+                **receipt, "operation_id": str(uuid4()), "quantity_delta": 6,
+            })).status_code == 200
+
+            lines = [{"sku": sku, "quantity": 3}, {"sku": second_sku, "quantity": 3}]
+            typed = {
+                "customer_email": "typed-test@example.com", "shipping_address": "10 Test St",
+                "shipping_city": "New York", "shipping_state": "NY", "shipping_zip": "10001",
+                "total_weight_kg": 1, "lines": lines,
+            }
+            assert (await client.post("/api/v1/orders", json={**typed, "lines": [lines[0], lines[0]]})).status_code == 422
+            assert (await client.post("/api/v1/orders", json={
+                **typed, "lines": [{"sku": "UNKNOWN", "quantity": 1}],
+            })).status_code == 409
+
+            # Fail on the second line after a real route and a real reservation were staged.
+            reserve = InventoryService.reserve
+            calls = 0
+
+            async def fail_second(self, *args, **kwargs):
+                nonlocal calls
+                calls += 1
+                if calls == 2:
+                    raise InventoryConflict("Injected allocation failure")
+                return await reserve(self, *args, **kwargs)
+
+            with monkeypatch.context() as patch:
+                patch.setattr(InventoryService, "reserve", fail_second)
+                failed = await client.post("/api/v1/orders", json=typed)
+            assert failed.status_code == 201, failed.text
+            pending = failed.json()
+            assert calls == 2 and pending["status"] == "pending" and pending["tracking_number"] is None
+            assert (await client.get(f"{base}/orders/{pending['id']}/reservations")).json() == []
+            assert len((await client.get(f"{path}/movements")).json()) == len(movement_rows)
+
+            operations = [client.post("/api/v1/orders", json=typed) for _ in range(3)]
+            outcomes = await asyncio.gather(*operations) if database == "postgresql" else [
+                await request for request in operations
+            ]
+            assert all(outcome.status_code == 201 for outcome in outcomes), [item.text for item in outcomes]
+            assert sorted(item.json()["status"] for item in outcomes) == ["pending", "processing", "processing"]
+            for outcome in outcomes:
+                item = outcome.json()
+                response = await client.get(f"/api/v1/orders/{item['id']}/lines")
+                persisted = response.json()
+                assert [(line["sku"], line["quantity"]) for line in persisted] == [(sku, 3), (second_sku, 3)]
+                allocated = item["status"] == "processing"
+                assert all(line["center_id"] == (center_id if allocated else None) for line in persisted)
+                assert all(line["reservation_status"] == ("reserved" if allocated else None) for line in persisted)
+            typed_rows = {row["id"]: row for row in (await client.get(f"{base}/stock")).json()}
+            for stock in (stock_id, second_stock):
+                assert (typed_rows[stock]["on_hand"], typed_rows[stock]["reserved"], typed_rows[stock]["available"]) == (6, 6, 0)
+
+            allocated_order = next(item.json() for item in outcomes if item.json()["status"] == "processing")
+            typed_path = f"/api/v1/orders/{allocated_order['id']}"
+            typed_reservations = (await client.get(f"{base}/orders/{allocated_order['id']}/reservations")).json()
+            assert len(typed_reservations) == 2
+            first_line = typed_reservations[0]["id"]
+            for action in ("consume", "release"):
+                assert (await client.post(f"{base}/reservations/{first_line}/{action}", json={
+                    "reason": "Invalid partial transition",
+                })).status_code == 409
+            shipment = next(row for row in (await client.get("/api/v1/shipments")).json()
+                            if row["order_id"] == allocated_order["id"])
+            async with sessions() as db:
+                assert await MonitorAgent(db).count_active_shipments([shipment["id"]]) == 0
+
+            async def shipment_event(status):
+                body = json.dumps({
+                    "tracking_number": shipment["tracking_number"],
+                    "carrier": shipment["carrier_name"], "status": status,
+                }).encode()
+                return await client.post("/api/v1/webhooks/shipment-event", content=body, headers={
+                    "Content-Type": "application/json",
+                    "X-Webhook-Signature": hmac.digest(settings.webhook_secret.encode(), body, "sha256").hex(),
+                })
+
+            assert (await shipment_event("delivered")).status_code == 409
+            dispatches = [
+                client.post(f"{typed_path}/dispatch", json={"reason": "Operator recorded dispatch"})
+                for _ in range(2)
+            ]
+            dispatched = await asyncio.gather(*dispatches) if database == "postgresql" else [
+                await request for request in dispatches
+            ]
+            assert all(item.status_code == 200 and item.json()["status"] == "shipped" for item in dispatched)
+            async with sessions() as db:
+                assert await MonitorAgent(db).count_active_shipments([shipment["id"]]) == 1
+            assert (await shipment_event("delivered")).status_code == 200
+            assert (await shipment_event("delivered")).status_code == 200
+            assert (await shipment_event("in_transit")).status_code == 409
+            assert (await client.get(typed_path)).json()["status"] == "delivered"
+            final = {row["id"]: row for row in (await client.get(f"{base}/stock")).json()}
+            for stock in (stock_id, second_stock):
+                assert (final[stock]["on_hand"], final[stock]["reserved"], final[stock]["available"]) == (3, 3, 0)
     finally:
         if prior_override is None:
             app.dependency_overrides.pop(get_db, None)

@@ -3,14 +3,25 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fulfillment.models.inventory import OrderLine
+from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment, ShipmentStatus
 
 logger = logging.getLogger(__name__)
 
 MAX_SHIPMENTS_PER_CYCLE = 200
+
+
+def _active_shipment() -> ColumnElement[bool]:
+    awaiting_dispatch = (
+        select(Order.id).join(OrderLine, OrderLine.order_id == Order.id)
+        .where(Order.id == Shipment.order_id, Order.status == OrderStatus.PROCESSING)
+        .exists()
+    )
+    return Shipment.status.notin_([ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED]) & ~awaiting_dispatch
 
 
 def _ensure_aware(dt: datetime | None) -> datetime | None:
@@ -26,12 +37,7 @@ class MonitorAgent:
     async def get_active_shipments(
         self, entity_ids: list[str] | None = None, offset: int = 0
     ) -> list[Shipment]:
-        query = select(Shipment).where(
-            Shipment.status.notin_([
-                ShipmentStatus.DELIVERED,
-                ShipmentStatus.RETURNED,
-            ])
-        )
+        query = select(Shipment).where(_active_shipment())
         if entity_ids:
             query = query.where(Shipment.id.in_(entity_ids))
         query = query.order_by(Shipment.updated_at.asc()).offset(offset).limit(MAX_SHIPMENTS_PER_CYCLE)
@@ -39,13 +45,7 @@ class MonitorAgent:
         return list(result.scalars().all())
 
     async def count_active_shipments(self, entity_ids: list[str] | None = None) -> int:
-        from sqlalchemy import func
-        query = select(func.count(Shipment.id)).where(
-            Shipment.status.notin_([
-                ShipmentStatus.DELIVERED,
-                ShipmentStatus.RETURNED,
-            ])
-        )
+        query = select(func.count(Shipment.id)).where(_active_shipment())
         if entity_ids:
             query = query.where(Shipment.id.in_(entity_ids))
         result = await self.db.execute(query)

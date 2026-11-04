@@ -3,7 +3,7 @@ from typing import Literal
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fulfillment.models.inventory import Reservation, Stock, StockMovement
+from fulfillment.models.inventory import OrderLine, Reservation, Stock, StockMovement
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.schemas.inventory import ReserveStock, StockChange
 
@@ -72,11 +72,21 @@ class InventoryService:
         await self.db.refresh(stock)
         return stock
 
-    async def reserve(self, stock_id: str, payload: ReserveStock, actor_id: str) -> Reservation:
+    async def reserve(
+        self, stock_id: str, payload: ReserveStock, actor_id: str, *, line: OrderLine | None = None,
+    ) -> Reservation:
         order = await self.db.scalar(select(Order).where(Order.id == payload.order_id).with_for_update())
         if order is None:
             raise InventoryNotFound("Order not found")
+        if line is None and await self.db.scalar(
+            select(OrderLine.id).where(OrderLine.order_id == order.id).limit(1)
+        ):
+            raise InventoryConflict("Use automatic allocation for orders with typed lines")
         stock = await self._lock_stock(stock_id)
+        if line is not None and (line.order_id, line.sku, line.quantity) != (
+            order.id, stock.sku, payload.quantity,
+        ):
+            raise InventoryConflict("Reservation does not match its order line")
         existing = await self.db.scalar(select(Reservation).where(
             Reservation.stock_id == stock_id, Reservation.order_id == order.id,
         ))
@@ -89,7 +99,10 @@ class InventoryService:
         center_id = order.fulfillment_center_id or await self.active_center(order.id)
         if center_id and center_id != stock.center_id:
             raise InventoryConflict("Stock location differs from the assigned fulfillment center")
-        reservation = Reservation(stock_id=stock_id, order_id=order.id, quantity=payload.quantity)
+        reservation = Reservation(
+            stock_id=stock_id, order_id=order.id, quantity=payload.quantity,
+            order_line_id=line.id if line is not None else None,
+        )
         await self._update_balance(stock_id, 0, payload.quantity)
         self.db.add(reservation)
         await self.db.flush()
@@ -101,7 +114,8 @@ class InventoryService:
         return reservation
 
     async def transition(
-        self, reservation_id: str, target: Literal["released", "consumed"], reason: str, actor_id: str
+        self, reservation_id: str, target: Literal["released", "consumed"], reason: str, actor_id: str,
+        *, order_dispatch: bool = False,
     ) -> Reservation:
         reservation = await self.db.get(Reservation, reservation_id)
         if reservation is None:
@@ -113,6 +127,8 @@ class InventoryService:
         await self.db.refresh(reservation)
         if reservation.status == target:
             return reservation
+        if reservation.order_line_id is not None and not (order_dispatch and target == "consumed"):
+            raise InventoryConflict("Use order-level dispatch for typed reservations")
         if target == "consumed" and order.status not in (
             OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.DELIVERED,
         ):

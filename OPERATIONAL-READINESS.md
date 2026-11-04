@@ -1,5 +1,27 @@
 # Warehouse OS operational readiness audit
 
+## Typed fulfillment checkpoint
+
+**Commercial status remains NOT READY.** Orders with typed SKU lines now attempt automatic allocation and routing when created. Every requested SKU must be stocked in the required quantity at a single eligible center with a configured route. The reservation rows reference the order lines. Allocation, route evidence, shipment, and center capacity change together. Shortages or routing failures leave a pending order with no partial reservations. Operators can retry allocation from Inventory after replenishment. Existing orders without typed lines retain their original behavior.
+
+- Dispatch for a typed order verifies every line against its reservation and consumes all reservations in one transaction. An accepted retry returns the existing dispatched state. Typed reservations cannot be consumed or released individually. The operator's dispatch record advances the order to shipped and records an audit event. Carrier delivery still requires an authenticated shipment event, and that event cannot complete an order before dispatch.
+- A routed typed shipment enters monitoring only after operator dispatch. Manual status patches on typed orders are restricted to cancelling a pending order. Routed cancellation, return-to-stock reconciliation, external shipment booking and full carrier event ordering remain open.
+- Migration `c8e2401a52df` adds order lines and an optional reservation link. Existing orders require no backfill. The migration guards against destructive downgrade when typed lines exist.
+- Development Compose now starts the Celery binary included in the runtime image, consumes the monitoring queue, uses the project Redis service explicitly, and gives worker and Beat appropriate container health settings. Runtime and restart verification still require a Linux container host.
+
+### Verification sequence
+
+On a disposable Docker host, prepare a local `.env` from `.env.example` with test-only secrets. From `order-fulfillment-coordinator`, run `docker compose -p warehouse-acceptance up -d postgres redis qdrant`, then `docker compose -p warehouse-acceptance run --rm api alembic upgrade head`, and `docker compose -p warehouse-acceptance up -d api celery-worker celery-beat`. Keep this stack separate from business deployments. Connect the existing frontend to the isolated backend. A production-equivalent worker test must capture task IDs, persisted outcomes, and database state across worker interruption and duplicate delivery. A running container alone does not meet that gate.
+
+For the typed workflow, create at least two SKUs with stock and a configured lane at the same center. Use **Add order line** in Inventory and submit exact quantities. Verify that the order shows its persisted lines, reserved quantities, assigned center and internal tracking. Record whole-order dispatch and check the movement ledger. Create an order that exceeds available stock and confirm it stays pending and no stock is reserved.
+
+### Checkpoint evidence
+
+- PostgreSQL 17 and SQLite API workflows passed. On PostgreSQL, three concurrent orders each requested three units of both SKUs, with six of each available. Two allocated and routed, and the third remained pending. A forced failure after the first reservation left no partial reservation or tracking number. Two concurrent dispatch requests consumed each allocated line once. Signed test events could not deliver before dispatch or regress a delivered order.
+- Eight browser checks passed against the real Next.js application, FastAPI, and disposable PostgreSQL. The two added checks covered a typed shortage and automatic allocation through whole-order dispatch. Backend regression passed all 1,228 tests with zero skips. Frontend regression passed 74 tests and 23 built authentication checks. Ruff, mypy, ESLint, TypeScript, and the frontend production build passed.
+- PostgreSQL upgraded and rolled back the typed-line migration on an empty test database. The populated downgrade guard stopped the rollback and left the database at `c8e2401a52df`. Both Compose manifests passed official Compose CLI configuration validation. Configuration validation does not build images or run containers.
+- The next gate is an isolated Linux Docker environment for both builds, real Redis/Celery/Beat execution with populated data, and worker interruption and recovery. Then complete routed cancellation, carrier event ordering, approval and delivery integrations, and representative performance and operational acceptance coverage. The 500-scenario target remains open.
+
 ## Inventory and order allocation milestone
 
 **Commercial status remains NOT READY.** This branch now supports a single-business inventory workflow. The existing admin and operator roles may write inventory. Viewers may read it, and public guest tokens cannot access business inventory.
