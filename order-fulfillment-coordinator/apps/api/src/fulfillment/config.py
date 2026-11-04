@@ -115,6 +115,7 @@ class Settings(BaseSettings):
     celery_result_backend: str = "redis://localhost:6379/0"
 
     max_allowed_cost_increase_pct: float = 40.0
+    allow_automatic_rerouting: bool = False
     max_notifications_per_order: int = 4
     shipment_poll_interval_seconds: int = 900
     failed_delivery_threshold_pct: float = 10.0

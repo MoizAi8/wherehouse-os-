@@ -60,10 +60,14 @@ class MonitorAgent:
         est_delivery = _ensure_aware(shipment.estimated_delivery)
         last_polled = _ensure_aware(shipment.last_polled_at)
 
+        if shipment.status == ShipmentStatus.DELAYED:
+            is_delayed = True
+            reason = shipment.delay_reason or "Shipment status is delayed"
+
         if est_delivery and now > est_delivery:
             diff_hours = (now - est_delivery).total_seconds() / 3600
             is_delayed = True
-            reason = f"Past estimated delivery by {diff_hours:.1f} hours"
+            reason = reason or f"Past estimated delivery by {diff_hours:.1f} hours"
             risk_score = min(diff_hours / 24, 1.0)
 
         if not is_delayed and last_polled:

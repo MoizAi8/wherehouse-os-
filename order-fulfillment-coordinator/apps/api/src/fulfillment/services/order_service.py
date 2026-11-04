@@ -1,16 +1,15 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fulfillment.agents.routing import RoutingAgent, RoutingError
 from fulfillment.models.carrier_rate import CarrierRate
-from fulfillment.models.fulfillment_center import FulfillmentCenter
 from fulfillment.models.order import Order, OrderStatus
-from fulfillment.models.shipment import Shipment, ShipmentStatus
+from fulfillment.models.shipment import Shipment
 from fulfillment.schemas.carrier import CarrierRateRequest, CarrierRateResponse
 from fulfillment.schemas.order import (
     OrderCreate,
@@ -121,79 +120,36 @@ class OrderService:
         order_id: str,
         payload: OrderRouteRequest | None = None,
     ) -> OrderRouteResponse:
-        result = await self.db.execute(select(Order).where(Order.id == order_id))
+        result = await self.db.execute(select(Order).where(Order.id == order_id).with_for_update())
         order = result.scalar_one_or_none()
         if order is None:
             raise ValueError("Order not found")
-
-        fc_result = await self.db.execute(
-            select(FulfillmentCenter)
-            .where(FulfillmentCenter.is_active)
-            .where(FulfillmentCenter.current_daily_orders < FulfillmentCenter.max_daily_orders)
-            .order_by(FulfillmentCenter.capacity_pct.asc())
-            .limit(1)
-        )
-        fc = fc_result.scalar_one_or_none()
-        if fc is None:
-            raise ValueError("No available fulfillment center")
-
-        rate_result = await self.db.execute(
-            select(CarrierRate)
-            .where(CarrierRate.is_active)
-            .where(CarrierRate.origin_zip == fc.zip_code)
-            .where(CarrierRate.destination_zip == order.shipping_zip)
-            .where(CarrierRate.weight_kg_min <= order.total_weight_kg)
-            .where(CarrierRate.weight_kg_max >= order.total_weight_kg)
-            .order_by(CarrierRate.base_rate.asc())
-            .limit(1)
-        )
-        carrier_rate = rate_result.scalar_one_or_none()
-        if carrier_rate is None:
-            raise ValueError("No suitable carrier rate found")
-
-        shipping_cost = carrier_rate.base_rate + (carrier_rate.rate_per_kg * order.total_weight_kg)
-        tracking_number = f"TRK-{uuid4().hex[:12].upper()}"
-        estimated_delivery = datetime.now(timezone.utc)
-
-        order.fulfillment_center_id = fc.id
-        order.carrier_id = carrier_rate.id
-        order.tracking_number = tracking_number
-        order.shipping_cost = shipping_cost
-        order.status = OrderStatus.PROCESSING
-        order.estimated_delivery = estimated_delivery
-
-        shipment = Shipment(
-            id=str(uuid4()),
-            order_id=order.id,
-            carrier_name=carrier_rate.carrier_name,
-            tracking_number=tracking_number,
-            status=ShipmentStatus.LABEL_CREATED,
-            estimated_delivery=estimated_delivery,
-            origin_zip=fc.zip_code,
-            destination_zip=order.shipping_zip,
-            weight_kg=order.total_weight_kg,
-            shipping_cost=shipping_cost,
-        )
-        self.db.add(shipment)
-
-        fc.current_daily_orders += 1
+        if order.tracking_number or await self.db.scalar(
+            select(Shipment.id).where(Shipment.order_id == order_id).limit(1)
+        ):
+            raise ValueError("Order is already routed")
+        if order.status != OrderStatus.PENDING:
+            raise ValueError("Only pending orders can be routed")
+        try:
+            decision = await RoutingAgent(self.db).route_order(order, payload)
+        except RoutingError as exc:
+            raise ValueError(str(exc)) from exc
 
         await self.db.flush()
         await self.db.refresh(order)
-
         return OrderRouteResponse(
             order_id=order.id,
-            fulfillment_center_id=fc.id,
-            carrier_id=carrier_rate.id,
-            carrier_name=carrier_rate.carrier_name,
-            tracking_number=tracking_number,
-            estimated_delivery=estimated_delivery,
-            shipping_cost=shipping_cost,
+            fulfillment_center_id=decision["fulfillment_center"]["id"],
+            carrier_id=decision["carrier"]["id"],
+            carrier_name=decision["carrier"]["name"],
+            tracking_number=decision["tracking_number"],
+            estimated_delivery=order.estimated_delivery,
+            shipping_cost=decision["shipping_cost"],
             route_details={
-                "fulfillment_center": fc.name,
-                "carrier": carrier_rate.carrier_name,
-                "service": carrier_rate.service_name,
-                "estimated_days": f"{carrier_rate.estimated_days_min}-{carrier_rate.estimated_days_max}",
+                "fulfillment_center": decision["fulfillment_center"]["name"],
+                "carrier": decision["carrier"]["name"],
+                "service": decision["carrier"]["service"],
+                "estimated_days": decision["estimated_days"],
             },
         )
 
@@ -222,16 +178,13 @@ class OrderService:
 
         The order pipeline (order → FC → carrier → shipment) should progress
         without a manual kick. If no eligible fulfillment center or carrier
-        rate exists yet the order is left PENDING (fail-open) so order creation
-        never fails because of routing availability.
+        rate exists yet the order is left PENDING so order creation can succeed.
         """
         try:
             await self.route_order(order_id)
             logger.info("Autonomous routing completed for order %s", order_id)
         except ValueError as exc:
             logger.info("Autonomous routing deferred for order %s: %s", order_id, exc)
-        except Exception as exc:
-            logger.warning("Autonomous routing failed for order %s: %s", order_id, exc)
 
     async def create_order_from_webhook(self, payload: OrderPlacedWebhook) -> Order:
         existing = await self.db.execute(

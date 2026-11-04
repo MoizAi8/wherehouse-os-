@@ -349,7 +349,8 @@ class TestCommunication:
             result = await agent.send_delay_alert(shipment, "Weather delay")
 
         assert result is not None
-        assert result["notifications_sent"] == 2
+        assert result["notifications_sent"] == 0
+        assert [channel["status"] for channel in result["channels"]] == ["skipped", "skipped"]
         _current_test["actual"] = json.dumps(result, default=str)
 
 
@@ -946,6 +947,7 @@ class TestMicroservices:
 # ============================================================
 class TestEndToEnd:
     @pytest.mark.asyncio
+    @patch.object(settings, "allow_automatic_rerouting", True)
     async def test_50_end_to_end_workflow(self, mock_db, mock_shipment, mock_result):
         _current_test["input"] = "Full end-to-end autonomous monitor cycle"
         _current_test["expected"] = "All agents coordinate: Monitor -> Reroute -> Communicate -> Predict -> Optimize"

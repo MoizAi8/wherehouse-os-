@@ -41,7 +41,6 @@ class CommunicationAgent:
         )
         sms_body = f"Shipment {shipment.tracking_number} delayed: {delay_reason}"
 
-        sent_count = 0
         results = []
 
         if order.customer_email:
@@ -52,7 +51,6 @@ class CommunicationAgent:
                 shipment=shipment,
             )
             if email_result:
-                sent_count += 1
                 results.append(email_result)
 
         if order.customer_phone:
@@ -62,16 +60,14 @@ class CommunicationAgent:
                 shipment=shipment,
             )
             if sms_result:
-                sent_count += 1
                 results.append(sms_result)
 
-        if sent_count == 0:
-            logger.warning("No notifications sent for shipment %s", shipment.id)
+        if not results:
             return None
 
         return {
             "shipment_id": shipment.id,
-            "notifications_sent": sent_count,
+            "notifications_sent": sum(result["status"] == "sent" for result in results),
             "channels": results,
         }
 
@@ -83,7 +79,7 @@ class CommunicationAgent:
         shipment: Shipment,
     ) -> dict | None:
         if not settings.sendgrid_api_key:
-            logger.info("SendGrid not configured. Email to %s: %s", recipient, subject)
+            logger.info("SendGrid not configured for shipment %s", shipment.id)
             notif = self._create_notification(
                 order_id=shipment.order_id,
                 shipment_id=shipment.id,
@@ -91,8 +87,9 @@ class CommunicationAgent:
                 channel="email",
                 subject=subject,
                 body=body,
+                status="skipped",
             )
-            return {"channel": "email", "recipient": recipient, "notification_id": notif.id}
+            return {"channel": "email", "status": "skipped", "notification_id": notif.id}
 
         try:
             import sendgrid
@@ -106,6 +103,8 @@ class CommunicationAgent:
                 plain_text_content=Content("text/plain", body),
             )
             response = sg.client.mail.send.post(request_body=mail.get())
+            if not 200 <= response.status_code < 300:
+                raise RuntimeError("SendGrid rejected the notification")
             provider_id = str(response.status_code)
             notif = self._create_notification(
                 order_id=shipment.order_id,
@@ -116,9 +115,9 @@ class CommunicationAgent:
                 body=body,
                 provider_id=provider_id,
             )
-            return {"channel": "email", "recipient": recipient, "provider_id": provider_id, "notification_id": notif.id}
+            return {"channel": "email", "status": "sent", "provider_id": provider_id, "notification_id": notif.id}
         except Exception as exc:
-            logger.error("SendGrid email failed to %s: %s", recipient, exc)
+            logger.error("SendGrid failed for shipment %s (%s)", shipment.id, type(exc).__name__)
             notif = self._create_notification(
                 order_id=shipment.order_id,
                 shipment_id=shipment.id,
@@ -128,7 +127,7 @@ class CommunicationAgent:
                 body=body,
                 status="failed",
             )
-            return {"channel": "email", "recipient": recipient, "error": str(exc), "notification_id": notif.id}
+            return {"channel": "email", "status": "failed", "notification_id": notif.id}
 
     async def _send_sms(
         self,
@@ -137,15 +136,16 @@ class CommunicationAgent:
         shipment: Shipment,
     ) -> dict | None:
         if not settings.twilio_account_sid or not settings.twilio_auth_token:
-            logger.info("Twilio not configured. SMS to %s: %s", recipient, body)
+            logger.info("Twilio not configured for shipment %s", shipment.id)
             notif = self._create_notification(
                 order_id=shipment.order_id,
                 shipment_id=shipment.id,
                 recipient=recipient,
                 channel="sms",
                 body=body,
+                status="skipped",
             )
-            return {"channel": "sms", "recipient": recipient, "notification_id": notif.id}
+            return {"channel": "sms", "status": "skipped", "notification_id": notif.id}
 
         try:
             from twilio.rest import Client
@@ -156,6 +156,8 @@ class CommunicationAgent:
                 from_=settings.twilio_phone_number,
                 to=recipient,
             )
+            if message.status in {"failed", "undelivered", "canceled"} or not message.sid:
+                raise RuntimeError("Twilio rejected the notification")
             notif = self._create_notification(
                 order_id=shipment.order_id,
                 shipment_id=shipment.id,
@@ -164,9 +166,9 @@ class CommunicationAgent:
                 body=body,
                 provider_id=message.sid,
             )
-            return {"channel": "sms", "recipient": recipient, "provider_id": message.sid, "notification_id": notif.id}
+            return {"channel": "sms", "status": "sent", "provider_id": message.sid, "notification_id": notif.id}
         except Exception as exc:
-            logger.error("Twilio SMS failed to %s: %s", recipient, exc)
+            logger.error("Twilio failed for shipment %s (%s)", shipment.id, type(exc).__name__)
             notif = self._create_notification(
                 order_id=shipment.order_id,
                 shipment_id=shipment.id,
@@ -175,7 +177,7 @@ class CommunicationAgent:
                 body=body,
                 status="failed",
             )
-            return {"channel": "sms", "recipient": recipient, "error": str(exc), "notification_id": notif.id}
+            return {"channel": "sms", "status": "failed", "notification_id": notif.id}
 
     def _create_notification(
         self,

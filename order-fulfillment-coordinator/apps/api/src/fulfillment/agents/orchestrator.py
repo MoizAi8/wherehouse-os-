@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import Any, TYPE_CHECKING, cast
 from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from fulfillment.agents.rerouting import ReroutingAgent
 from fulfillment.agents.communication import CommunicationAgent
 from fulfillment.agents.prediction import PredictionAgent
 from fulfillment.agents.cost_optimizer import CostOptimizer
+from fulfillment.config import settings
 from fulfillment.schemas.agent import MonitorRequest, MonitorResponse
 from fulfillment.guardrails.sla import sla_compliance
 from fulfillment.guardrails.cost import cost_cap
@@ -139,7 +140,20 @@ class FulfillmentOrchestrator:
                     continue
 
                 if reroute_result["should_reroute"]:
-                    if cost_cap(shipment.shipping_cost or 0, reroute_result.get("new_cost", 0)):
+                    if not settings.allow_automatic_rerouting:
+                        recommendation = {
+                            **cast(dict[str, Any], reroute_result),
+                            "approval_required": True,
+                        }
+                        await self._log_event(
+                            "ReroutingAgent", "reroute_recommended", shipment.id, recommendation,
+                        )
+                        events.append({
+                            "type": "reroute_recommended",
+                            "shipment_id": shipment.id,
+                            "detail": recommendation,
+                        })
+                    elif cost_cap(shipment.shipping_cost or 0, reroute_result.get("new_cost", 0)):
                         try:
                             executed = await with_retry(
                                 lambda: _rerouting_breaker.call(self.rerouting.execute_reroute, shipment, reroute_result),
@@ -161,9 +175,10 @@ class FulfillmentOrchestrator:
                                             retry_exceptions=(Exception,),
                                         )  # type: ignore[assignment]
                                         if notif_result:
-                                            notifications += 1
+                                            sent = notif_result["notifications_sent"]
+                                            notifications += sent
                                             events.append({
-                                                "type": "notification_sent",
+                                                "type": "notification_sent" if sent else "notification_not_sent",
                                                 "shipment_id": shipment.id,
                                                 "detail": notif_result,
                                             })

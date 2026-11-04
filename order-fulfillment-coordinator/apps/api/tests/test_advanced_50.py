@@ -810,6 +810,7 @@ class TestSuite:
         assert results == sorted(results)
 
     @pytest.mark.asyncio
+    @patch.object(settings, "allow_automatic_rerouting", True)
     async def test_complete_workflow_execution(self, mock_db, mock_shipment, mock_result):
         """TEST 49: Entire autonomous workflow succeeds end-to-end."""
         mock_db.execute.return_value = mock_result
