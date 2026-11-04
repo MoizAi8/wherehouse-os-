@@ -72,11 +72,13 @@ jobs:
           WAREHOUSE_ACCEPTANCE_OUTPUT: ${{ runner.temp }}/warehouse-evidence
         run: |
           uv sync --frozen --python 3.12
+          export WAREHOUSE_ACCEPTANCE_REDIS_CONTAINER="$(cd ../.. && docker compose ps -q redis)"
+          test -n "$WAREHOUSE_ACCEPTANCE_REDIS_CONTAINER"
           uv run --no-sync python tests/verify_celery_recovery.py
-          docker compose --project-directory ../.. exec -T postgres createdb -U acceptance inventory_test
+          (cd ../.. && docker compose exec -T postgres createdb -U acceptance inventory_test)
           export WAREHOUSE_INVENTORY_TEST_DATABASE="${DATABASE_URL%/*}/inventory_test"
           DATABASE_URL="$WAREHOUSE_INVENTORY_TEST_DATABASE" uv run --no-sync alembic upgrade head
-          uv run --no-sync pytest -q tests/test_inventory_operations.py tests/test_notification_transport.py tests/test_operational_routing.py --junitxml="$WAREHOUSE_ACCEPTANCE_OUTPUT/warehouse-tests.xml"
+          env -u DATABASE_URL uv run --no-sync pytest -q tests --junitxml="$WAREHOUSE_ACCEPTANCE_OUTPUT/backend-regression.xml"
       - name: Capture container evidence
         if: always()
         run: |

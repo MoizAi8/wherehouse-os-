@@ -178,7 +178,10 @@ class FulfillmentOrchestrator:
                                             sent = notif_result["notifications_sent"]
                                             notifications += sent
                                             events.append({
-                                                "type": "notification_sent" if sent else "notification_not_sent",
+                                                "type": (
+                                                    "notification_sent" if sent else "notification_queued"
+                                                    if notif_result.get("notifications_queued") else "notification_not_sent"
+                                                ),
                                                 "shipment_id": shipment.id,
                                                 "detail": notif_result,
                                             })

@@ -1,4 +1,6 @@
+import asyncio
 import json
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 from urllib.parse import parse_qs, urlsplit
@@ -6,11 +8,12 @@ from uuid import uuid4
 
 import pytest
 from sendgrid import SendGridAPIClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from twilio.http.http_client import TwilioHttpClient
 
-from fulfillment.agents.communication import CommunicationAgent
+from fulfillment.agents.communication import CommunicationAgent, deliver_due_notifications
+from fulfillment.agents import communication
 from fulfillment.config import settings
 from fulfillment.database import Base
 from fulfillment.models.notification import Notification
@@ -19,7 +22,7 @@ from fulfillment.models.shipment import Shipment, ShipmentStatus
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("provider_status", ["accepted", "rejected"])
+@pytest.mark.parametrize("provider_status", ["accepted", "rejected", "rate_limited", "ambiguous", "crash"])
 async def test_notification_sdk_contract(tmp_path, monkeypatch, provider_status):
     requests = []
 
@@ -28,11 +31,14 @@ async def test_notification_sdk_contract(tmp_path, monkeypatch, provider_status)
             payload = self.rfile.read(int(self.headers["Content-Length"])).decode()
             requests.append((self.path, self.headers["Authorization"], payload))
             email = self.path == "/v3/mail/send"
-            if provider_status == "accepted":
+            if provider_status in {"accepted", "crash"}:
                 status = 202 if email else 201
                 body = {} if email else {"sid": "SM" + "1" * 32, "status": "queued"}
-            else:
+            elif provider_status == "rejected":
                 status, body = 400, {"message": "Sandbox rejection", "code": 21614}
+            else:
+                status = 429 if provider_status == "rate_limited" else 503
+                body = {"message": "Sandbox unavailable"}
             response = json.dumps(body).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json")
@@ -81,16 +87,56 @@ async def test_notification_sdk_contract(tmp_path, monkeypatch, provider_status)
             await db.flush()
             result = await CommunicationAgent(db).send_delay_alert(shipment, "weather")
             assert result is not None
-            assert result["notifications_sent"] == (2 if provider_status == "accepted" else 0)
+            assert result["notifications_queued"] == 2
+            assert result["notifications_sent"] == 0
+            assert await CommunicationAgent(db).send_delay_alert(shipment, "weather") is None
+            assert requests == []
+        if provider_status == "crash":
+            submit = communication._submit_notice
+
+            async def interrupt_after_provider(notice):
+                await submit(notice)
+                raise asyncio.CancelledError
+
+            with monkeypatch.context() as patch:
+                patch.setattr(communication, "_submit_notice", interrupt_after_provider)
+                with pytest.raises(asyncio.CancelledError):
+                    await deliver_due_notifications(sessions)
+            async with sessions.begin() as db:
+                await db.execute(update(Notification).where(Notification.status == "sending").values(
+                    delivery_due_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+                ))
+            assert await deliver_due_notifications(sessions) == 1
+        else:
+            assert await deliver_due_notifications(sessions) == 2
+        assert await deliver_due_notifications(sessions) == 0
         async with sessions() as db:
             records = list(await db.scalars(select(Notification)))
             assert {record.channel for record in records} == {"email", "sms"}
-            assert {record.status for record in records} == {"sent" if provider_status == "accepted" else "failed"}
-        email, sms = requests
+            expected = {
+                "accepted": {"sent"}, "rejected": {"failed"}, "rate_limited": {"retry"},
+                "ambiguous": {"unknown"}, "crash": {"sent", "unknown"},
+            }
+            assert {record.status for record in records} == expected[provider_status]
+        email = next(item for item in requests if item[0] == "/v3/mail/send")
+        sms = next(item for item in requests if item[0].endswith("/Messages.json"))
+        assert len(requests) == 2
         assert email[0] == "/v3/mail/send" and email[1] == "Bearer sandbox-only"
         assert json.loads(email[2])["personalizations"][0]["to"][0]["email"] == "receiver@example.com"
         assert sms[0].endswith("/Messages.json") and sms[1].startswith("Basic ")
         assert parse_qs(sms[2])["To"] == ["+12025550102"]
+        if provider_status == "rate_limited":
+            for _ in range(communication.MAX_ATTEMPTS - 1):
+                async with sessions.begin() as db:
+                    await db.execute(update(Notification).where(Notification.status == "retry").values(
+                        delivery_due_at=datetime.now(timezone.utc) - timedelta(seconds=1),
+                    ))
+                assert await deliver_due_notifications(sessions) == 2
+            assert await deliver_due_notifications(sessions) == 0
+            async with sessions() as db:
+                records = list(await db.scalars(select(Notification)))
+                assert {(row.status, row.delivery_attempts) for row in records} == {("failed", communication.MAX_ATTEMPTS)}
+            assert len(requests) == 2 * communication.MAX_ATTEMPTS
     finally:
         await engine.dispose()
         server.shutdown()

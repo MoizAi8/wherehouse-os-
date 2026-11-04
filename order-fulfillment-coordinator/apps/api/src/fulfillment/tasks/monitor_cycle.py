@@ -10,6 +10,7 @@ from sqlalchemy import text
 from fulfillment.config import settings
 from fulfillment.database import async_session_factory, engine
 from fulfillment.agents.orchestrator import FulfillmentOrchestrator
+from fulfillment.agents.communication import deliver_due_notifications
 from fulfillment.logging_config import log_agent_event, setup_logging
 from fulfillment.models.agent_event import MonitorTaskResult
 
@@ -56,6 +57,11 @@ celery_app.conf.update(
 
     # Beat schedule
     beat_schedule={
+        "notification-outbox": {
+            "task": "fulfillment.tasks.monitor_cycle.drain_notification_outbox",
+            "schedule": 30,
+            "options": {"queue": "monitoring", "expires": 30},
+        },
         "monitor-cycle-every-15-min": {
             "task": "fulfillment.tasks.monitor_cycle.run_monitor_cycle",
             "schedule": settings.shipment_poll_interval_seconds,
@@ -73,6 +79,17 @@ celery_app.conf.update(
     task_send_sent_event=True,
     worker_send_task_events=True,
 )
+
+
+@celery_app.task(name="fulfillment.tasks.monitor_cycle.drain_notification_outbox")
+def drain_notification_outbox() -> int:
+    async def drain() -> int:
+        try:
+            return await deliver_due_notifications(async_session_factory)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(drain())
 
 # Set up structured logging in workers
 @worker_ready.connect

@@ -160,6 +160,20 @@ async def main():
             await wait_for(restored, {"SUCCESS"}, 30)
             evidence["after_exhaustion"] = {"task_id": restored.id, "cycle_id": restored.result["cycle_id"]}
 
+            redis_container = os.environ.get("WAREHOUSE_ACCEPTANCE_REDIS_CONTAINER")
+            if redis_container:
+                labels = subprocess.check_output([
+                    "docker", "inspect", "--format", "{{json .Config.Labels}}", redis_container,
+                ], text=True, timeout=10)
+                assert json.loads(labels)["com.docker.compose.project"] == "warehouse-acceptance"
+                assert json.loads(labels)["com.docker.compose.service"] == "redis"
+                subprocess.run(["docker", "restart", "--timeout", "2", redis_container], check=True, timeout=20)
+                reconnected = run_monitor_cycle.delay()
+                await wait_for(reconnected, {"SUCCESS"}, 45)
+                evidence["redis_restart"] = {
+                    "task_id": reconnected.id, "cycle_id": reconnected.result["cycle_id"],
+                }
+
             async with async_session_factory() as db:
                 for result in (duplicate, retry, recovery):
                     rows = list(await db.scalars(select(AgentEvent).where(AgentEvent.entity_id == result.result["cycle_id"])))

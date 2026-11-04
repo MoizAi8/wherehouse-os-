@@ -35,6 +35,9 @@ class Notification(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="sent")
     provider_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    delivery_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+    delivery_attempts: Mapped[int | None]
+    delivery_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
