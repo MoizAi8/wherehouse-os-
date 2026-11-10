@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import AgentsPage from "@/app/dashboard/agents/page"
 
@@ -71,5 +71,21 @@ describe("Category 3: Agents Page", () => {
     render(<AgentsPage />)
     expect(screen.getByText("Backend unreachable")).toBeInTheDocument()
     expect(screen.getByText("Try again")).toBeInTheDocument()
+  })
+
+  it("refreshes the evidence and shows the persisted event and its outcome", () => {
+    const refetch = vi.fn()
+    mockMonitor.mockReturnValue({ data: { agents: [{
+      name: "RoutingAgent", status: "IDLE", event_type: "route_selected",
+      observed_at: "2026-11-10T12:00:00Z", event_id: "route-event-1",
+      outcome: { carrier: "Fixture A", shipping_cost: 11 },
+    }] }, loading: false, error: null, refetch })
+    render(<AgentsPage />)
+    fireEvent.click(screen.getByRole("button", { name: "Refresh agent status" }))
+    expect(refetch).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByText("Last execution"))
+    expect(screen.getByText("Event route-event-1")).toBeVisible()
+    expect(screen.getByText("carrier: Fixture A")).toBeVisible()
+    expect(screen.getByText("2026-11-10T12:00:00Z")).toBeVisible()
   })
 })

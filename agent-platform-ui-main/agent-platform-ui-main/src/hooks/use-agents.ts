@@ -12,6 +12,7 @@ export interface AgentRuntimeEvidence {
   event_type: string | null
   entity_id: string | null
   observed_at: string | null
+  outcome?: Record<string, string | number | boolean>
 }
 
 export interface MonitorResponse {

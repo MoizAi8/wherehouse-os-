@@ -4,7 +4,7 @@ import { useMemo } from "react"
 import { AgentCard } from "./AgentCard"
 import { SkeletonCard } from "@/components/ui/SkeletonCard"
 import { ErrorDisplay } from "@/components/ui/ErrorDisplay"
-import { type AgentRuntimeStatus, useAgentMonitor } from "@/hooks/use-agents"
+import { type AgentRuntimeEvidence, type AgentRuntimeStatus, useAgentMonitor } from "@/hooks/use-agents"
 import { useSearch } from "@/contexts/SearchContext"
 
 export interface AgentInfo {
@@ -13,6 +13,7 @@ export interface AgentInfo {
   role: string
   status: AgentRuntimeStatus
   evidence?: string
+  execution?: AgentRuntimeEvidence
   uptime: string
   tasksCompleted: number
   workload: number | null
@@ -81,7 +82,7 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
     ]
     return roster.map(agent => {
       const evidence = monitorData?.agents?.find(item => item.name === agent.name)
-      return { ...agent, status: evidence?.status ?? "UNVERIFIED",
+      return { ...agent, status: evidence?.status ?? "UNVERIFIED", execution: evidence,
         evidence: evidence ? `${evidence.reason}${evidence.observed_at ? ` (${evidence.observed_at})` : ""}` : "No execution evidence" }
     })
   }, [loading, monitorData])
@@ -107,6 +108,7 @@ export function AgentStatusGrid({ onAgentSelect }: { onAgentSelect?: (agent: { n
   return (
     <div className="space-y-2" role="list" aria-label="Agent status list">
       <p className="text-xs text-muted-foreground">Status reflects recorded execution evidence. Live workload and accuracy are not measured.</p>
+      <button type="button" onClick={refetch} className="text-xs text-accent hover:underline">Refresh agent status</button>
       {filtered.map((agent, i) => (
         <AgentCard key={agent.id} agent={agent} index={i} onSelect={onAgentSelect} />
       ))}

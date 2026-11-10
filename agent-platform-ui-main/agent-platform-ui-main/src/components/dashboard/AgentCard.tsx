@@ -5,10 +5,11 @@ import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import { CheckCircle, AlertTriangle, PauseCircle, Loader2 } from "lucide-react"
 
-import type { AgentRuntimeStatus } from "@/hooks/use-agents"
+import type { AgentRuntimeEvidence, AgentRuntimeStatus } from "@/hooks/use-agents"
 
 interface Agent {
   id: string; name: string; role: string; status: AgentRuntimeStatus; evidence?: string
+  execution?: AgentRuntimeEvidence
   uptime: string; tasksCompleted: number; workload: number | null; accuracy: number | null
 }
 
@@ -43,6 +44,17 @@ export function AgentCard({ agent, index, onSelect }: AgentCardProps) {
           <span title={agent.evidence} className={cn("text-[10px] font-medium uppercase tracking-wider", cfg.color)}>{agent.status.toLowerCase()}</span>
         </div>
         <p className="text-xs text-muted-foreground truncate">{agent.role}</p>
+        {agent.execution?.event_id && (
+          <details className="mt-1 text-xs text-muted-foreground" onClick={event => event.stopPropagation()}>
+            <summary className="cursor-pointer">Last execution</summary>
+            <p>{agent.execution.event_type?.replaceAll("_", " ")} · <time dateTime={agent.execution.observed_at ?? undefined}>{agent.execution.observed_at}</time></p>
+            <p className="break-all">Event {agent.execution.event_id}</p>
+            {agent.execution.entity_id && <p className="break-all">Related record {agent.execution.entity_id}</p>}
+            {Object.entries(agent.execution.outcome ?? {}).map(([key, value]) => (
+              <p key={key}>{key.replaceAll("_", " ")}: {String(value)}</p>
+            ))}
+          </details>
+        )}
       </div>
       <div className="flex items-center gap-3 text-[11px] text-muted-foreground shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <span title="Workload">{agent.workload === null ? "—" : `${agent.workload}%`}</span>

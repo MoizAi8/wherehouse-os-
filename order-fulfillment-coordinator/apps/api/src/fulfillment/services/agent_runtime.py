@@ -4,6 +4,7 @@ IDLE means a recent completed invocation, not a worker heartbeat. No live
 RUNNING or READY assertion is made without a corresponding runtime probe.
 """
 from datetime import datetime, timedelta, timezone
+import json
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +24,29 @@ AGENT_OUTCOMES = {
 FAILURES = {"delay_check_failed", "prediction_failed", "evaluate_failed", "execute_failed",
             "delivery_failed", "delivery_unknown", "delivery_uncertain", "analysis_failed", "cycle_failed"}
 EVIDENCE_MAX_AGE = timedelta(hours=24)
+
+
+def _outcome(event: AgentEvent) -> dict:
+    """Expose operational values without returning the raw event payload."""
+    try:
+        details = json.loads(event.details_json or "{}")
+    except ValueError:
+        return {}
+    if not isinstance(details, dict):
+        return {}
+    keys = ("shipping_cost", "risk_level", "failure_probability", "is_delayed",
+            "alternative_carrier", "current_cost", "new_cost", "approval_required",
+            "shipments_checked", "delays_detected", "anomalies_found", "attempt")
+    result = {k: details[k] for k in keys if isinstance(details.get(k), (str, int, float))}
+    carrier = details.get("carrier")
+    if isinstance(carrier, dict) and isinstance(carrier.get("name"), str):
+        result["carrier"] = carrier["name"]
+    analysis = details.get("analysis")
+    if isinstance(analysis, dict):
+        for k in ("total_shipments", "total_cost", "average_cost"):
+            if isinstance(analysis.get(k), (int, float)):
+                result[k] = analysis[k]
+    return result
 
 
 async def agent_runtime_status(db: AsyncSession) -> list[dict]:
@@ -47,5 +71,6 @@ async def agent_runtime_status(db: AsyncSession) -> list[dict]:
             "event_type": event.event_type if event else None,
             "entity_id": event.entity_id if event else None,
             "observed_at": timestamp,
+            "outcome": _outcome(event) if event else {},
         })
     return agents
