@@ -118,6 +118,9 @@ class Settings(BaseSettings):
     allow_automatic_rerouting: bool = False
     max_notifications_per_order: int = 4
     shipment_poll_interval_seconds: int = 900
+    carrier_booking_provider: str = ""
+    carrier_sandbox_enabled: bool = False
+    carrier_require_booking_before_dispatch: bool = False
     failed_delivery_threshold_pct: float = 10.0
     sla_critical_hours: int = 2
 

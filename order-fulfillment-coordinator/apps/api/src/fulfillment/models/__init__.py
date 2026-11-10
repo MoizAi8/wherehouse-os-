@@ -28,3 +28,4 @@ __all__ = [
 ]
 from fulfillment.models.chat_approval import ChatApproval  # noqa: F401
 from fulfillment.models.inventory import Product, Reservation, Stock, StockMovement  # noqa: F401
+from fulfillment.models.carrier_booking import CarrierBooking, SandboxCarrierReceipt  # noqa: F401

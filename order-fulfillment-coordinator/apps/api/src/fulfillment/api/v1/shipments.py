@@ -8,8 +8,65 @@ from fulfillment.schemas.shipment import ShipmentRead, ShipmentRerouteRequest, S
 from fulfillment.services.shipment_service import ShipmentService
 from fulfillment.services.inventory import InventoryConflict
 from fulfillment.models.user import User
+from fulfillment.models.carrier_booking import CarrierBooking
+from fulfillment.schemas.carrier_booking import BookingRequest, BookingRead
+from fulfillment.services.carrier_booking import request_booking, cancel_booking, reconcile_booking
+from fulfillment.services.carrier_adapters import CarrierUnavailable
+from fulfillment.services.inventory import InventoryNotFound
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 router = APIRouter()
+
+
+@router.post("/{shipment_id}/booking", response_model=BookingRead, status_code=202)
+async def book_shipment(shipment_id: str, payload: BookingRequest,
+                        db: AsyncSession = Depends(get_db), user: User = Depends(require_operator_or_admin)):
+    try:
+        return await request_booking(db, shipment_id, payload, user.id)
+    except InventoryNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (InventoryConflict, IntegrityError) as exc:
+        raise HTTPException(409, "Booking request conflicts with existing fulfillment state" if isinstance(exc, IntegrityError) else str(exc)) from exc
+    except CarrierUnavailable as exc:
+        raise HTTPException(503, str(exc)) from exc
+
+
+@router.get("/{shipment_id}/booking", response_model=BookingRead)
+async def get_booking(shipment_id: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    booking = await db.scalar(select(CarrierBooking).where(CarrierBooking.shipment_id == shipment_id)
+                              .order_by(CarrierBooking.active.desc(), CarrierBooking.created_at.desc(), CarrierBooking.id.desc()).limit(1))
+    if booking is None:
+        raise HTTPException(404, "No booking recorded")
+    return booking
+
+
+@router.post("/{shipment_id}/booking/cancel", response_model=BookingRead)
+async def cancel_shipment_booking(shipment_id: str, db: AsyncSession = Depends(get_db),
+                                  user: User = Depends(require_operator_or_admin)):
+    try:
+        booking = await cancel_booking(db, shipment_id, user.id)
+        await db.flush()
+        await db.refresh(booking)
+        return booking
+    except InventoryNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except InventoryConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+
+
+@router.post("/{shipment_id}/booking/reconcile", response_model=BookingRead, status_code=202)
+async def reconcile_shipment_booking(shipment_id: str, db: AsyncSession = Depends(get_db),
+                                     user: User = Depends(require_operator_or_admin)):
+    try:
+        booking = await reconcile_booking(db, shipment_id, user.id)
+        await db.flush()
+        await db.refresh(booking)
+        return booking
+    except InventoryNotFound as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except InventoryConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("", response_model=list[ShipmentRead])

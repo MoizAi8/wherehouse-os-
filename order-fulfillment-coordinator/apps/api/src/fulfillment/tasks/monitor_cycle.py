@@ -13,6 +13,7 @@ from fulfillment.config import settings
 from fulfillment.database import async_session_factory, engine
 from fulfillment.agents.orchestrator import FulfillmentOrchestrator
 from fulfillment.agents.communication import deliver_due_notifications
+from fulfillment.services.carrier_booking import process_due_bookings
 from fulfillment.logging_config import log_agent_event, setup_logging
 from fulfillment.models.agent_event import AgentEvent, MonitorTaskResult
 
@@ -59,6 +60,11 @@ celery_app.conf.update(
 
     # Beat schedule
     beat_schedule={
+        "carrier-booking-outbox": {
+            "task": "fulfillment.tasks.monitor_cycle.drain_carrier_bookings",
+            "schedule": 15,
+            "options": {"queue": "monitoring", "expires": 15},
+        },
         "notification-outbox": {
             "task": "fulfillment.tasks.monitor_cycle.drain_notification_outbox",
             "schedule": 30,
@@ -81,6 +87,16 @@ celery_app.conf.update(
     task_send_sent_event=True,
     worker_send_task_events=True,
 )
+
+
+@celery_app.task(bind=True, name="fulfillment.tasks.monitor_cycle.drain_carrier_bookings")
+def drain_carrier_bookings(self) -> int:
+    async def drain() -> int:
+        try:
+            return await process_due_bookings(async_session_factory, task_id=self.request.id)
+        finally:
+            await engine.dispose()
+    return asyncio.run(drain())
 
 
 @celery_app.task(name="fulfillment.tasks.monitor_cycle.drain_notification_outbox")

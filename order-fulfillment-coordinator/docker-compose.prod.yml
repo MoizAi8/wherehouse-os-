@@ -44,6 +44,9 @@ services:
     expose:
       - "8000"
     environment: &app-environment
+      CARRIER_BOOKING_PROVIDER: "${CARRIER_BOOKING_PROVIDER:-}"
+      CARRIER_SANDBOX_ENABLED: "${CARRIER_SANDBOX_ENABLED:-false}"
+      CARRIER_REQUIRE_BOOKING_BEFORE_DISPATCH: "${CARRIER_REQUIRE_BOOKING_BEFORE_DISPATCH:-false}"
       APP_NAME: "FulfillOS"
       APP_VERSION: "${APP_VERSION:-0.1.0}"
       DEBUG: "false"

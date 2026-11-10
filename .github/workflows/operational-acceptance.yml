@@ -80,7 +80,20 @@ jobs:
           (cd ../.. && docker compose exec -T postgres createdb -U acceptance inventory_test)
           export WAREHOUSE_INVENTORY_TEST_DATABASE="${DATABASE_URL%/*}/inventory_test"
           DATABASE_URL="$WAREHOUSE_INVENTORY_TEST_DATABASE" uv run --no-sync alembic upgrade head
+          (cd ../.. && docker compose exec -T postgres createdb -U acceptance booking_acceptance)
+          export WAREHOUSE_BOOKING_TEST_DATABASE="${DATABASE_URL%/*}/booking_acceptance"
+          DATABASE_URL="$WAREHOUSE_BOOKING_TEST_DATABASE" uv run --no-sync alembic upgrade head
           env -u DATABASE_URL uv run --no-sync pytest -q tests --junitxml="$WAREHOUSE_ACCEPTANCE_OUTPUT/backend-regression.xml"
+      - name: Carrier booking persistence and worker-loss recovery
+        working-directory: order-fulfillment-coordinator/apps/api
+        env:
+          DATABASE_URL: postgresql+asyncpg://acceptance:disposable-acceptance-password@127.0.0.1:55471/booking_acceptance
+          CELERY_BROKER_URL: redis://127.0.0.1:56379/9
+          CELERY_RESULT_BACKEND: redis://127.0.0.1:56379/10
+          CARRIER_BOOKING_PROVIDER: sandbox
+          CARRIER_SANDBOX_ENABLED: "true"
+          WAREHOUSE_ACCEPTANCE_OUTPUT: ${{ runner.temp }}/warehouse-evidence
+        run: uv run --no-sync python tests/verify_booking_worker.py
       - name: 500 PostgreSQL warehouse scenarios with real prefork worker
         working-directory: order-fulfillment-coordinator/apps/api
         env:

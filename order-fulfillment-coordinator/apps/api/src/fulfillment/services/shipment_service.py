@@ -17,6 +17,7 @@ from fulfillment.models.shipment import Shipment, ShipmentStatus
 from fulfillment.schemas.shipment import ShipmentRead, ShipmentRerouteRequest, ShipmentRerouteResponse
 from fulfillment.schemas.webhook import ShipmentEventWebhook
 from fulfillment.services.inventory import InventoryConflict
+from fulfillment.services.carrier_booking import ensure_no_active_booking, active_booking
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,7 @@ class ShipmentService:
             raise ValueError("Shipment not found")
         order = await self.db.scalar(select(Order).where(Order.id == shipment.order_id).with_for_update())
         await self.db.refresh(shipment)
+        await ensure_no_active_booking(self.db, shipment.order_id)
         if shipment.status == ShipmentStatus.CANCELLED or (order and order.status == OrderStatus.CANCELLED):
             raise InventoryConflict("Cancelled shipments cannot be rerouted")
         if shipment.status in (ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED):
@@ -173,6 +175,9 @@ class ShipmentService:
         if shipment.status == ShipmentStatus.CANCELLED or (order and order.status == OrderStatus.CANCELLED):
             raise InventoryConflict("Cancelled shipments cannot accept carrier events")
         event_at = payload.timestamp
+        booking = await active_booking(self.db, shipment.id)
+        if booking is not None and booking.status != "booked":
+            raise InventoryConflict("Carrier booking must be reconciled before accepting tracking events")
         event_hash = None
         if event_at is not None:
             if event_at.tzinfo is None:

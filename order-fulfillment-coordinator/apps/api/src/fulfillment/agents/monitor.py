@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fulfillment.models.inventory import OrderLine
 from fulfillment.models.order import Order, OrderStatus
 from fulfillment.models.shipment import Shipment, ShipmentStatus
+from fulfillment.models.carrier_booking import CarrierBooking
 
 logger = logging.getLogger(__name__)
 
@@ -21,9 +22,13 @@ def _active_shipment() -> ColumnElement[bool]:
         .where(Order.id == Shipment.order_id, Order.status == OrderStatus.PROCESSING)
         .exists()
     )
+    awaiting_booking = select(CarrierBooking.id).where(
+        CarrierBooking.shipment_id == Shipment.id, CarrierBooking.active,
+        CarrierBooking.status != "booked",
+    ).exists()
     return Shipment.status.notin_([
         ShipmentStatus.DELIVERED, ShipmentStatus.RETURNED, ShipmentStatus.CANCELLED,
-    ]) & ~awaiting_dispatch
+    ]) & ~awaiting_dispatch & ~awaiting_booking
 
 
 def _ensure_aware(dt: datetime | None) -> datetime | None:

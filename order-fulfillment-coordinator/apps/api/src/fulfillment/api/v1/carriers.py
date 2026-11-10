@@ -6,8 +6,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from fulfillment.api.deps import get_current_user, get_db
 from fulfillment.schemas.carrier import CarrierRateRequest, CarrierRateResponse
 from fulfillment.services.order_service import OrderService
+from fulfillment.config import settings
 
 router = APIRouter()
+
+
+@router.get("/booking-adapters")
+async def booking_adapters(_user=Depends(get_current_user)) -> dict:
+    return {
+        "selected_provider": settings.carrier_booking_provider or None,
+        "booking_required_before_dispatch": settings.carrier_require_booking_before_dispatch,
+        "adapters": [{"provider": "sandbox", "available": settings.carrier_sandbox_enabled,
+                      "sandbox": True, "description": "Simulation only; no live parcel booking"}],
+        "live_activation_dependencies": ["TCS", "Leopards", "Trax", "PostEx"],
+        "live_adapters_implemented": [],
+    }
 
 
 @router.get("/rates", response_model=list[CarrierRateResponse])

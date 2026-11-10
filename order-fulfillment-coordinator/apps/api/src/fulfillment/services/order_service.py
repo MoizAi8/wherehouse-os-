@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fulfillment.agents.routing import RoutingAgent, RoutingError
 from fulfillment.models.agent_event import AgentEvent
+from fulfillment.services.carrier_booking import ensure_no_active_booking, require_booking_safe_to_dispatch
 from fulfillment.models.carrier_rate import CarrierRate
 from fulfillment.models.fulfillment_center import FulfillmentCenter
 from fulfillment.models.inventory import OrderLine, Product, Reservation, Stock
@@ -133,6 +134,8 @@ class OrderService:
         update_data = payload.model_dump(exclude_unset=True)
         if not update_data:
             return OrderRead.model_validate(order)
+        if set(update_data) - {"notes"}:
+            await ensure_no_active_booking(self.db, order_id)
         if await self.db.scalar(select(OrderLine.id).where(OrderLine.order_id == order_id).limit(1)):
             if "items_json" in update_data:
                 raise InventoryConflict("Typed order lines are immutable")
@@ -163,6 +166,7 @@ class OrderService:
         order = result.scalar_one_or_none()
         if order is None:
             return False
+        await ensure_no_active_booking(self.db, order_id)
         if await self.db.scalar(select(OrderLine.id).where(OrderLine.order_id == order_id).limit(1)):
             raise InventoryConflict("Cancel typed orders to retain their line history")
         if await self.db.scalar(select(Reservation.id).where(Reservation.order_id == order_id).limit(1)):
@@ -280,6 +284,7 @@ class OrderService:
             return OrderRead.model_validate(order)
         if order.status != OrderStatus.PROCESSING or not order.fulfillment_center_id:
             raise InventoryConflict("Only a routed order can be dispatched")
+        await require_booking_safe_to_dispatch(self.db, order_id)
         if not all(
             reservation is not None and stock is not None
             and reservation.order_id == order_id and reservation.quantity == line.quantity
@@ -311,6 +316,7 @@ class OrderService:
             return OrderRead.model_validate(order)
         if order.status not in (OrderStatus.PENDING, OrderStatus.PROCESSING):
             raise InventoryConflict("An order cannot be cancelled after dispatch")
+        await ensure_no_active_booking(self.db, order_id)
         shipments = list(await self.db.scalars(
             select(Shipment).where(Shipment.order_id == order_id).with_for_update()
         ))
