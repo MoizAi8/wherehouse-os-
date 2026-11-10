@@ -69,6 +69,7 @@ done
 "${COMPOSE[@]}" run --rm --no-deps api python -c 'from fulfillment.config import settings; settings.validate_production()'
 "${COMPOSE[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 "${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 postgres redis qdrant
+( source infra/scripts/verify_release_backup.sh )
 "${COMPOSE[@]}" run --rm --no-deps api alembic upgrade head
 # Compose 2.40 rejects --wait for beat's explicitly disabled inherited API probe.
 # Start the scheduler separately; retain real health gates on API and worker.

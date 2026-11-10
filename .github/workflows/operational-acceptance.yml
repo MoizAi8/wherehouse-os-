@@ -108,6 +108,13 @@ jobs:
           worker_pid=$!
           trap 'kill "$worker_pid"; wait "$worker_pid" || true' EXIT
           uv run --no-sync pytest -q tests/verify_operational_matrix.py --junitxml="$RUNNER_TEMP/warehouse-evidence/warehouse-matrix.xml" -o junit_family=legacy
+      - name: Restore a fresh PostgreSQL release backup in isolation
+        run: |
+          DOCKER=(docker)
+          COMPOSE=(docker compose)
+          export RELEASE_BACKUP_DIR="$RUNNER_TEMP/private-backup"
+          ( source infra/scripts/verify_release_backup.sh )
+          cp "$RELEASE_BACKUP_DIR"/*/verified "$RUNNER_TEMP/warehouse-evidence/backup-verification.txt"
       - name: Capture container evidence
         if: always()
         run: |

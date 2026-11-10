@@ -88,7 +88,7 @@ def test_readiness_requires_all_production_backends():
     assert is_ready({"status": "ok", "backends": dict.fromkeys(("postgres", "celery", "qdrant"), True)})
 
 
-@pytest.mark.parametrize("failure", ["none", "existing", "pull", "migration", "readiness", "collision", "lock", "caddy", "tls", "registry"])
+@pytest.mark.parametrize("failure", ["none", "existing", "pull", "backup", "restore", "revision", "migration", "readiness", "collision", "lock", "caddy", "tls", "registry"])
 def test_deploy_command_flow_and_failure_propagation(tmp_path, failure):
     bash = shutil.which("bash")
     if not bash and os.name == "nt":
@@ -100,6 +100,7 @@ def test_deploy_command_flow_and_failure_propagation(tmp_path, failure):
     scripts = release / "infra/scripts"
     scripts.mkdir(parents=True)
     shutil.copy(INFRA / "scripts/deploy.sh", scripts)
+    shutil.copy(INFRA / "scripts/verify_release_backup.sh", scripts)
     shutil.copy(INFRA / "scripts/check_readiness.py", scripts)
     (release / ".env").write_text("DOMAIN=example.test\n")
     (release / "docker-compose.prod.yml").write_text("services: {}\n")
@@ -113,6 +114,14 @@ docker() {
         return 1
     fi
     case " $* " in
+      *" ps -q postgres "*) echo fixture-postgres; return ;;
+      *" inspect --format {{.Image}} "*) printf 'sha256:%064d\n' 0; return ;;
+      *" exec psql "*) cat >/dev/null; echo d5e8f1a2b3c4; return ;;
+      *" exec pg_dump "*) echo fixture; [[ "$FAILURE" != backup ]]; return ;;
+      *" --network none "*) cat >/dev/null
+        [[ "$FAILURE" != restore ]] || return 1
+        if [[ "$FAILURE" == revision ]]; then echo empty; else echo d5e8f1a2b3c4; fi
+        return ;;
       *" ps -q celery-beat "*) echo fixture-beat; return ;;
       *".State.Running"*) echo true; return ;;
       *" container inspect "*) [[ "$FAILURE" == collision || "$FAILURE" == existing ]]; return ;;
@@ -146,6 +155,7 @@ bash "$1"
 ''', encoding="utf-8")
     env = {**os.environ, "TAG": "a" * 40, "IMAGE_OWNER": "Example", "FAILURE": failure,
            "DEPLOY_STATE_DIR": (tmp_path / "state").as_posix(),
+           "RELEASE_BACKUP_DIR": (tmp_path / "backups").as_posix(),
            "CALLS": (tmp_path / "calls").as_posix(), "TEST_PY": Path(sys.executable).as_posix()}
     for name in ("CONFIG_B64", "REGISTRY_TOKEN", "DOCKER_HOST", "DOCKER_CONTEXT"):
         env.pop(name, None)
@@ -166,5 +176,11 @@ bash "$1"
         assert " pull" in calls
     if failure == "migration":
         assert "alembic upgrade head" in calls
+    if failure in ("backup", "restore", "revision"):
+        assert "alembic upgrade head" not in calls
+        assert not list((tmp_path / "backups").glob("*/verified"))
+    if success:
+        assert calls.index("pg_dump --format=custom") < calls.index("--network none") < calls.index("alembic upgrade head")
+        assert len(list((tmp_path / "backups").glob("*/verified"))) == 1
     if failure == "readiness":
         assert "exec -T api python" in calls
