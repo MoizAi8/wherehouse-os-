@@ -3,6 +3,7 @@
 import React from "react"
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { agentDiagnostic, agentStatusLabel, executionResult } from "@/lib/agent-status"
 import { CheckCircle, AlertTriangle, PauseCircle, Loader2 } from "lucide-react"
 
 import type { AgentRuntimeEvidence, AgentRuntimeStatus } from "@/hooks/use-agents"
@@ -26,6 +27,7 @@ const statusConfig: Record<string, { icon: React.ElementType; color: string; bg:
 
 export function AgentCard({ agent, index, onSelect }: AgentCardProps) {
   const cfg = statusConfig[agent.status] ?? statusConfig.UNVERIFIED
+  const result = executionResult(agent.execution?.event_type)
 
   return (
     <motion.div
@@ -41,13 +43,20 @@ export function AgentCard({ agent, index, onSelect }: AgentCardProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <h3 className="text-sm font-semibold text-foreground truncate">{agent.name}</h3>
-          <span title={agent.evidence} className={cn("text-[10px] font-medium uppercase tracking-wider", cfg.color)}>{agent.status.toLowerCase()}</span>
+          <span title={agentDiagnostic(agent.evidence)} className={cn("text-[10px] font-medium tracking-wide", cfg.color)}>{agentStatusLabel[agent.status] ?? "Not yet run"}</span>
         </div>
         <p className="text-xs text-muted-foreground truncate">{agent.role}</p>
         {agent.execution?.event_id && (
+          <div className="mt-1 text-xs text-muted-foreground">
+            <p>{agent.execution.event_type?.replaceAll("_", " ")}</p>
+            {agent.execution.observed_at && <p>Last execution: <time dateTime={agent.execution.observed_at}>{agent.execution.observed_at}</time></p>}
+            {result && <p className={result.startsWith("Error") ? "text-destructive" : undefined}>Result: {result}</p>}
+          </div>
+        )}
+        {agent.execution?.event_id && (
           <details className="mt-1 text-xs text-muted-foreground" onClick={event => event.stopPropagation()}>
-            <summary className="cursor-pointer">Last execution</summary>
-            <p>{agent.execution.event_type?.replaceAll("_", " ")} · <time dateTime={agent.execution.observed_at ?? undefined}>{agent.execution.observed_at}</time></p>
+            <summary className="cursor-pointer">Execution details</summary>
+            {agent.evidence && <p>{agentDiagnostic(agent.evidence)}</p>}
             <p className="break-all">Event {agent.execution.event_id}</p>
             {agent.execution.entity_id && <p className="break-all">Related record {agent.execution.entity_id}</p>}
             {Object.entries(agent.execution.outcome ?? {}).map(([key, value]) => (

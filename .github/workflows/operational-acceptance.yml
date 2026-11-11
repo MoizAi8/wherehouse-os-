@@ -8,6 +8,42 @@ permissions:
   contents: read
 
 jobs:
+  test-frontend:
+    name: Test Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: agent-platform-ui-main/agent-platform-ui-main
+    steps:
+      - uses: actions/checkout@v5
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24.22.2'
+          cache: npm
+          cache-dependency-path: agent-platform-ui-main/agent-platform-ui-main/package-lock.json
+      - name: Install locked dependencies with strict peers
+        run: npm ci --include=dev --strict-peer-deps --no-audit --no-fund
+      - name: Check TypeScript
+        run: npx --no-install tsc --noEmit
+      - name: Run ESLint
+        run: npm run lint
+      - name: Run Vitest test suite
+        run: npm run test -- --run
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          # Required by Next.js for build-time checks
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      - name: Build production frontend
+        run: npm run build
+        env:
+          BACKEND_URL: http://api:8000
+          NEXT_TELEMETRY_DISABLED: '1'
+      - name: Verify built authentication routes
+        run: npm run test:auth
+
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 35

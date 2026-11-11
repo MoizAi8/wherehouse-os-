@@ -28,7 +28,7 @@ describe("Category 3: Agents Page", () => {
     render(<AgentsPage />)
     expect(screen.getByText("RoutingAgent")).toBeInTheDocument()
     expect(screen.getByText("MonitorAgent")).toBeInTheDocument()
-    expect(screen.getAllByText("unverified")).toHaveLength(7)
+    expect(screen.getAllByText("Not yet run")).toHaveLength(7)
     expect(screen.queryByText("active")).not.toBeInTheDocument()
   })
 
@@ -46,7 +46,7 @@ describe("Category 3: Agents Page", () => {
 
   it("Test 19: Delays do not fabricate a rerouting agent runtime state", () => {
     render(<AgentsPage />)
-    expect(screen.getAllByText("unverified")).toHaveLength(7)
+    expect(screen.getAllByText("Not yet run")).toHaveLength(7)
   })
 
   it("Test 20: Loading state shows skeleton", () => {
@@ -61,9 +61,9 @@ describe("Category 3: Agents Page", () => {
       { name: "CommunicationAgent", status: "FAILED", reason: "Provider rejected" },
     ] }, loading: false, error: null, refetch: vi.fn() })
     render(<AgentsPage />)
-    expect(screen.getByText("idle")).toHaveAttribute("title", "Completed route")
-    expect(screen.getByText("failed")).toHaveAttribute("title", "Provider rejected")
-    expect(screen.getAllByText("unverified")).toHaveLength(5)
+    expect(screen.getByText("Idle")).toHaveAttribute("title", "Completed route")
+    expect(screen.getByText("Error")).toHaveAttribute("title", "Provider rejected")
+    expect(screen.getAllByText("Not yet run")).toHaveLength(5)
   })
 
   it("Test 21: Error handling renders error display", () => {
@@ -83,7 +83,7 @@ describe("Category 3: Agents Page", () => {
     render(<AgentsPage />)
     fireEvent.click(screen.getByRole("button", { name: "Refresh agent status" }))
     expect(refetch).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByText("Last execution"))
+    fireEvent.click(screen.getByText("Execution details"))
     expect(screen.getByText("Event route-event-1")).toBeVisible()
     expect(screen.getByText("carrier: Fixture A")).toBeVisible()
     expect(screen.getByText("2026-11-10T12:00:00Z")).toBeVisible()
