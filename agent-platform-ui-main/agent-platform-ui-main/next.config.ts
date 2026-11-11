@@ -6,31 +6,18 @@ const nextConfig: NextConfig = {
   transpilePackages: ["three"],
   output: process.env.NODE_ENV === "production" ? "standalone" : undefined,
   async rewrites() {
-    if (process.env.NODE_ENV === "production") {
-      const target = process.env.BACKEND_URL
-      if (!target) return {}
-      return {
-        fallback: [
-          {
-            source: "/api/:path*",
-            destination: `${target}/api/:path*`,
-          },
-          {
-            source: "/health",
-            destination: `${target}/health`,
-          },
-        ],
-      }
-    }
+    const target = process.env.BACKEND_URL ||
+      (process.env.NODE_ENV !== "production" ? "http://localhost:8000" : undefined)
+    if (!target) return {}
     return {
       fallback: [
         {
           source: "/api/:path*",
-          destination: "http://localhost:8000/api/:path*",
+          destination: `${target}/api/:path*`,
         },
         {
           source: "/health",
-          destination: "http://localhost:8000/health",
+          destination: `${target}/health`,
         },
       ],
     }
