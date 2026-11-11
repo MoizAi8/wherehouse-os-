@@ -1,380 +1,55 @@
-name: Deploy to Oracle Cloud
+name: Read-only OCI release identity verification
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
     inputs:
       deploy:
-        description: 'Deploy tested main to OCI (requires production approval)'
         type: boolean
-        required: true
         default: false
+        required: true
       verify_gemini:
-        description: 'Run bounded synthetic Gemini free-tier verification without deploying'
         type: boolean
-        required: true
         default: false
-
-env:
-  # Pin exact versions to match local development [ARCHITECT-LOCK: DO NOT OVERWRITE]
-  NODE_VERSION: '24.22.2'
-  PYTHON_VERSION: '3.12'
-  UV_VERSION: '0.12.3'
-  API_IMAGE: fulfillment-api
-  FRONTEND_IMAGE: fulfillment-ui
-
+        required: true
+permissions:
+  contents: read
 jobs:
-  verify-gemini:
-    name: Verify Gemini free-tier integration
-    if: github.event_name == 'workflow_dispatch' && inputs.verify_gemini && !inputs.deploy
+  readback:
+    if: github.ref == 'refs/heads/codex/oci-release-readback' && !inputs.deploy && !inputs.verify_gemini
     runs-on: ubuntu-latest
-    timeout-minutes: 8
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v7
-        with:
-          version: ${{ env.UV_VERSION }}
-          python-version: ${{ env.PYTHON_VERSION }}
-      - run: uv sync --frozen --group dev
-        working-directory: order-fulfillment-coordinator/apps/api
-      - name: Run synthetic conversations against disposable API
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          GEMINI_FREE_TIER_CONFIRMED: ${{ vars.GEMINI_FREE_TIER_CONFIRMED }}
-        run: order-fulfillment-coordinator/apps/api/.venv/bin/python qa/verify_gemini.py
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: gemini-synthetic-verification
-          path: reports/teacher-demo-20261103/gemini-verification.json
-          if-no-files-found: error
-  test-api:
-    name: Test Backend
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: order-fulfillment-coordinator/apps/api
-    # Service containers for integration tests [ARCHITECT-LOCK: DO NOT OVERWRITE]
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: fulfillment_test
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        options: >-
-          --health-cmd "pg_isready -U postgres -d fulfillment_test"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-      redis:
-        image: redis:7-alpine
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 6379:6379
-    steps:
-      - uses: actions/checkout@v5
-      - name: Setup uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          version: ${{ env.UV_VERSION }}
-          python-version: ${{ env.PYTHON_VERSION }}
-          enable-cache: true
-      - name: Install dependencies (frozen lockfile)
-        run: uv sync --frozen --group dev
-      - name: Run ruff linter
-        run: uv run --group dev ruff check . --no-fix
-      - name: Run mypy type checker
-        run: uv run --group dev mypy src/ --ignore-missing-imports
-      - name: Run pytest test suite
-        run: uv run --group dev pytest tests/ -v
-        env:
-          # Database & Cache (provided by service containers)
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/fulfillment_test
-          REDIS_URL: redis://localhost:6379/0
-          # Authentication & Security
-          JWT_SECRET: test-secret-key-for-ci-testing-only
-          JWT_ALGORITHM: HS256
-          WEBHOOK_SECRET: test-webhook-secret-for-ci
-          INTEGRATION_SECRET_KEY: test-integration-secret-for-ci
-          # AI & External Services (dummy values for CI - tests use mocks)
-          OPENAI_API_KEY: sk-test-dummy-key-for-ci
-          OPENAI_BASE_URL: ""
-          OPENAI_MODEL: gpt-4o-mini
-          EMBEDDING_MODEL: text-embedding-3-small
-          EMBEDDING_DIMENSIONS: "1536"
-          QDRANT_URL: http://localhost:6333
-          QDRANT_API_KEY: ""
-          # Rate limiting
-          RATE_LIMIT_ENABLED: "true"
-          RATE_LIMIT_DEFAULT: "120/minute"
-          RATE_LIMIT_AUTH: "10/minute"
-          RATE_LIMIT_CHAT: "30/minute"
-          # Celery
-          CELERY_BROKER_URL: redis://localhost:6379/0
-          CELERY_RESULT_BACKEND: redis://localhost:6379/0
-          # Feature flags
-          DEBUG: "true"
-          # Optional integrations (empty for CI)
-          TWILIO_ACCOUNT_SID: ""
-          TWILIO_AUTH_TOKEN: ""
-          TWILIO_PHONE_NUMBER: ""
-          SENDGRID_API_KEY: ""
-          SENDGRID_FROM_EMAIL: "noreply@fulfillment.com"
-          ODOO_URL: ""
-          ODOO_DB: ""
-          ODOO_USERNAME: ""
-          ODOO_PASSWORD: ""
-          ODOO_VERIFY_SSL: "true"
-          MAX_ALLOWED_COST_INCREASE_PCT: "40.0"
-          MAX_NOTIFICATIONS_PER_ORDER: "4"
-          SHIPMENT_POLL_INTERVAL_SECONDS: "900"
-          FAILED_DELIVERY_THRESHOLD_PCT: "10.0"
-          SLA_CRITICAL_HOURS: "2"
-
-  test-frontend:
-    name: Test Frontend
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    defaults:
-      run:
-        working-directory: agent-platform-ui-main/agent-platform-ui-main
-    steps:
-      - uses: actions/checkout@v5
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
-          cache-dependency-path: agent-platform-ui-main/agent-platform-ui-main/package-lock.json
-      - name: Install locked dependencies with strict peers
-        run: npm ci --include=dev --strict-peer-deps --no-audit --no-fund
-      - name: Check TypeScript
-        run: npx --no-install tsc --noEmit
-      - name: Run ESLint
-        run: npm run lint
-      - name: Run Vitest test suite
-        run: npm run test -- --run
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
-          # Required by Next.js for build-time checks
-          NEXT_TELEMETRY_DISABLED: "1"
-
-      - name: Build production frontend
-        run: npm run build
-        env:
-          BACKEND_URL: http://api:8000
-          NEXT_TELEMETRY_DISABLED: '1'
-      - name: Verify built authentication routes
-        run: npm run test:auth
-
-  build-and-push:
-    name: Build & Push Images
-    if: github.event_name != 'workflow_dispatch' || !inputs.verify_gemini
-    needs: [test-api, test-frontend]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: "Sanitize Repository Owner to Lowercase [ARCHITECT-LOCK: DO NOT OVERWRITE]"
-        run: |
-          echo "REPO_OWNER_LOWERCASE=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Cache Docker layers (Backend)
-        uses: actions/cache@v5
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-buildx-backend-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-backend-
-
-      - name: Cache Docker layers (Frontend)
-        uses: actions/cache@v5
-        with:
-          path: /tmp/.buildx-cache-frontend
-          key: ${{ runner.os }}-buildx-frontend-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-buildx-frontend-
-
-      - name: Cache Node modules
-        uses: actions/cache@v5
-        with:
-          path: agent-platform-ui-main/agent-platform-ui-main/node_modules
-          key: ${{ runner.os }}-node-${{ hashFiles('agent-platform-ui-main/agent-platform-ui-main/package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-node-
-
-      - name: Cache Python packages
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/uv
-          key: ${{ runner.os }}-uv-${{ hashFiles('order-fulfillment-coordinator/apps/api/uv.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-uv-
-
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build & Push Backend
-        uses: docker/build-push-action@v6
-        with:
-          context: order-fulfillment-coordinator/apps/api
-          target: production
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.API_IMAGE }}:latest
-            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.API_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            UV_VERSION=${{ env.UV_VERSION }}
-            PYTHON_VERSION=${{ env.PYTHON_VERSION }}
-
-      - name: Build & Push Frontend
-        uses: docker/build-push-action@v6
-        with:
-          context: agent-platform-ui-main/agent-platform-ui-main
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: |
-            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.FRONTEND_IMAGE }}:latest
-            ghcr.io/${{ env.REPO_OWNER_LOWERCASE }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            NEXT_PUBLIC_API_URL=
-            BACKEND_URL=http://api:8000
-            NODE_VERSION=${{ env.NODE_VERSION }}
-            NEXT_TELEMETRY_DISABLED=1
-
-  deploy:
-    name: Deploy to OCI
-    needs: [build-and-push]
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    if: github.repository == 'MoizAi8/wherehouse-os-' && github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.deploy
+    timeout-minutes: 5
     environment: production
-    permissions:
-      contents: read
-      packages: read
-    concurrency:
-      group: oci-production
-      cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v5
-      - name: Prepare deployment configuration
-        env:
-          CFG_POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          CFG_POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          CFG_POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
-          CFG_JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          CFG_JWT_ALGORITHM: ${{ secrets.JWT_ALGORITHM }}
-          CFG_JWT_EXPIRATION_MINUTES: ${{ secrets.JWT_EXPIRATION_MINUTES }}
-          CFG_WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
-          CFG_INTEGRATION_SECRET_KEY: ${{ secrets.INTEGRATION_SECRET_KEY }}
-          CFG_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          CFG_OPENAI_BASE_URL: ${{ secrets.OPENAI_BASE_URL }}
-          CFG_OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
-          CFG_CHAT_API_KEY: ${{ secrets.GEMINI_API_KEY || secrets.CHAT_API_KEY }}
-          CFG_CHAT_BASE_URL: ${{ secrets.GEMINI_API_KEY != '' && 'https://generativelanguage.googleapis.com/v1beta/openai/' || vars.CHAT_BASE_URL }}
-          CFG_CHAT_MODEL: ${{ secrets.GEMINI_API_KEY != '' && (vars.GEMINI_MODEL || 'gemini-3.5-flash-lite') || vars.CHAT_MODEL }}
-          CFG_CHAT_PROVIDER: ${{ secrets.GEMINI_API_KEY != '' && 'gemini-free' || vars.CHAT_PROVIDER }}
-          GEMINI_FREE_TIER_CONFIRMED: ${{ vars.GEMINI_FREE_TIER_CONFIRMED }}
-          CFG_CHAT_TIMEOUT_SECONDS: ${{ vars.CHAT_TIMEOUT_SECONDS }}
-          CFG_DEMO_GUEST_ENABLED: ${{ vars.DEMO_GUEST_ENABLED }}
-          CFG_TEACHER_DEMO_MODE: ${{ vars.TEACHER_DEMO_MODE }}
-          CFG_TEACHER_DEMO_LLM_MAX_REQUESTS: ${{ vars.TEACHER_DEMO_LLM_MAX_REQUESTS }}
-          CFG_EMBEDDING_MODEL: ${{ secrets.EMBEDDING_MODEL }}
-          CFG_EMBEDDING_DIMENSIONS: ${{ secrets.EMBEDDING_DIMENSIONS }}
-          CFG_QDRANT_URL: ${{ secrets.QDRANT_URL }}
-          CFG_QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
-          CFG_RATE_LIMIT_ENABLED: ${{ secrets.RATE_LIMIT_ENABLED }}
-          CFG_RATE_LIMIT_DEFAULT: ${{ secrets.RATE_LIMIT_DEFAULT }}
-          CFG_RATE_LIMIT_AUTH: ${{ secrets.RATE_LIMIT_AUTH }}
-          CFG_RATE_LIMIT_CHAT: ${{ secrets.RATE_LIMIT_CHAT }}
-          CFG_TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
-          CFG_TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          CFG_TWILIO_PHONE_NUMBER: ${{ secrets.TWILIO_PHONE_NUMBER }}
-          CFG_SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
-          CFG_SENDGRID_FROM_EMAIL: ${{ secrets.SENDGRID_FROM_EMAIL }}
-          CFG_EASYPOST_API_KEY: ${{ secrets.EASYPOST_API_KEY }}
-          CFG_SMARTYSTREETS_AUTH_ID: ${{ secrets.SMARTYSTREETS_AUTH_ID }}
-          CFG_SMARTYSTREETS_AUTH_TOKEN: ${{ secrets.SMARTYSTREETS_AUTH_TOKEN }}
-          CFG_ODOO_URL: ${{ secrets.ODOO_URL }}
-          CFG_ODOO_DB: ${{ secrets.ODOO_DB }}
-          CFG_ODOO_USERNAME: ${{ secrets.ODOO_USERNAME }}
-          CFG_ODOO_PASSWORD: ${{ secrets.ODOO_PASSWORD }}
-          CFG_ODOO_VERIFY_SSL: ${{ secrets.ODOO_VERIFY_SSL }}
-          CFG_MAX_ALLOWED_COST_INCREASE_PCT: ${{ secrets.MAX_ALLOWED_COST_INCREASE_PCT }}
-          CFG_MAX_NOTIFICATIONS_PER_ORDER: ${{ secrets.MAX_NOTIFICATIONS_PER_ORDER }}
-          CFG_SHIPMENT_POLL_INTERVAL_SECONDS: ${{ secrets.SHIPMENT_POLL_INTERVAL_SECONDS }}
-          CFG_FAILED_DELIVERY_THRESHOLD_PCT: ${{ secrets.FAILED_DELIVERY_THRESHOLD_PCT }}
-          CFG_SLA_CRITICAL_HOURS: ${{ secrets.SLA_CRITICAL_HOURS }}
-          CFG_FRONTEND_URL: ${{ secrets.FRONTEND_URL }}
-          CFG_DOMAIN: ${{ secrets.DOMAIN }}
-          CFG_SSL_EMAIL: ${{ secrets.SSL_EMAIL }}
-          CFG_APP_VERSION: ${{ secrets.APP_VERSION }}
-          CFG_RESET_EMAIL_REDIRECT_URL: ${{ secrets.RESET_EMAIL_REDIRECT_URL }}
-        run: python .github/scripts/prepare_deploy_env.py
-      - name: Verify SSH configuration
-        env:
-          OCI_HOST: ${{ secrets.OCI_HOST }}
-          OCI_USERNAME: ${{ secrets.OCI_USERNAME }}
-          OCI_SSH_KEY: ${{ secrets.OCI_SSH_KEY }}
-          OCI_SSH_FINGERPRINT: ${{ secrets.OCI_SSH_FINGERPRINT }}
-        run: |
-          for name in OCI_HOST OCI_USERNAME OCI_SSH_KEY OCI_SSH_FINGERPRINT; do
-            if [ -z "${!name}" ]; then echo "Missing secret: $name"; exit 1; fi
-          done
-      - name: Copy deployment configuration and scripts
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.OCI_HOST }}
-          username: ${{ secrets.OCI_USERNAME }}
-          key: ${{ secrets.OCI_SSH_KEY }}
-          fingerprint: ${{ secrets.OCI_SSH_FINGERPRINT }}
-          source: "order-fulfillment-coordinator/docker-compose.prod.yml,order-fulfillment-coordinator/infra/"
-          target: "~/fulfillment/releases/${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}"
-      - name: Deploy immutable images and verify readiness
+      - name: Inspect approved release and running image identities only
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          CONFIG_B64: ${{ env.CONFIG_B64 }}
-          TAG: ${{ github.sha }}
-          RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
-          IMAGE_OWNER: ${{ github.repository_owner }}
-          REGISTRY_USER: ${{ github.actor }}
-          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.OCI_HOST }}
           username: ${{ secrets.OCI_USERNAME }}
           key: ${{ secrets.OCI_SSH_KEY }}
           fingerprint: ${{ secrets.OCI_SSH_FINGERPRINT }}
-          envs: CONFIG_B64,TAG,RELEASE_ID,IMAGE_OWNER,REGISTRY_USER,REGISTRY_TOKEN
-          command_timeout: 30m
+          command_timeout: 2m
           script: |
-            set -eu
-            test -n "$CONFIG_B64"
-            cd "$HOME/fulfillment/releases/$RELEASE_ID/order-fulfillment-coordinator"
-            bash infra/scripts/deploy.sh
+            bash -s <<'READ_ONLY'
+            set -euo pipefail
+            expected=d6a876296064434ba2015f1f73dd804490269504
+            release=$(cat "$HOME/fulfillment/deploy-state/current-release")
+            case "$release" in "$HOME/fulfillment/releases/$expected-"*/order-fulfillment-coordinator) ;; *) echo 'Unexpected current release'; exit 1 ;; esac
+            grep -Fx "TAG=$expected" "$release/release.env" >/dev/null
+            DOCKER=(docker)
+            if ! docker info >/dev/null 2>&1; then DOCKER=(sudo -n docker); "${DOCKER[@]}" info >/dev/null; fi
+            printf 'DEPLOYED_SHA=%s\n' "$expected"
+            for pair in api:API_IMAGE_REF frontend:FRONTEND_IMAGE_REF; do
+                service=${pair%%:*}
+                variable=${pair#*:}
+                reference=$(sed -n "s/^$variable=//p" "$release/release.env")
+                [[ "$reference" =~ ^ghcr.io/moizai8/fulfillment-(api|ui)@sha256:[a-f0-9]{64}$ ]] || exit 1
+                container="order-fulfillment-coordinator-$service-1"
+                actual=$("${DOCKER[@]}" inspect --format '{{.Config.Image}}' "$container")
+                [[ "$actual" == "$reference" ]] || { echo 'Container differs from approved release manifest'; exit 1; }
+                image_id=$("${DOCKER[@]}" inspect --format '{{.Image}}' "$container")
+                [[ "$image_id" == "$("${DOCKER[@]}" image inspect --format '{{.Id}}' "$reference")" ]] || exit 1
+                [[ "$("${DOCKER[@]}" inspect --format '{{.State.Running}}' "$container")" == true ]] || exit 1
+                health=$("${DOCKER[@]}" inspect --format '{{.State.Health.Status}}' "$container")
+                [[ "$health" == healthy ]] || exit 1
+                printf 'SERVICE=%s REFERENCE=%s IMAGE_ID=%s HEALTH=%s\n' "$service" "$reference" "$image_id" "$health"
+            done
+            READ_ONLY
