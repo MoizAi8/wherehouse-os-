@@ -1,0 +1,132 @@
+[
+  {
+    "route": "",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nEnterprise Multi-Agent OS\nIntelligence orchestrating\nyour warehouse\n\nDeploy, monitor, and scale autonomous agents that manage inventory, optimize workflows, and predict demand in real time.\n\nLaunch Dashboard\nReal-time metrics\nTrusted by enterprise warehouses\n\nOur platform processes millions of transactions daily across global fulfillment networks.\n\n0\n\nActive Agents\n\n0.00%\n\nSystem Uptime\n\n0+\n\nItems Managed\n\n0ms\n\nAvg Response\n\nPlatform capabilities\nIntelligence at every layer\nMulti-Agent Orchestration\n\nDeploy autonomous agents that collaborate in real-time. Each agent specializes in inventory, routing, quality, or forecasting.\n\nLearn more\nPredictive Intelligence\n\nML-driven demand forecasting and anomaly detection. Anticipate stockouts, optimize replenishment, and prevent bottlenecks before they happen.\n\nLearn more\nEnterprise Security\n\nRole-based access, audit trails, and end-to-end encryption. SOC 2 compliant with granular permission controls.\n\nLearn more\nReady to transform your warehouse?\n\nDeploy your first agent in minutes. No credit card required.\n\nStart Free Trial\nBook a Demo"
+  },
+  {
+    "route": "dashboard",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\n⌘K\nAdmin\nWarehouse OS\n\nMonitor agents and manage operations\n\nTotal Orders\n\n5\n\nOn-Time Rate\n\n0.0%\n\nAvg Delivery (days)\n\n0.0\n\nLast Recorded Cycle Checks\n\n2\nAGENT SESSION\n2\nChecked\n1\nDelays\n0\nReroutes\n0\nNotified\nAGENT STATUS\n\nStatus reflects recorded execution evidence. Live workload and accuracy are not measured.\n\nRefresh agent status\nRoutingAgent\nIdle\n\nOrder Router\n\nroute selected\n\nLast execution: 2026-11-11T14:47:26.303780Z\n\nResult: Completed\n\nExecution details\n—\n—\nMonitorAgent\nIdle\n\nShipment Monitor\n\ndelay detected\n\nLast execution: 2026-11-11T14:47:48.994367Z\n\nResult: Completed\n\nExecution details\n—\n—\nPredictionAgent\nIdle\n\nFailure Predictor\n\nfailure prediction\n\nLast execution: 2026-11-11T14:47:48.994367Z\n\nResult: Completed\n\nExecution details\n—\n—\nReroutingAgent\nIdle\n\nReroute Handler\n\nreroute evaluated\n\nLast execution: 2026-11-11T14:47:48.973420Z\n\nResult: Completed\n\nExecution details\n\nRecent completed execution; current worker activity is not measured (2026-11-11T14:47:48.973420Z)\n\nEvent c3bac8cd-796f-4703-91d0-9fc1bf1b155e\n\nRelated record 130c4f3c-eda6-422e-bb1d-d6dafb86fe77\n\nalternative carrier: Fixture B\n\ncurrent cost: 11\n\nnew cost: 12\n\n—\n—\nCommunicationAgent\nIdle\n\nNotification Relay\n\nprovider accepted\n\nLast execution: 2026-11-11T14:48:01.182647Z\n\nResult: Completed\n\nExecution details\n—\n—\nCostOptimizer\nIdle\n\nCost Comparison\n\ncost analysis\n\nLast execution: 2026-11-11T14:47:49.003901Z\n\nResult: "
+  },
+  {
+    "route": "dashboard/agents",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nAgents\n⌘K\nAdmin\nAgents\n\nAsk AI to monitor and control agents\n\nStatus reflects recorded execution evidence. Live workload and accuracy are not measured.\n\nRefresh agent status\nRoutingAgent\nIdle\n\nOrder Router\n\nroute selected\n\nLast execution: 2026-11-11T14:47:26.303780Z\n\nResult: Completed\n\nExecution details\n—\n—\nMonitorAgent\nIdle\n\nShipment Monitor\n\ndelay detected\n\nLast execution: 2026-11-11T14:47:48.994367Z\n\nResult: Completed\n\nExecution details\n—\n—\nPredictionAgent\nIdle\n\nFailure Predictor\n\nfailure prediction\n\nLast execution: 2026-11-11T14:47:48.994367Z\n\nResult: Completed\n\nExecution details\n—\n—\nReroutingAgent\nIdle\n\nReroute Handler\n\nreroute evaluated\n\nLast execution: 2026-11-11T14:47:48.973420Z\n\nResult: Completed\n\nExecution details\n—\n—\nCommunicationAgent\nIdle\n\nNotification Relay\n\nprovider accepted\n\nLast execution: 2026-11-11T14:48:01.182647Z\n\nResult: Completed\n\nExecution details\n—\n—\nCostOptimizer\nIdle\n\nCost Comparison\n\ncost analysis\n\nLast execution: 2026-11-11T14:47:49.003901Z\n\nResult: Completed\n\nExecution details\n—\n—\nFulfillmentOrchestrator\nIdle\n\nWorkflow Coordination\n\ncycle complete\n\nLast execution: 2026-11-11T14:47:49.003901Z\n\nResult: Completed\n\nExecution details\n—\n—"
+  },
+  {
+    "route": "dashboard/orders",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nOrders\n⌘K\nAdmin\nOrders (5)\n\nBrowse orders or ask the AI to create and manage them\n\nORDER ID\tCUSTOMER\tDESTINATION\tWEIGHT\tSTATUS\tDATE\n#aa118c18\tsandbox@example.com\tTest, NY\t1 kg\t\ndelivered\t11/11/2026\n#59668345\tsandbox@example.com\tTest, NY\t1 kg\t\ndelivered\t11/11/2026\n#ae7e07f6\tsandbox@example.com\tTest, NY\t1 kg\t\ndelivered\t11/11/2026\n#3d21210f\tsandbox@example.com\tTest, NY\t1 kg\t\ndelivered\t11/11/2026\n#22b43e0b\tsandbox@example.com\tTest, NY\t1 kg\t\nshipped\t11/11/2026"
+  },
+  {
+    "route": "dashboard/inventory",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nInventory\n⌘K\nAdmin\nInventory\n\nManage SKU balances, stock movements, and order reservations.\n\nNew product\nSKU\nProduct name\nAdd product\nNew stock location\nProduct\nSelect a SKU\n14662a030e · QA product\n3ece9a7dc5 · QA product\nb52dcabee8 · QA product\nf02128be5d · QA product\nfa52d322b8 · QA product\nFulfillment center\nSelect a center\n14662a030e\n3ece9a7dc5\nInventory Browser Center\nb52dcabee8\nf02128be5d\nfa52d322b8\nLow-stock threshold\nAdd stock location\nCreate order for allocation\nOrder reference\nCustomer email\nShipping address\nPostal code\nShipping city\nState or region\nShipping country\nTotal weight (kg)\nAdd order line\nCreate pending order\nStock location\nSelect a location\n14662a030e · 14662a030e\n3ece9a7dc5 · 3ece9a7dc5\nb52dcabee8 · b52dcabee8\nf02128be5d · f02128be5d\nfa52d322b8 · fa52d322b8\nOrder reservations\nLookup order ID\nFind reservations"
+  },
+  {
+    "route": "dashboard/monitoring",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nMonitoring\n⌘K\nAdmin\nMonitoring\n\nAsk AI for system health and performance\n\nAPI Latency\n\n47ms\n\nCPU Usage\n\n34%\n\nMemory\n\n62%\n\nNetwork I/O\n\n1.2 Gbps\n\nError Rate\n\n0.03%\n\nAgent Status\nOrder Router\nactive\nUptime: 99.98%\nTasks: 1,243\nInventory Monitor\nactive\nUptime: 99.95%\nTasks: 892\nCost Optimizer\nactive\nUptime: 99.99%\nTasks: 567\nDemand Predictor\nactive\nUptime: 99.87%\nTasks: 345\nRerouting Agent\nidle\nUptime: 99.91%\nTasks: 78\nQuality Checker\nactive\nUptime: 99.93%\nTasks: 2,101"
+  },
+  {
+    "route": "dashboard/workflows",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nWorkflows\n⌘K\nAdmin\nWorkflows\n\nAsk AI to manage workflows\n\nWorkflow simulations\n4 workflows\n\nSample data. These controls change this view only; no production workflow is started, paused or completed.\n\nInventory Reconciliation\n3 agents\n72%\n2m ago\nOrder Fulfillment Pipeline\n5 agents\n45%\n1m ago\nDemand Forecasting Cycle\n2 agents\n88%\n15m ago\nQuality Assurance Batch\n2 agents\n100%\n32m ago"
+  },
+  {
+    "route": "dashboard/analytics",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nAnalytics\n⌘K\nAdmin\nAnalytics\n\nAsk AI for insights and metrics\n\nAnalytics\n24H\n7D\n30D\nTotal Shipments\n\n5\n\n0.0% on-time\nDelivered\n\n4\n\n0.0d avg\nFailed Rate\n\n0.0%\n\n0 delayed\nFixtur"
+  },
+  {
+    "route": "dashboard/chat",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nChat\n⌘K\nAdmin\nChat\n\nAsk the AI to manage your warehouse operations\n\nWarehouse OS AI\n\nConnected\nWelcome to Warehouse OS! Send a message to get started.\nHow many agents are active?\nSummarize agent health\nWhat's our top priority?\nSuggest optimizations\nExplain current metrics\nCreate an order for ahmed@gmail.com, Lahore, 3kg\nShow me all orders\nHow are the agents performing?"
+  },
+  {
+    "route": "dashboard/integrations",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nIntegrations\n⌘K\nAdmin\nIntegrations\n\nConnect your warehouse management system\n\nAdd Connection\n\nNo integrations configured\n\nConnect your Odoo warehouse to get started"
+  },
+  {
+    "route": "dashboard/notifications",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nNotifications\n⌘K\nAdmin\nNotifications\n\nAsk AI about alerts and notifications\n\nShipment Delay Detected\nMonitorAgent\n·\n2m ago\n\nOrder #1024 via FedEx is past estimated delivery by 15.2 hours\n\nOrder Routing Delay\nMonitorAgent\n·\n15m ago\n\nShipment #d7ac53 to 90210 is delayed - evaluating alternatives\n\nCustomer Notification Sent\nCommunicationAgent\n·\n1h ago\n\nDelay alert sent to customer ahmed@example.com via email\n\nInventory Reconciliation\nRoutingAgent\n·\n2m ago\n\nInventory reconciliation completed successfully across all zones\n\nAnomaly Detected in Zone C\nCostOptimizer\n·\n2h ago\n\nUnusual cost pattern detected - 23% above average for Zone C shipments\n\nHigh Failure Risk\nPredictionAgent\n·\n30m ago\n\nShipment #1436a4 has 92% failure probability - immediate action needed\n\nShipment Rerouted\nReroutingAgent\n·\n45m ago\n\nShipment #38a29f rerouted from UPS to DHL - new tracking generated\n\nBulk Notification Sent\nCommunicationAgent\n·\n3h ago\n\n24 delay notifications sent to affected customers"
+  },
+  {
+    "route": "dashboard/settings",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nSettings\n⌘K\nAdmin\nSettings\n\nAsk AI to update settings\n\nCurrent Configuration\nApp Name\nWarehouse OS\nTimezone\nUTC\nLanguage\nEnglish\nTheme\ndark\nAPI Endpoint"
+  },
+  {
+    "route": "dashboard/team",
+    "status": 200,
+    "hasAuditLabel": false,
+    "alerts": [
+      ""
+    ],
+    "failedRequests": [],
+    "text": "Skip to main content\nFulfillOS\nv2.0\nMain Workspace\nDashboard\nChat\nAgents\nWorkflows\nOrders\nMonitoring\nIntegrations\nAnalytics\nTeam\nInventory\nNotifications\nSettings\nLight Mode\n/\nDashboard\nTeam\n⌘K\nAdmin\nTeam\n\nAsk AI to manage team members\n\nNAME\nEMAIL\nROLE\nSTATUS\n\nNo team members yet\n\nTeam management is handled by the AI assistant."
+  }
+]

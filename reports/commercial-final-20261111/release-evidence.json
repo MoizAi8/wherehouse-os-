@@ -1,0 +1,41 @@
+{
+  "application_commit": "dceb5f22c8744c975eb4154da43b6f0fe4affb3b",
+  "ci": "https://github.com/MoizAi8/wherehouse-os-/actions/runs/43041661053",
+  "frontend_tests": 87,
+  "built_auth_checks": 23,
+  "backend": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "1252",
+    "time": "18.428",
+    "timestamp": "2026-11-11T14:49:37.291414+00:00",
+    "hostname": "runnervmwuk1x"
+  },
+  "matrix": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "500",
+    "time": "105.866",
+    "timestamp": "2026-11-11T14:50:03.601325+00:00",
+    "hostname": "runnervmwuk1x"
+  },
+  "ledger_passes": 519,
+  "images": {
+    "api": {
+      "manifest": "sha256:26477fd32793f60cc938f0b765027ce294152935ae4d6b5a8fa6f6e3f0872546",
+      "config": "sha256:d844bc03a5a667093210265058574d7e24581712ecc38476f3f774924a90f2c7"
+    },
+    "frontend": {
+      "manifest": "sha256:47f339313a468cd5b17e981e5ec3f7a9f4319a3cbfaa2961a1fba89c7ec9d680",
+      "config": "sha256:3de01906a534abde916454a77d784aba698571d624b0ee18b06c3d409a4eea42"
+    }
+  },
+  "image_scope": "Isolated CI images, not production registry releases or independently read-back OCI images",
+  "migration_head": "f328a76da954",
+  "migration_changes_since_production": false,
+  "production_approval": "pending; no new deployment"
+}

@@ -1,0 +1,28 @@
+{
+  "https://140-245-218-97.sslip.io/": {
+    "http": 200,
+    "location": null
+  },
+  "https://140-245-218-97.sslip.io/health": {
+    "http": 200,
+    "location": null,
+    "body": {
+      "status": "ok",
+      "version": "0.1.0",
+      "database": "postgresql",
+      "postgres": true,
+      "celery": true,
+      "qdrant": true,
+      "degraded": false,
+      "backends": {
+        "postgres": true,
+        "celery": true,
+        "qdrant": true
+      }
+    }
+  },
+  "https://140.245.218.97/": {
+    "http": 308,
+    "location": "https://140-245-218-97.sslip.io/"
+  }
+}

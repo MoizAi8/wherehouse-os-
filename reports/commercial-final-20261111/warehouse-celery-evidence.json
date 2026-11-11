@@ -1,0 +1,187 @@
+{
+  "normal": {
+    "task_id": "272eb68c-84df-419d-ae5f-c023f9c210b4",
+    "cycle_id": "660790ae-8cc8-4ea2-8981-fcf70c003b52"
+  },
+  "duplicate": {
+    "task_id": "272eb68c-84df-419d-ae5f-c023f9c210b4",
+    "cycle_id": "660790ae-8cc8-4ea2-8981-fcf70c003b52"
+  },
+  "retry": {
+    "task_id": "ada6b50a-68a7-4809-ba2c-98e7a160e5ae",
+    "cycle_id": "9e9cdec6-7fe1-428e-9084-643dc2efd880"
+  },
+  "recovery": {
+    "task_id": "c289fc18-46e9-4181-994c-d146593838fc",
+    "cycle_id": "85256c13-6589-456b-baf5-97bec5c512f0"
+  },
+  "scheduled": {
+    "task_id": "b75149b9-3bd1-4abf-bee0-ceff058bfa8f",
+    "cycle_id": "8a9555a3-ca05-4dbc-a2b9-419c7cc26b51"
+  },
+  "exhausted": {
+    "task_id": "ee18d1a0-0d97-4c33-99f3-0e9dc053aef3",
+    "state": "FAILURE"
+  },
+  "after_exhaustion": {
+    "task_id": "a4400183-b648-47cf-aa5c-ba8a7c94609e",
+    "cycle_id": "f70f68e9-74dc-4c9b-9c2a-528c3a24363c"
+  },
+  "notification_worker": {
+    "task_id": "6c8167a4-2a1e-4d4b-a0b6-ee7affce8267",
+    "notification_id": "b5b51235-d464-4688-b592-ec06f9b297c3",
+    "status": "failed"
+  },
+  "notification_accepted": {
+    "task_id": "80414611-20cf-4c6f-a2cf-e55cc331688b",
+    "notification_id": "057f7e40-2d27-4e5d-8b37-8a68c6b02953",
+    "status": "provider_accepted",
+    "external_provider": "loopback sandbox",
+    "duplicate_task_id": "39082cf3-cc0e-4185-906f-0f54dea82c11",
+    "http_requests": 1
+  },
+  "redis_restart": {
+    "task_id": "dcc6630f-dd42-46c1-b784-d27a8f0bbfa8",
+    "cycle_id": "1911e67e-575f-45e5-b9aa-8befda9be0b8"
+  },
+  "persisted_agents": [
+    "CommunicationAgent",
+    "CostOptimizer",
+    "FulfillmentOrchestrator",
+    "MonitorAgent",
+    "PredictionAgent",
+    "ReroutingAgent",
+    "RoutingAgent"
+  ],
+  "agent_executions": [
+    {
+      "agent": "CommunicationAgent",
+      "event_id": "1674d969-3eaa-4074-bc70-f983c8eaffac",
+      "entity_id": "057f7e40-2d27-4e5d-8b37-8a68c6b02953",
+      "event_type": "provider_accepted",
+      "timestamp": "2026-11-11T14:49:27.835932+00:00",
+      "result": {
+        "attempt": 1
+      }
+    },
+    {
+      "agent": "CostOptimizer",
+      "event_id": "251dfec6-8bf2-4350-996c-6bd3fae4b5ed",
+      "entity_id": "1911e67e-575f-45e5-b9aa-8befda9be0b8",
+      "event_type": "cost_analysis",
+      "timestamp": "2026-11-11T14:49:31.566547+00:00",
+      "result": {
+        "cycle_id": "1911e67e-575f-45e5-b9aa-8befda9be0b8",
+        "analysis": {
+          "total_shipments": 2,
+          "total_cost": 24.0,
+          "average_cost": 12.0,
+          "min_cost": 12.0,
+          "max_cost": 12.0
+        },
+        "recommendations": [],
+        "analyzed_at": "2026-11-11T14:49:31.566513+00:00"
+      }
+    },
+    {
+      "agent": "FulfillmentOrchestrator",
+      "event_id": "514cc389-9e1c-44a3-9668-f7197c156a67",
+      "entity_id": "1911e67e-575f-45e5-b9aa-8befda9be0b8",
+      "event_type": "cycle_complete",
+      "timestamp": "2026-11-11T14:49:31.566619+00:00",
+      "result": {
+        "shipments_checked": 2,
+        "delays_detected": 2,
+        "reroutes_initiated": 0,
+        "notifications_sent": 0,
+        "anomalies_found": 6
+      }
+    },
+    {
+      "agent": "MonitorAgent",
+      "event_id": "7703c285-eb8c-424c-b99a-ff4222957aaa",
+      "entity_id": "7d879550-1752-464e-8f34-11de8732ae96",
+      "event_type": "delay_detected",
+      "timestamp": "2026-11-11T14:49:31.556767+00:00",
+      "result": {
+        "is_delayed": true,
+        "reason": "Past estimated delivery by 48.0 hours",
+        "risk_score": 1.0,
+        "checked_at": "2026-11-11T14:49:31.551250+00:00"
+      }
+    },
+    {
+      "agent": "PredictionAgent",
+      "event_id": "2f8ebb2b-587a-41e5-b0b9-f43924f14a80",
+      "entity_id": "7d879550-1752-464e-8f34-11de8732ae96",
+      "event_type": "failure_prediction",
+      "timestamp": "2026-11-11T14:49:31.556695+00:00",
+      "result": {
+        "shipment_id": "7d879550-1752-464e-8f34-11de8732ae96",
+        "tracking_number": "TRK-AEE38BAF4CA4",
+        "failure_probability": 0.95,
+        "risk_level": "high",
+        "factors": [
+          {
+            "factor": "current_delay",
+            "weight": 0.3,
+            "detail": "Past estimated delivery by 48.0 hours"
+          },
+          {
+            "factor": "overdue",
+            "weight": 0.3,
+            "detail": "Shipment is 48.0 hours overdue"
+          },
+          {
+            "factor": "carrier_history",
+            "weight": 0.2,
+            "detail": "Carrier historical delay rate: 100.0%"
+          }
+        ],
+        "predicted_at": "2026-11-11T14:49:31.556670+00:00"
+      }
+    },
+    {
+      "agent": "ReroutingAgent",
+      "event_id": "796398d4-d719-45f7-a4c6-1d2b4cad8bfe",
+      "entity_id": "7d879550-1752-464e-8f34-11de8732ae96",
+      "event_type": "reroute_recommended",
+      "timestamp": "2026-11-11T14:49:31.554017+00:00",
+      "result": {
+        "should_reroute": true,
+        "alternative_carrier": "Sandbox B",
+        "alternative_service": "Ground",
+        "alternative_rate_id": "1de20f47-471c-4a9a-9ec9-bee5d2e92542",
+        "new_cost": 13.0,
+        "current_cost": 12.0,
+        "cost_increase_pct": 8.33,
+        "estimated_days_min": 2,
+        "estimated_days_max": 3,
+        "urgency": "medium",
+        "approval_required": true
+      }
+    },
+    {
+      "agent": "RoutingAgent",
+      "event_id": "297da137-68db-49f8-9f61-0e36a0e284f1",
+      "entity_id": "d6de9a5a-028d-448e-b402-e64d2a8fb5d9",
+      "event_type": "route_selected",
+      "timestamp": "2026-11-11T14:49:25.892518+00:00",
+      "result": {
+        "fulfillment_center": {
+          "id": "3e132f69-354c-489f-9b7d-6180fd978fea",
+          "name": "Worker fixture"
+        },
+        "carrier": {
+          "id": "0cc52d62-4a74-4a36-a4f5-8c3b44f8d54d",
+          "name": "Sandbox A",
+          "service": "Ground"
+        },
+        "tracking_number": "TRK-591C4D0DD151",
+        "shipping_cost": 12.0,
+        "estimated_delivery": "2026-11-14T14:49:25.902084+00:00",
+        "estimated_days": "2-3"
+      }
+    }
+  ]
+}

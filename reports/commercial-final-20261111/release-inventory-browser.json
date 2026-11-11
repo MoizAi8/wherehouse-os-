@@ -1,0 +1,15 @@
+{
+  "status": "passed",
+  "checks": [
+    "Operator authenticated and created SKU and stock location",
+    "Receipt persisted and inventory view refreshed",
+    "Order remained pending for allocation and insufficient stock was rejected",
+    "Routing and dispatch persisted across reload",
+    "Insufficient typed order remains pending without holding stock",
+    "Typed order automatically allocated and routed; whole-order dispatch consumed its stock",
+    "Routed cancellation released the reservation and restored availability",
+    "Original landing launches the original dashboard without guest login",
+    "Guest inventory route is restricted and guest bearer cannot read stock",
+    "Guest roster uses Not yet run with no private execution data"
+  ]
+}
