@@ -48,8 +48,8 @@ jobs:
                 image_id=$("${DOCKER[@]}" inspect --format '{{.Image}}' "$container")
                 [[ "$image_id" == "$("${DOCKER[@]}" image inspect --format '{{.Id}}' "$reference")" ]] || exit 1
                 [[ "$("${DOCKER[@]}" inspect --format '{{.State.Running}}' "$container")" == true ]] || exit 1
-                health=$("${DOCKER[@]}" inspect --format '{{.State.Health.Status}}' "$container")
-                [[ "$health" == healthy ]] || exit 1
+                health=$("${DOCKER[@]}" inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}not-configured{{end}}' "$container")
+                if [[ "$service" == api || "$health" != not-configured ]]; then [[ "$health" == healthy ]] || exit 1; fi
                 printf 'SERVICE=%s REFERENCE=%s IMAGE_ID=%s HEALTH=%s\n' "$service" "$reference" "$image_id" "$health"
             done
             READ_ONLY
