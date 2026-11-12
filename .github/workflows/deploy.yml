@@ -52,4 +52,18 @@ jobs:
                 if [[ "$service" == api || "$health" != not-configured ]]; then [[ "$health" == healthy ]] || exit 1; fi
                 printf 'SERVICE=%s REFERENCE=%s IMAGE_ID=%s HEALTH=%s\n' "$service" "$reference" "$image_id" "$health"
             done
+            "${DOCKER[@]}" exec -i order-fulfillment-coordinator-api-1 python - <<'PY_STATUS'
+            import asyncio, json
+            from sqlalchemy import text
+            from fulfillment.database import async_session_factory, engine
+            from fulfillment.services.agent_runtime import agent_runtime_status
+            async def main():
+                async with async_session_factory() as db:
+                    await db.execute(text("SET TRANSACTION READ ONLY"))
+                    rows = await agent_runtime_status(db)
+                    for row in rows:
+                        print("AGENT_EVIDENCE=" + json.dumps({k: row[k] for k in ("name", "status", "reason", "event_id", "event_type", "observed_at")}, default=str))
+                await engine.dispose()
+            asyncio.run(main())
+            PY_STATUS
             READ_ONLY
