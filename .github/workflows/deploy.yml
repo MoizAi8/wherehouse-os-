@@ -54,12 +54,20 @@ jobs:
             done
             "${DOCKER[@]}" exec -i order-fulfillment-coordinator-api-1 python - <<'PY_STATUS'
             import asyncio, json
-            from sqlalchemy import text
+            from sqlalchemy import text, select
             from fulfillment.database import async_session_factory, engine
+            from fulfillment.models.user import User
             from fulfillment.services.agent_runtime import agent_runtime_status
             async def main():
                 async with async_session_factory() as db:
                     await db.execute(text("SET TRANSACTION READ ONLY"))
+                    accounts = (await db.execute(select(User.role, User.is_active).where(User.email == "teacher@example.com"))).all()
+                    account = {"matches": len(accounts)}
+                    if len(accounts) == 1:
+                        role, active = accounts[0]
+                        role = getattr(role, "value", role)
+                        account.update(role=role, active=active, eligible=bool(active and role in ("admin", "operator")))
+                    print("RECOVERY_ACCOUNT_CHECK=" + json.dumps(account))
                     rows = await agent_runtime_status(db)
                     for row in rows:
                         print("AGENT_EVIDENCE=" + json.dumps({k: row[k] for k in ("name", "status", "reason", "event_id", "event_type", "observed_at")}, default=str))
