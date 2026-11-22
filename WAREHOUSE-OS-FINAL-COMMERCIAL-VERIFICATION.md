@@ -1,5 +1,42 @@
 # Warehouse OS — Final commercial verification
 
+## November 22 practical instructor acceptance
+
+**NO-GO for a writable instructor HTTPS link.** Local isolated warehouse execution PASS. Production Guest Mode PASS for read-only evaluation. Cloud isolated writable evaluation BLOCKED. Real customer fulfillment BLOCKED for live carrier and notification activation. Historical production administrator recovery is closed for this assignment. Administrator login remains NOT TESTED.
+
+Local development HEAD, remote main and the OCI release directory matched d6a876296064434ba2015f1f73dd804490269504 during testing. OCI had 956 MiB total RAM, 336 MiB available, 895 MiB swap in use, and 13 GiB available disk. The API, PostgreSQL, Redis and Celery worker reported healthy. Beat was running. Another full stack has no demonstrated safe memory headroom there. Public browser acceptance passed the HTTPS redirect, landing, Launch Dashboard, seven guest cards and 401 rejection at the private status endpoint.
+
+The credentials provider exchanges email/password for a backend JWT. The UI session exposes that bearer to frontend code. Operator authorization spans inventory, shipments and integration configuration. Stock/order selectors and monitoring tasks operate across the configured database. A link to an ordinary operator session cannot enforce evaluator-only scope. An independently routed evaluation origin needs its own database, signing secrets, broker/workers, sandbox dependencies, and a revocable invitation/session boundary that enforces permitted operations at the API. Redemption, revocation, CSRF, replay and cross-environment rejection are BLOCKED for instructor acceptance. No invitation or deployment candidate was issued.
+
+**Linked operational test.** A real PostgreSQL reservation, sandbox booking with idempotent replay, signed delay/delivery events and Celery tasks produced a delivered order. Stock went from 5 on hand / 2 reserved to 3 / 0. One provider request matched the order's unique sandbox recipient. An earlier fixture run omitted explicit sandbox activation; another used a workspace-wide request count. Corrected the acceptance runner locally. Full records, input entity IDs, UTC timestamps, outcomes, booking receipt, task IDs and original dashboard screenshots are in [the evidence bundle](reports/practical-evaluation-20261122/).
+
+| Agent | Trigger / persisted result | Event ID | UTC | Backend |
+|---|---|---|---|---|
+| RoutingAgent | route_selected | 2e6504c1-f97a-4d6a-9849-1ae5149c5f78 | 2026-11-22T07:29:05.204201+00:00 | PASS |
+| MonitorAgent | delay_detected | 1886ac47-daf0-451d-bf16-75607b99c301 | 2026-11-22T07:29:30.519612+00:00 | PASS |
+| PredictionAgent | failure_prediction | f5440d17-9d7e-4909-b602-b55f7f2687a3 | 2026-11-22T07:29:30.519612+00:00 | PASS |
+| ReroutingAgent | reroute_recommended | 05268ad5-82d5-49d2-8cd5-4fba0d9b946c | 2026-11-22T07:29:30.508644+00:00 | PASS |
+| CommunicationAgent | provider_accepted | 885c0e28-7878-4fd1-bc3c-6dd34858ed57 | 2026-11-22T07:29:42.819798+00:00 | PASS |
+| CostOptimizer | cost_analysis | e8233f6d-d662-4835-953c-90e22fc40f4f | 2026-11-22T07:29:30.560819+00:00 | PASS |
+| FulfillmentOrchestrator | cycle_complete | a4581fb6-c1cf-4311-8ee9-c202e5c18512 | 2026-11-22T07:29:30.560819+00:00 | PASS |
+
+Booking task dd9e4c36-7be4-42f7-9c5b-6ec651a53690, monitor/orchestration task 5eabfb66-2a1f-4453-b4be-fbc8152ef9c1, outbox task 25071010-085c-4cd6-b5e7-b92d29c7ab35. Browser refresh and all seven expanded card IDs/times matched the latest database evidence. The monitoring cycle evaluated multiple fixture shipments, so some cards displayed a different shipment from the same scan. See dashboard_status versus events in the JSON.
+
+**Instructor questions and guide**
+
+1. Open https://140-245-218-97.sslip.io/ and click **Launch Dashboard** for login-free read-only guest access. A writable instructor invitation is unavailable.
+2. Creating stock-backed orders works with an isolated operator. Guest order creation is unavailable.
+3. Isolated receiving and reservation passed. On this PC an authorized local operator can open http://127.0.0.1:3385/dashboard/inventory and follow section 19 below using a new SKU such as EVAL-BOX-01.
+4. All seven implementations executed. To repeat this machine's isolated linked run, use PowerShell from the repository root and run `powershell -NoProfile -File .tools/watch-20261110185156/run-evaluation.ps1`. Keep the local API, PostgreSQL and broker running. Each invocation creates a fresh SKU and order. The runner drives signed events and worker tasks. It requires local access.
+5. Visit Agents, click **Refresh agent status**, expand **Execution details**, and compare event IDs and timestamps with the runner output. All seven were Idle after completion. Orders displays the delivered order.
+6. Current live Gemini inference BLOCKED pending confirmed no-cost quota. Earlier live greeting and bounded tool checks are historical. English/Roman Urdu multi-turn inference, inventory accuracy and model error behavior were NOT TESTED this run.
+7. Authenticated local Chat PASS for fallback response and history reload, reopen and deletion. Scroll container used overflow auto. Long-transcript scrolling and evaluator isolation NOT TESTED.
+8. Local test records used the dedicated loopback database and broker. Messages went to a loopback sink. The browser fixture used ordinary sign-in and deactivated its disposable tester afterward.
+9. No new P0/P1 application defect confirmed in the exercised paths. npm reports moderate advisories affecting Next 16.4.3, including GHSA-f3mh-rxg3-f5g2. App-specific exposure NOT TESTED.
+10. Evaluation release deployment BLOCKED. Existing app and CI evidence: [main CI and images](https://github.com/MoizAi8/wherehouse-os-/actions/runs/43105879858), [deployment](https://github.com/MoizAi8/wherehouse-os-/actions/runs/43106874143). Local Docker executable unavailable. No new image builds or production migrations. Historical 500-scenario, worker recovery, over-allocation and duplicate-prevention results apply to the unchanged application code.
+11. The instructor cannot independently complete the workflow from one HTTPS link today.
+12. Remaining gates: safely hosted independent evaluation origin, restricted evaluator identity with revocable invitation exchange, safe linked workflow controls, verified inference quota, and browser acceptance against that origin. Until provisioned there is no invitation to use, reset, or revoke.
+
 Verification date: 11 November 2026 (Asia/Karachi). Evidence timestamps retain UTC offsets. Decision: **CONDITIONALLY READY**.
 
 ## 1. Executive summary

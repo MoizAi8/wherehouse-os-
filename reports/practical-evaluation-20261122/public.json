@@ -1,0 +1,24 @@
+{
+  "checkedAt": "2026-11-22T07:26:39.270Z",
+  "health": {
+    "status": "ok",
+    "version": "0.1.0",
+    "database": "postgresql",
+    "postgres": true,
+    "celery": true,
+    "qdrant": true,
+    "degraded": false,
+    "backends": {
+      "postgres": true,
+      "celery": true,
+      "qdrant": true
+    }
+  },
+  "ip": 308,
+  "guest": {
+    "guest": true,
+    "role": "VIEWER",
+    "privateStatus": 401
+  },
+  "professionalLabels": true
+}
