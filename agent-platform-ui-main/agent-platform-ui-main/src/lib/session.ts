@@ -12,6 +12,7 @@ const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD || "Demo1234!"
 let signingIn: Promise<unknown> | undefined
 
 export async function refreshSession(): Promise<boolean> {
+  if (process.env.NEXT_PUBLIC_INSTRUCTOR_WORKSPACE === "1") return false
   if (process.env.NODE_ENV === "production") {
     // Expired/legacy cookies cannot be renewed without re-authentication.
     // Never substitute demo credentials or keep displaying a stale session.
@@ -39,6 +40,7 @@ export async function refreshSession(): Promise<boolean> {
  * Returns true when a valid access token is available afterwards.
  */
 export async function ensureValidSession(): Promise<boolean> {
+  if (process.env.NEXT_PUBLIC_INSTRUCTOR_WORKSPACE === "1") return (await fetch("/api/auth/me", { cache: "no-store" })).ok
   const { getSession } = await import("next-auth/react")
   const session = await getSession()
   if (session?.demoGuest) return true

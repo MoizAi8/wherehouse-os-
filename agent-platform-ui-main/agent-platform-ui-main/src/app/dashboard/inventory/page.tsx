@@ -319,7 +319,8 @@ function InventoryWorkspace() {
 export default function InventoryPage() {
   const { data: session, status } = useSession()
   if (status === "loading") return <p className="text-sm text-muted-foreground">Loading session…</p>
-  if (!session?.accessToken || session.demoGuest) {
+  const instructor = process.env.NEXT_PUBLIC_INSTRUCTOR_WORKSPACE === "1" && session?.user?.id
+  if (!session || (!session.accessToken && !instructor) || session.demoGuest) {
     return <p className="text-sm text-muted-foreground">Sign in with a business account to view inventory.</p>
   }
   return <InventoryWorkspace key={session.user.id} />

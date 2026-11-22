@@ -28,7 +28,7 @@ const breadcrumbMap: Record<string, string> = {
 
 export function Topbar() {
   const { data: session } = useSession()
-  const displayName = session?.demoGuest ? "Demo Guest" : "Admin"
+  const displayName = process.env.NEXT_PUBLIC_INSTRUCTOR_WORKSPACE === "1" ? "Instructor" : session?.demoGuest ? "Demo Guest" : "Admin"
   const pathname = usePathname()
   const router = useRouter()
   const segments = pathname.split("/").filter(Boolean)
@@ -93,7 +93,7 @@ export function Topbar() {
           <DropdownMenuContent align="end" className="w-56 glass-card-strong border-border/60">
             <div className="px-2.5 py-2">
               <p className="text-sm font-medium">{displayName}</p>
-              <p className="text-xs text-muted-foreground">{session?.demoGuest ? "Read-only sample workspace" : "admin@warehouse.io"}</p>
+              <p className="text-xs text-muted-foreground">{process.env.NEXT_PUBLIC_INSTRUCTOR_WORKSPACE === "1" ? "Isolated evaluation workspace" : session?.demoGuest ? "Read-only sample workspace" : "admin@warehouse.io"}</p>
             </div>
             <DropdownMenuSeparator className="bg-border/30" />
             <DropdownMenuItem className="text-xs" onSelect={() => router.push("/dashboard/profile")}>Profile</DropdownMenuItem>

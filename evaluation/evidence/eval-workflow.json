@@ -1,0 +1,298 @@
+{
+  "booking_id": "701f0fdb-cec0-464d-ac19-69095d8a83b9",
+  "booking_task": "1e9461ab-0cb7-48ae-8de4-3fc57e80021b",
+  "booking_status": "booked",
+  "provider_reference": "SANDBOX-BOOKING-04359a15-92af-4352-b237-727dc6067877",
+  "order": "f22840dc-3ea3-4bd6-9621-4b0b5b0b044b",
+  "shipment": "34039640-9c84-425e-960a-bb23bd1071f8",
+  "cycle": "01f6aac0-2ada-40e0-b1c7-834499394710",
+  "monitor_task": "210bc90a-f9d5-463a-b9dd-f040bced1523",
+  "notification_task": "1a9b5f18-26c7-4564-a95a-aa9970b228d3",
+  "provider_http_requests": 1,
+  "all_workspace_provider_requests": 1,
+  "stock_before_dispatch": [
+    5,
+    2
+  ],
+  "stock_after_delivery": [
+    3,
+    0
+  ],
+  "order_state": "delivered",
+  "events": [
+    {
+      "agent": "RoutingAgent",
+      "id": "cde1b055-35e8-46e7-881f-d5b493d91a8a",
+      "time": "2026-11-22T18:10:09.061429+00:00",
+      "entity": "f22840dc-3ea3-4bd6-9621-4b0b5b0b044b",
+      "type": "route_selected",
+      "result": {
+        "fulfillment_center": {
+          "id": "3edab095-0c39-4323-b9ea-26ac4480279e",
+          "name": "16ff3ed6da"
+        },
+        "carrier": {
+          "id": "a76f80c8-df1b-4a83-9724-998ea1aa17f5",
+          "name": "Fixture A",
+          "service": "Ground"
+        },
+        "tracking_number": "TRK-1611F5F468A1",
+        "shipping_cost": 11.0,
+        "estimated_delivery": "2026-11-25T18:10:09.134910+00:00",
+        "estimated_days": "2-3"
+      }
+    },
+    {
+      "agent": "WarehouseOperator",
+      "id": "bf5acd63-f40d-4b08-8a7b-79b7363de648",
+      "time": "2026-11-22T18:10:13.169890+00:00",
+      "entity": "f22840dc-3ea3-4bd6-9621-4b0b5b0b044b",
+      "type": "order_dispatch_recorded",
+      "result": {
+        "actor_id": "QA",
+        "line_count": 1,
+        "reason": "QA dispatch"
+      }
+    },
+    {
+      "agent": "MonitorAgent",
+      "id": "f1ae7577-86df-496c-a5e4-dfbf1024d490",
+      "time": "2026-11-22T18:10:14.487394+00:00",
+      "entity": "01f6aac0-2ada-40e0-b1c7-834499394710",
+      "type": "scan_complete",
+      "result": {
+        "shipments_checked": 1
+      }
+    },
+    {
+      "agent": "ReroutingAgent",
+      "id": "cf955dfc-fab8-45b0-bb4d-9eb3b5f38e29",
+      "time": "2026-11-22T18:10:14.494369+00:00",
+      "entity": "34039640-9c84-425e-960a-bb23bd1071f8",
+      "type": "reroute_evaluated",
+      "result": {
+        "should_reroute": true,
+        "alternative_carrier": "Fixture B",
+        "alternative_service": "Ground",
+        "alternative_rate_id": "80bfee12-3b95-4c14-b1d1-65acc014798e",
+        "new_cost": 12.0,
+        "current_cost": 11.0,
+        "cost_increase_pct": 9.09,
+        "estimated_days_min": 2,
+        "estimated_days_max": 3,
+        "urgency": "medium"
+      }
+    },
+    {
+      "agent": "ReroutingAgent",
+      "id": "af9e9de7-077b-491e-aaab-a20828797149",
+      "time": "2026-11-22T18:10:14.494369+00:00",
+      "entity": "34039640-9c84-425e-960a-bb23bd1071f8",
+      "type": "reroute_recommended",
+      "result": {
+        "should_reroute": true,
+        "alternative_carrier": "Fixture B",
+        "alternative_service": "Ground",
+        "alternative_rate_id": "80bfee12-3b95-4c14-b1d1-65acc014798e",
+        "new_cost": 12.0,
+        "current_cost": 11.0,
+        "cost_increase_pct": 9.09,
+        "estimated_days_min": 2,
+        "estimated_days_max": 3,
+        "urgency": "medium",
+        "approval_required": true
+      }
+    },
+    {
+      "agent": "PredictionAgent",
+      "id": "09144959-49b2-4d27-9c2b-a7f6c684cae4",
+      "time": "2026-11-22T18:10:14.508293+00:00",
+      "entity": "34039640-9c84-425e-960a-bb23bd1071f8",
+      "type": "failure_prediction",
+      "result": {
+        "shipment_id": "34039640-9c84-425e-960a-bb23bd1071f8",
+        "tracking_number": "SANDBOX-04359a1592af4352b237727dc6067877",
+        "failure_probability": 0.95,
+        "risk_level": "high",
+        "factors": [
+          {
+            "factor": "current_delay",
+            "weight": 0.3,
+            "detail": "Shipment status is delayed"
+          },
+          {
+            "factor": "overdue",
+            "weight": 0.3,
+            "detail": "Shipment is 48.0 hours overdue"
+          },
+          {
+            "factor": "carrier_history",
+            "weight": 0.2,
+            "detail": "Carrier historical delay rate: 100.0%"
+          }
+        ],
+        "predicted_at": "2026-11-22T18:10:14.508293+00:00"
+      }
+    },
+    {
+      "agent": "MonitorAgent",
+      "id": "aa6131e5-1734-4927-9592-8c80b4136467",
+      "time": "2026-11-22T18:10:14.508293+00:00",
+      "entity": "34039640-9c84-425e-960a-bb23bd1071f8",
+      "type": "delay_detected",
+      "result": {
+        "is_delayed": true,
+        "reason": "Shipment status is delayed",
+        "risk_score": 1.0,
+        "checked_at": "2026-11-22T18:10:14.487394+00:00"
+      }
+    },
+    {
+      "agent": "CostOptimizer",
+      "id": "3efe53da-79a0-4c19-a192-ce1d7bb6a4ca",
+      "time": "2026-11-22T18:10:14.518060+00:00",
+      "entity": "01f6aac0-2ada-40e0-b1c7-834499394710",
+      "type": "cost_analysis",
+      "result": {
+        "cycle_id": "01f6aac0-2ada-40e0-b1c7-834499394710",
+        "analysis": {
+          "total_shipments": 1,
+          "total_cost": 11.0,
+          "average_cost": 11.0,
+          "min_cost": 11.0,
+          "max_cost": 11.0
+        },
+        "recommendations": [],
+        "analyzed_at": "2026-11-22T18:10:14.518060+00:00"
+      }
+    },
+    {
+      "agent": "FulfillmentOrchestrator",
+      "id": "6a2a530a-a632-4231-a43f-94f77ef90c5d",
+      "time": "2026-11-22T18:10:14.518060+00:00",
+      "entity": "01f6aac0-2ada-40e0-b1c7-834499394710",
+      "type": "cycle_complete",
+      "result": {
+        "shipments_checked": 1,
+        "delays_detected": 1,
+        "reroutes_initiated": 0,
+        "notifications_sent": 0,
+        "anomalies_found": 3
+      }
+    },
+    {
+      "agent": "CommunicationAgent",
+      "id": "00e9a7bf-f8aa-49d3-afae-f0aee8c8e239",
+      "time": "2026-11-22T18:10:15.636523+00:00",
+      "entity": "a1be1ec0-e6cb-4bbd-beeb-459513694e74",
+      "type": "delivery_claimed",
+      "result": {
+        "attempt": 1
+      }
+    },
+    {
+      "agent": "CommunicationAgent",
+      "id": "a413d707-45ec-41c8-86d2-cbb346687047",
+      "time": "2026-11-22T18:10:15.667754+00:00",
+      "entity": "a1be1ec0-e6cb-4bbd-beeb-459513694e74",
+      "type": "provider_accepted",
+      "result": {
+        "attempt": 1
+      }
+    }
+  ],
+  "dashboard_status": [
+    {
+      "name": "RoutingAgent",
+      "status": "IDLE",
+      "reason": "Recent completed execution; current worker activity is not measured",
+      "event_id": "cde1b055-35e8-46e7-881f-d5b493d91a8a",
+      "event_type": "route_selected",
+      "entity_id": "f22840dc-3ea3-4bd6-9621-4b0b5b0b044b",
+      "observed_at": "2026-11-22 18:10:09.061429+00:00",
+      "outcome": {
+        "shipping_cost": 11.0,
+        "carrier": "Fixture A"
+      }
+    },
+    {
+      "name": "MonitorAgent",
+      "status": "IDLE",
+      "reason": "Recent completed execution; current worker activity is not measured",
+      "event_id": "aa6131e5-1734-4927-9592-8c80b4136467",
+      "event_type": "delay_detected",
+      "entity_id": "34039640-9c84-425e-960a-bb23bd1071f8",
+      "observed_at": "2026-11-22 18:10:14.508293+00:00",
+      "outcome": {
+        "is_delayed": true
+      }
+    },
+    {
+      "name": "PredictionAgent",
+      "status": "IDLE",
+      "reason": "Recent completed execution; current worker activity is not measured",
+      "event_id": "09144959-49b2-4d27-9c2b-a7f6c684cae4",
+      "event_type": "failure_prediction",
+      "entity_id": "34039640-9c84-425e-960a-bb23bd1071f8",
+      "observed_at": "2026-11-22 18:10:14.508293+00:00",
+      "outcome": {
+        "risk_level": "high",
+        "failure_probability": 0.95
+      }
+    },
+    {
+      "name": "ReroutingAgent",
+      "status": "IDLE",
+      "reason": "Recent completed execution; current worker activity is not measured",
+      "event_id": "cf955dfc-fab8-45b0-bb4d-9eb3b5f38e29",
+      "event_type": "reroute_evaluated",
+      "entity_id": "34039640-9c84-425e-960a-bb23bd1071f8",
+      "observed_at": "2026-11-22 18:10:14.494369+00:00",
+      "outcome": {
+        "alternative_carrier": "Fixture B",
+        "current_cost": 11.0,
+        "new_cost": 12.0
+      }
+    },
+    {
+      "name": "CommunicationAgent",
+      "status": "IDLE",
+      "reason": "Recent completed execution; current worker activity is not measured",
+      "event_id": "a413d707-45ec-41c8-86d2-cbb346687047",
+      "event_type": "provider_accepted",
+      "entity_id": "a1be1ec0-e6cb-4bbd-beeb-459513694e74",
+      "observed_at": "2026-11-22 18:10:15.667754+00:00",
+      "outcome": {
+        "attempt": 1
+      }
+    },
+    {
+      "name": "CostOptimizer",
+      "status": "IDLE",
+      "reason": "Recent completed execution; current worker activity is not measured",
+      "event_id": "3efe53da-79a0-4c19-a192-ce1d7bb6a4ca",
+      "event_type": "cost_analysis",
+      "entity_id": "01f6aac0-2ada-40e0-b1c7-834499394710",
+      "observed_at": "2026-11-22 18:10:14.518060+00:00",
+      "outcome": {
+        "total_shipments": 1,
+        "total_cost": 11.0,
+        "average_cost": 11.0
+      }
+    },
+    {
+      "name": "FulfillmentOrchestrator",
+      "status": "IDLE",
+      "reason": "Recent completed execution; current worker activity is not measured",
+      "event_id": "6a2a530a-a632-4231-a43f-94f77ef90c5d",
+      "event_type": "cycle_complete",
+      "entity_id": "01f6aac0-2ada-40e0-b1c7-834499394710",
+      "observed_at": "2026-11-22 18:10:14.518060+00:00",
+      "outcome": {
+        "shipments_checked": 1,
+        "delays_detected": 1,
+        "anomalies_found": 3
+      }
+    }
+  ]
+}

@@ -1,5 +1,11 @@
 # Warehouse OS — Final commercial verification
 
+## Instructor invitation and original dashboard
+
+**Local browser acceptance passed. External HTTPS acceptance awaits authorization.** The single-use instructor invitation opened the original dashboard in fresh Edge. The restricted session received stock, ran the linked warehouse workflow, refreshed the dashboard and matched seven idle agent cards to their persisted event IDs. Order `f22840dc-3ea3-4bd6-9621-4b0b5b0b044b` was delivered, with three units on hand and zero reserved. The browser verified replay rejection, denied administration and integrations, origin enforcement, revocation and Chat History. Chat used fallback. The instructor frontend release build and 87 frontend regression tests passed.
+
+[Instructor walkthrough and owner controls](evaluation/README.md) · [Persisted execution results](evaluation/evidence/eval-workflow.json) · [Original Agents dashboard](evaluation/evidence/verified-cards.png)
+
 ## November 22 practical instructor acceptance
 
 **NO-GO for a writable instructor HTTPS link.** Local isolated warehouse execution PASS. Production Guest Mode PASS for read-only evaluation. Cloud isolated writable evaluation BLOCKED. Real customer fulfillment BLOCKED for live carrier and notification activation. Historical production administrator recovery is closed for this assignment. Administrator login remains NOT TESTED.

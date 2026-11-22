@@ -12,3 +12,5 @@ deploy-state/
 deployment-test-*/
 .tools/
 .mypy_cache/
+
+.next-instructor/
