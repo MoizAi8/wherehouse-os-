@@ -2,6 +2,12 @@ import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, it, expect, vi, beforeEach } from "vitest"
 import AgentsPage from "@/app/dashboard/agents/page"
 
+import { SessionProvider } from "next-auth/react"
+
+function renderAgents() {
+  return render(<SessionProvider session={null}><AgentsPage /></SessionProvider>)
+}
+
 const mockMonitor = vi.fn()
 
 vi.mock("@/hooks/use-agents", () => ({
@@ -19,13 +25,13 @@ describe("Category 3: Agents Page", () => {
   })
 
   it("Test 15: Agents page renders", () => {
-    render(<AgentsPage />)
+    renderAgents()
     expect(screen.getByText("Agents")).toBeInTheDocument()
     expect(screen.getByText("Ask AI to monitor and control agents")).toBeInTheDocument()
   })
 
   it("Test 16: Agent cards show correct data with status", () => {
-    render(<AgentsPage />)
+    renderAgents()
     expect(screen.getByText("RoutingAgent")).toBeInTheDocument()
     expect(screen.getByText("MonitorAgent")).toBeInTheDocument()
     expect(screen.getAllByText("Not yet run")).toHaveLength(7)
@@ -33,25 +39,25 @@ describe("Category 3: Agents Page", () => {
   })
 
   it("Test 17: Agent cards reflect monitor data", () => {
-    render(<AgentsPage />)
+    renderAgents()
     expect(screen.getByText("Shipment Monitor")).toBeInTheDocument()
     expect(screen.getByText("Order Router")).toBeInTheDocument()
   })
 
   it("Test 18: Agent statuses rendered", () => {
-    render(<AgentsPage />)
+    renderAgents()
     expect(screen.getByText("Reroute Handler")).toBeInTheDocument()
     expect(screen.getByText("Notification Relay")).toBeInTheDocument()
   })
 
   it("Test 19: Delays do not fabricate a rerouting agent runtime state", () => {
-    render(<AgentsPage />)
+    renderAgents()
     expect(screen.getAllByText("Not yet run")).toHaveLength(7)
   })
 
   it("Test 20: Loading state shows skeleton", () => {
     mockMonitor.mockReturnValue({ data: null, loading: true, error: null, refetch: vi.fn() })
-    render(<AgentsPage />)
+    renderAgents()
     expect(screen.getByLabelText("Loading agents")).toBeInTheDocument()
   })
 
@@ -60,7 +66,7 @@ describe("Category 3: Agents Page", () => {
       { name: "RoutingAgent", status: "IDLE", reason: "Completed route" },
       { name: "CommunicationAgent", status: "FAILED", reason: "Provider rejected" },
     ] }, loading: false, error: null, refetch: vi.fn() })
-    render(<AgentsPage />)
+    renderAgents()
     expect(screen.getByText("Idle")).toHaveAttribute("title", "Completed route")
     expect(screen.getByText("Error")).toHaveAttribute("title", "Provider rejected")
     expect(screen.getAllByText("Not yet run")).toHaveLength(5)
@@ -68,7 +74,7 @@ describe("Category 3: Agents Page", () => {
 
   it("Test 21: Error handling renders error display", () => {
     mockMonitor.mockReturnValue({ data: null, loading: false, error: "Backend unreachable", refetch: vi.fn() })
-    render(<AgentsPage />)
+    renderAgents()
     expect(screen.getByText("Backend unreachable")).toBeInTheDocument()
     expect(screen.getByText("Try again")).toBeInTheDocument()
   })
@@ -80,7 +86,7 @@ describe("Category 3: Agents Page", () => {
       observed_at: "2026-11-10T12:00:00Z", event_id: "route-event-1",
       outcome: { carrier: "Fixture A", shipping_cost: 11 },
     }] }, loading: false, error: null, refetch })
-    render(<AgentsPage />)
+    renderAgents()
     fireEvent.click(screen.getByRole("button", { name: "Refresh agent status" }))
     expect(refetch).toHaveBeenCalledOnce()
     fireEvent.click(screen.getByText("Execution details"))

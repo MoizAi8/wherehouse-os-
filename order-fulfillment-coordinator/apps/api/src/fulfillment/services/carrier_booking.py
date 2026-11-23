@@ -369,5 +369,5 @@ async def require_booking_safe_to_dispatch(db: AsyncSession, order_id: str) -> N
             raise InventoryConflict("Carrier booking must complete before dispatch")
         if settings.carrier_require_booking_before_dispatch and booking is None:
             raise InventoryConflict("A confirmed carrier booking is required before dispatch")
-        if booking and booking.sandbox and not (settings.carrier_sandbox_enabled or db.info.get("instructor_sandbox")):
+        if booking and booking.sandbox and not (settings.carrier_sandbox_enabled or db.info.get("instructor_sandbox") is True):
             raise InventoryConflict("Sandbox bookings cannot authorize live dispatch")

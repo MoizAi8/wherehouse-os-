@@ -147,7 +147,7 @@ class FulfillmentOrchestrator:
                 if "error" not in cast(dict, reroute_result):
                     await self._log_event("ReroutingAgent", "reroute_evaluated", shipment.id, reroute_result)
                 if reroute_result["should_reroute"]:
-                    if self.db.info.get("instructor_sandbox") or not settings.allow_automatic_rerouting:
+                    if self.db.info.get("instructor_sandbox") is True or not settings.allow_automatic_rerouting:
                         recommendation = {
                             **cast(dict[str, Any], reroute_result),
                             "approval_required": True,

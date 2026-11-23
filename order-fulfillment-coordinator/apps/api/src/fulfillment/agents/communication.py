@@ -35,9 +35,10 @@ class CommunicationAgent:
         subject = f"Shipment Delay - {shipment.tracking_number}"
         body = f"Shipment {shipment.tracking_number} via {shipment.carrier_name} is delayed: {delay_reason}"
         channels = []
+        sandbox = self.db.info.get("instructor_sandbox") is True
         for channel, recipient, configured in (
-            ("email", order.customer_email, bool(self.db.info.get("instructor_sandbox") or settings.sendgrid_api_key)),
-            ("sms", order.customer_phone, bool(not self.db.info.get("instructor_sandbox") and settings.twilio_account_sid and settings.twilio_auth_token)),
+            ("email", order.customer_email, sandbox or bool(settings.sendgrid_api_key)),
+            ("sms", order.customer_phone, not sandbox and bool(settings.twilio_account_sid and settings.twilio_auth_token)),
         ):
             if not recipient:
                 continue
@@ -135,7 +136,7 @@ async def deliver_due_notifications(sessions: async_sessionmaker[AsyncSession], 
                 db.add(_delivery_event(notice.id, "delivery_claimed", notice.delivery_attempts))
         if notice is None:
             break
-        if db.info.get("instructor_sandbox"):
+        if db.info.get("instructor_sandbox") is True:
             # The receipt is the durable delivery destination for instructor messages.
             from sqlalchemy import text
             async with sessions.begin() as sink:
