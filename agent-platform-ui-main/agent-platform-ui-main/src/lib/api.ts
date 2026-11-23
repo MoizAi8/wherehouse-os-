@@ -5,14 +5,14 @@ export class ApiError extends Error {
   }
 }
 
-async function getAuthHeaders(): Promise<{ headers: Record<string, string>; guest?: boolean }> {
+async function getAuthHeaders(): Promise<{ headers: Record<string, string>; guest?: boolean; instructor?: boolean }> {
   if (typeof window === "undefined") return { headers: {} }
 
   try {
     const { getSession } = await import("next-auth/react")
     const session = await getSession()
     if (session?.accessToken) {
-      return { headers: { Authorization: `Bearer ${session.accessToken}` }, guest: session.demoGuest }
+      return { headers: { Authorization: `Bearer ${session.accessToken}` }, guest: session.demoGuest, instructor: session.instructorWorkspace }
     }
   } catch {
     // No active session — requests proceed without auth (server rejects with 401).
@@ -22,7 +22,9 @@ async function getAuthHeaders(): Promise<{ headers: Record<string, string>; gues
 
 async function request<T>(path: string, options?: RequestInit, retried = false): Promise<T> {
   const auth = await getAuthHeaders()
-  if (auth.guest) {
+  if (auth.instructor && auth.guest) {
+    path = "/api/demo/guest/workspace" + path
+  } else if (auth.guest) {
     const url = new URL(path, window.location.origin)
     const params = new URLSearchParams({ path: url.pathname })
     for (const key of ["status", "limit"]) if (url.searchParams.has(key)) params.set(key, url.searchParams.get(key)!)

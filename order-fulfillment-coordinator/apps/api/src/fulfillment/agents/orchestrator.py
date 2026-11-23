@@ -29,16 +29,17 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_monitor_breaker = get_circuit_breaker("monitor_agent", failure_threshold=5, timeout=60.0)
-_rerouting_breaker = get_circuit_breaker("rerouting_agent", failure_threshold=5, timeout=60.0)
-_communication_breaker = get_circuit_breaker("communication_agent", failure_threshold=5, timeout=60.0)
-_prediction_breaker = get_circuit_breaker("prediction_agent", failure_threshold=5, timeout=60.0)
-_cost_breaker = get_circuit_breaker("cost_optimizer", failure_threshold=5, timeout=60.0)
 
 
 class FulfillmentOrchestrator:
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
+        prefix = "instructor:" if db.info.get("instructor_sandbox") is True else ""
+        self._monitor_breaker = get_circuit_breaker(prefix + "monitor_agent", failure_threshold=5, timeout=60.0)
+        self._rerouting_breaker = get_circuit_breaker(prefix + "rerouting_agent", failure_threshold=5, timeout=60.0)
+        self._communication_breaker = get_circuit_breaker(prefix + "communication_agent", failure_threshold=5, timeout=60.0)
+        self._prediction_breaker = get_circuit_breaker(prefix + "prediction_agent", failure_threshold=5, timeout=60.0)
+        self._cost_breaker = get_circuit_breaker(prefix + "cost_optimizer", failure_threshold=5, timeout=60.0)
         self.monitor = MonitorAgent(db)
         self.rerouting = ReroutingAgent(db)
         self.communication = CommunicationAgent(db)
@@ -89,7 +90,7 @@ class FulfillmentOrchestrator:
         for shipment in shipments:  # type: ignore[union-attr]
             try:
                 delay_result = await with_retry(
-                    lambda: _monitor_breaker.call(self.monitor.check_delay, shipment),
+                    lambda: self._monitor_breaker.call(self.monitor.check_delay, shipment),
                     max_retries=2,
                     retry_exceptions=(Exception,),
                 )  # type: ignore[assignment]
@@ -126,7 +127,7 @@ class FulfillmentOrchestrator:
 
                 try:
                     reroute_result = await with_retry(
-                        lambda: _rerouting_breaker.call(self.rerouting.evaluate_reroute, shipment),
+                        lambda: self._rerouting_breaker.call(self.rerouting.evaluate_reroute, shipment),
                         max_retries=2,
                         retry_exceptions=(Exception,),
                     )  # type: ignore[assignment]
@@ -146,7 +147,7 @@ class FulfillmentOrchestrator:
                 if "error" not in cast(dict, reroute_result):
                     await self._log_event("ReroutingAgent", "reroute_evaluated", shipment.id, reroute_result)
                 if reroute_result["should_reroute"]:
-                    if not settings.allow_automatic_rerouting:
+                    if self.db.info.get("instructor_sandbox") or not settings.allow_automatic_rerouting:
                         recommendation = {
                             **cast(dict[str, Any], reroute_result),
                             "approval_required": True,
@@ -162,7 +163,7 @@ class FulfillmentOrchestrator:
                     elif cost_cap(shipment.shipping_cost or 0, reroute_result.get("new_cost", 0)):
                         try:
                             executed = await with_retry(
-                                lambda: _rerouting_breaker.call(self.rerouting.execute_reroute, shipment, reroute_result),
+                                lambda: self._rerouting_breaker.call(self.rerouting.execute_reroute, shipment, reroute_result),
                                 max_retries=2,
                                 retry_exceptions=(Exception,),
                             )  # type: ignore[assignment]
@@ -188,7 +189,7 @@ class FulfillmentOrchestrator:
                 if await notification_frequency(shipment.order_id, self.db):
                     try:
                         notif_result = await with_retry(
-                            lambda: _communication_breaker.call(self.communication.send_delay_alert, shipment=shipment, delay_reason=delay_result.get("reason", "Unknown")),
+                            lambda: self._communication_breaker.call(self.communication.send_delay_alert, shipment=shipment, delay_reason=delay_result.get("reason", "Unknown")),
                             max_retries=2,
                             retry_exceptions=(Exception,),
                         )  # type: ignore[assignment]
@@ -209,7 +210,7 @@ class FulfillmentOrchestrator:
 
                 try:
                     pred = await with_retry(
-                        lambda: _prediction_breaker.call(self.prediction.predict_failure, shipment),
+                        lambda: self._prediction_breaker.call(self.prediction.predict_failure, shipment),
                         max_retries=2,
                         retry_exceptions=(Exception,),
                     )  # type: ignore[assignment]
@@ -237,7 +238,7 @@ class FulfillmentOrchestrator:
 
         try:
             analysis = await with_retry(
-                lambda: _cost_breaker.call(self.cost_optimizer.analyze_cycle, cycle_id),
+                lambda: self._cost_breaker.call(self.cost_optimizer.analyze_cycle, cycle_id),
                 max_retries=2,
                 retry_exceptions=(Exception,),
             )  # type: ignore[assignment]

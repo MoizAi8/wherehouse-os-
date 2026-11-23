@@ -71,6 +71,7 @@ services:
       CHAT_PROVIDER: "${CHAT_PROVIDER:-openai-compatible}"
       CHAT_TIMEOUT_SECONDS: "${CHAT_TIMEOUT_SECONDS:-25}"
       DEMO_GUEST_ENABLED: "${DEMO_GUEST_ENABLED:-false}"
+      INSTRUCTOR_DATABASE_URL: "${INSTRUCTOR_DATABASE_URL:-}"
       TEACHER_DEMO_MODE: "${TEACHER_DEMO_MODE:-false}"
       TEACHER_DEMO_LLM_MAX_REQUESTS: "${TEACHER_DEMO_LLM_MAX_REQUESTS:-100}"
       EMBEDDING_MODEL: "${EMBEDDING_MODEL:-text-embedding-3-small}"
@@ -178,6 +179,7 @@ services:
     expose:
       - "3000"
     environment:
+      HOSTED_INSTRUCTOR_ENABLED: "${HOSTED_INSTRUCTOR_ENABLED:-false}"
       NEXTAUTH_SECRET: ${JWT_SECRET}
       NEXTAUTH_URL: "${FRONTEND_URL:-http://localhost:3000}"
       BACKEND_URL: "${BACKEND_URL:-http://api:8000}"

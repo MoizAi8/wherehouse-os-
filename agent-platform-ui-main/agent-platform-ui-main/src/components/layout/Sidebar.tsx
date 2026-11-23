@@ -34,7 +34,7 @@ const inventoryItem = { icon: Boxes, label: "Inventory", href: "/dashboard/inven
 export function Sidebar() {
   const pathname = usePathname()
   const { data: session } = useSession()
-  const instructor = process.env.NEXT_PUBLIC_INSTRUCTOR_WORKSPACE === "1" && session?.user?.id
+  const instructor = session?.instructorWorkspace || (process.env.NEXT_PUBLIC_INSTRUCTOR_WORKSPACE === "1" && session?.user?.id)
   const items = instructor ? [...navItems.filter(item => !["Integrations", "Team"].includes(item.label)), inventoryItem] : session?.accessToken && !session.demoGuest ? [...navItems, inventoryItem] : navItems
   const [collapsed, setCollapsed] = useState(false)
   const { settings, updateSetting } = useSettings()

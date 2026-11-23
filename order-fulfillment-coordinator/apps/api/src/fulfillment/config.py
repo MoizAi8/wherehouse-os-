@@ -111,6 +111,8 @@ class Settings(BaseSettings):
 
     reset_email_redirect_url: str = "http://localhost:3000/reset-password"
 
+    instructor_database_url: str = ""
+
     celery_broker_url: str = "redis://localhost:6379/0"
     celery_result_backend: str = "redis://localhost:6379/0"
 
@@ -146,6 +148,8 @@ class Settings(BaseSettings):
     def validate_production(self) -> None:
         """Fail closed at boot: production (DEBUG=false) must not run with
         default/empty security secrets."""
+        if self.instructor_database_url and (self.debug or not self.demo_guest_enabled):
+            raise RuntimeError("Hosted evaluation requires strict authentication and scoped guest mode")
         if self.debug:
             return
         insecure = {

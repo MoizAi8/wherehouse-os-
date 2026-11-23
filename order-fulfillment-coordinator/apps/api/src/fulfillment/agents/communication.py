@@ -36,8 +36,8 @@ class CommunicationAgent:
         body = f"Shipment {shipment.tracking_number} via {shipment.carrier_name} is delayed: {delay_reason}"
         channels = []
         for channel, recipient, configured in (
-            ("email", order.customer_email, bool(settings.sendgrid_api_key)),
-            ("sms", order.customer_phone, bool(settings.twilio_account_sid and settings.twilio_auth_token)),
+            ("email", order.customer_email, bool(self.db.info.get("instructor_sandbox") or settings.sendgrid_api_key)),
+            ("sms", order.customer_phone, bool(not self.db.info.get("instructor_sandbox") and settings.twilio_account_sid and settings.twilio_auth_token)),
         ):
             if not recipient:
                 continue
@@ -135,7 +135,17 @@ async def deliver_due_notifications(sessions: async_sessionmaker[AsyncSession], 
                 db.add(_delivery_event(notice.id, "delivery_claimed", notice.delivery_attempts))
         if notice is None:
             break
-        status, provider_id = await _submit_notice(notice)
+        if db.info.get("instructor_sandbox"):
+            # The receipt is the durable delivery destination for instructor messages.
+            from sqlalchemy import text
+            async with sessions.begin() as sink:
+                provider_id = await sink.scalar(text(
+                    "INSERT INTO instructor_mailbox(notice_id) VALUES (:id) "
+                    "ON CONFLICT(notice_id) DO UPDATE SET notice_id=EXCLUDED.notice_id RETURNING notice_id"
+                ), {"id": notice.id})
+            status = "sent"
+        else:
+            status, provider_id = await _submit_notice(notice)
         attempts = notice.delivery_attempts or 1
         if status == "retry" and attempts >= MAX_ATTEMPTS:
             status = "failed"

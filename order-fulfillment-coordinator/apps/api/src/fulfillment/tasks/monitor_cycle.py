@@ -24,7 +24,7 @@ celery_app = Celery(
     "fulfillment",
     broker=settings.celery_broker_url,
     backend=settings.celery_result_backend,
-    include=["fulfillment.tasks.monitor_cycle", "fulfillment.tasks.health"],
+    include=["fulfillment.tasks.monitor_cycle", "fulfillment.tasks.health", "fulfillment.tasks.instructor"],
 )
 
 celery_app.conf.update(

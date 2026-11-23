@@ -88,7 +88,7 @@ def test_readiness_requires_all_production_backends():
     assert is_ready({"status": "ok", "backends": dict.fromkeys(("postgres", "celery", "qdrant"), True)})
 
 
-@pytest.mark.parametrize("failure", ["none", "existing", "pull", "backup", "restore", "revision", "migration", "readiness", "collision", "lock", "caddy", "tls", "registry"])
+@pytest.mark.parametrize("failure", ["none", "existing", "pull", "backup", "restore", "revision", "migration", "readiness", "collision", "lock", "caddy", "tls", "registry", "hosted", "hosted_database"])
 def test_deploy_command_flow_and_failure_propagation(tmp_path, failure):
     bash = shutil.which("bash")
     if not bash and os.name == "nt":
@@ -104,6 +104,10 @@ def test_deploy_command_flow_and_failure_propagation(tmp_path, failure):
     shutil.copy(INFRA / "scripts/check_readiness.py", scripts)
     (release / ".env").write_text("DOMAIN=example.test\n")
     (release / "docker-compose.prod.yml").write_text("services: {}\n")
+    if failure in ("hosted", "hosted_database"):
+        (tmp_path / "state").mkdir()
+        (tmp_path / "state/hosted-instructor.enabled").touch()
+        shutil.copy(INFRA / "scripts/instructor_registry.sql", scripts)
     harness = tmp_path / "harness.sh"
     harness.write_text(r'''
 set -e
@@ -135,6 +139,7 @@ docker() {
       *" image inspect "*) image="${!#}"; printf '%s@sha256:%064d\n' "${image%:*}" 0; return ;;
       *" pull "*) [[ "$FAILURE" != pull ]]; return ;;
       *" caddy validate "*) [[ "$FAILURE" != caddy ]]; return ;;
+      *" fulfillment.services.provision_instructor "*) cat >/dev/null; [[ "$FAILURE" != hosted_database ]]; return ;;
       *" alembic upgrade head "*) [[ "$FAILURE" != migration ]]; return ;;
       *" config --format json "*) echo '{"services":{"caddy":{"environment":{"DOMAIN":"example.test"}}}}'; return ;;
       *" exec -T api python "*)
@@ -163,7 +168,7 @@ bash "$1"
         env.update(REGISTRY_TOKEN="local-fixture-token", REGISTRY_USER="fixture")
     result = subprocess.run([bash, str(harness), str(scripts / "deploy.sh")],
                             env=env, capture_output=True, text=True, timeout=30)
-    success = failure in ("none", "existing")
+    success = failure in ("none", "existing", "hosted")
     assert (result.returncode == 0) == success, result.stdout + result.stderr
     current = tmp_path / "state/current-release"
     assert current.exists() == success
@@ -174,6 +179,15 @@ bash "$1"
         assert "up -d" not in calls
     if failure == "pull":
         assert " pull" in calls
+    if failure in ("hosted", "hosted_database"):
+        assert calls.index("--network none") < calls.index("fulfillment.services.provision_instructor")
+        key = (tmp_path / "state/instructor-db.key").read_text().strip()
+        assert key and key not in (release / "release.env").read_text()
+        assert key not in calls + result.stdout + result.stderr
+    if failure == "hosted_database":
+        assert "alembic upgrade head" not in calls
+    if failure == "hosted":
+        assert calls.index("fulfillment.services.provision_instructor") < calls.index("alembic upgrade head")
     if failure == "migration":
         assert "alembic upgrade head" in calls
     if failure in ("backup", "restore", "revision"):

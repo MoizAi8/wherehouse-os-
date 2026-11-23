@@ -3,6 +3,7 @@ import "next-auth"
 declare module "next-auth" {
   interface Session {
     demoGuest?: boolean
+    instructorWorkspace?: boolean
     accessToken?: string
     error?: "SessionExpired"
     user: {

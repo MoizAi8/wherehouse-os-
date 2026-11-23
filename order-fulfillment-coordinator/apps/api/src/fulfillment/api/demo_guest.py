@@ -29,18 +29,25 @@ PROFILE = {"id": "demo-guest", "name": "Demo Guest · read-only samples",
 
 @router.get("/status")
 def guest_status() -> dict:
-    return {"enabled": True, "expires_at": None, "read_only": True}
+    return {"enabled": True, "expires_at": None, "read_only": not bool(settings.instructor_database_url)}
 
 
 @router.post("/session")
-def guest_session() -> dict:
+def guest_session(credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer)] = None) -> dict:
     now = datetime.now(timezone.utc)
     expires = now + timedelta(hours=1)
-    token = jwt.encode({"sub": secrets.token_urlsafe(24), "typ": "demo_guest",
+    subject = secrets.token_urlsafe(24)
+    if settings.instructor_database_url and credentials:
+        try:
+            subject = require_guest(credentials)["sub"]
+        except HTTPException:
+            pass
+    token = jwt.encode({"sub": subject, "typ": "demo_guest",
                         "aud": "isolated-demo", "iat": now, "exp": expires},
                        settings.jwt_secret, algorithm=settings.jwt_algorithm)
     # Token lifetime is renewable; the owner-controlled mode never expires.
-    return {"user": PROFILE, "demoGuest": True, "accessToken": token,
+    profile = dict(PROFILE, name="Instructor", role="OPERATOR") if settings.instructor_database_url else PROFILE
+    return {"user": profile, "instructorWorkspace": bool(settings.instructor_database_url), "demoGuest": True, "accessToken": token,
             "expires": expires.isoformat()}
 
 

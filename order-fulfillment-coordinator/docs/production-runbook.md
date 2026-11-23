@@ -224,3 +224,11 @@ Recheck backend JSON, Caddy HTTPS, frontend, login, and the worker. Keep the
 deployment marked failed until all checks pass. This causes possible downtime
 and is **not** the architecture-required traffic rollback. Do not automatically
 reverse migrations or restore a production database over newer orders.
+
+### Hosted instructor evaluation
+
+After approval for the exact release SHA, create the empty opt-in file `$HOME/fulfillment/deploy-state/hosted-instructor.enabled` on the existing host. The release script keeps the evaluator key in the protected deploy-state directory. After verifying the business database backup by isolated restore, it provisions a separate evaluation database and limited role, checks the role's business-table privileges, and initializes the visitor registry. The existing PostgreSQL, Redis, Celery, API, frontend and HTTPS services serve the workspace.
+
+Verify the canonical root in a fresh browser. Receive inventory, allocate a manual order, run the evaluation from Agents, and match all seven execution details to the completed task. Check a second fresh browser sees an empty workspace. Opening the dashboard alone consumes no writable slot. Eight writable workspaces are available, with inactive slots eligible for recycling after two hours.
+
+For rollback, deactivate the host opt-in for future releases. Check the retained pre-change SHA and image digests against the deployment record, then use the existing service-replacement recovery procedure after confirming database compatibility. This release adds no business-schema migration. Retain both databases, the protected key and production volumes.

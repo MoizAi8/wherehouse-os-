@@ -17,6 +17,8 @@ from fulfillment.models.shipment import Shipment, ShipmentStatus
 from fulfillment.schemas.carrier_booking import BookingRequest
 from fulfillment.services.carrier_adapters import (
     BookingReceipt,
+    CarrierAdapter,
+    SandboxCarrier,
     CarrierAmbiguous,
     CarrierRejected,
     CarrierRetryable,
@@ -95,10 +97,13 @@ async def request_booking(
         or shipment.last_polled_at is not None
     ):
         raise InventoryConflict("Only an unhanded routed shipment can be booked")
-    provider = settings.carrier_booking_provider
-    adapter = get_carrier_adapter(
-        provider, async_sessionmaker(bind=db.bind, expire_on_commit=False)
-    )
+    adapter: CarrierAdapter
+    sessions = async_sessionmaker(bind=db.bind, expire_on_commit=False)
+    if db.info.get("instructor_sandbox") is True:
+        provider, adapter = "sandbox", SandboxCarrier(sessions)
+    else:
+        provider = settings.carrier_booking_provider
+        adapter = get_carrier_adapter(provider, sessions)
     if not adapter.sandbox and request.sandbox_scenario != "accepted":
         raise InventoryConflict("Sandbox scenarios cannot be used with a live carrier")
     center = await db.get(FulfillmentCenter, order.fulfillment_center_id)
@@ -246,10 +251,16 @@ async def process_due_bookings(
                 continue
             await db.refresh(booking)
             db.add(booking_event(booking, "claimed", task_id or "worker"))
+        adapter: CarrierAdapter
         receipt = None
         state, error_code = "booked", None
         try:
-            adapter = get_carrier_adapter(booking.provider, sessions)
+            if db.info.get("instructor_sandbox") is True:
+                if booking.provider != "sandbox":
+                    raise CarrierUnavailable("Only sandbox bookings are permitted")
+                adapter = SandboxCarrier(sessions)
+            else:
+                adapter = get_carrier_adapter(booking.provider, sessions)
             if reconcile:
                 receipt = await asyncio.wait_for(
                     adapter.lookup(booking.idempotency_key, booking.request),
@@ -358,5 +369,5 @@ async def require_booking_safe_to_dispatch(db: AsyncSession, order_id: str) -> N
             raise InventoryConflict("Carrier booking must complete before dispatch")
         if settings.carrier_require_booking_before_dispatch and booking is None:
             raise InventoryConflict("A confirmed carrier booking is required before dispatch")
-        if booking and booking.sandbox and not settings.carrier_sandbox_enabled:
+        if booking and booking.sandbox and not (settings.carrier_sandbox_enabled or db.info.get("instructor_sandbox")):
             raise InventoryConflict("Sandbox bookings cannot authorize live dispatch")

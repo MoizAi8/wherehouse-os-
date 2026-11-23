@@ -12,6 +12,7 @@ from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from fulfillment.api import auth, chat, demo, demo_guest
+from fulfillment.api.instructor import app as instructor_app
 from fulfillment.api.v1 import (
     agents,
     analytics,
@@ -92,6 +93,7 @@ app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(demo.router)
 app.include_router(demo_guest.router)
+app.mount("/api/demo/guest/workspace", instructor_app)
 app.include_router(orders.router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(inventory.router, prefix="/api/v1/inventory", tags=["inventory"])
 app.include_router(shipments.router, prefix="/api/v1/shipments", tags=["shipments"])

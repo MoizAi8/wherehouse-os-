@@ -24,7 +24,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ nex
     if (!current.accessToken && backendUrl()) {
       try {
         const guest = await fetch(`${backendUrl()}/api/demo/guest/session`, {
-          method: "POST", cache: "no-store", signal: AbortSignal.timeout(2000),
+          method: "POST", cache: "no-store",
+          headers: request.cookies?.get(guestCookieName())?.value
+            ? { Authorization: `Bearer ${request.cookies.get(guestCookieName())!.value}` } : {},
+          signal: AbortSignal.timeout(2000),
         })
         if (guest.ok) {
           const session = await guest.json()

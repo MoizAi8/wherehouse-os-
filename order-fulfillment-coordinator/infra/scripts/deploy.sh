@@ -29,6 +29,20 @@ if ! docker info >/dev/null 2>&1; then
 fi
 "${DOCKER[@]}" compose version >/dev/null
 printf 'TAG=%s\nIMAGE_OWNER=%s\n' "$TAG" "$IMAGE_OWNER" > release.env
+# Explicit host opt-in, applied only to a release using the dedicated sandbox database.
+if [[ -f "$STATE_DIR/hosted-instructor.enabled" ]]; then
+    if [[ ! -s "$STATE_DIR/instructor-db.key" ]]; then
+        openssl rand -hex 32 > "$STATE_DIR/instructor-db.key.new"
+        mv "$STATE_DIR/instructor-db.key.new" "$STATE_DIR/instructor-db.key"
+    fi
+    instructor_key=$(<"$STATE_DIR/instructor-db.key")
+    [[ "$instructor_key" =~ ^[0-9a-f]{64}$ ]] || { echo 'Invalid instructor key file'; exit 1; }
+    # Keep the deployment manifest free of credentials. The release .env is mode 0600.
+    printf '\nINSTRUCTOR_DB_PASSWORD=%s\n' "$instructor_key" >> .env
+    printf '%s\n' 'HOSTED_INSTRUCTOR_ENABLED=true' 'DEMO_GUEST_ENABLED=true' \
+        'INSTRUCTOR_DATABASE_URL=postgresql+asyncpg://warehouse_evaluator:${INSTRUCTOR_DB_PASSWORD}@postgres:5432/warehouse_evaluation' >> release.env
+    unset instructor_key
+fi
 COMPOSE=("${DOCKER[@]}" compose --project-name order-fulfillment-coordinator --env-file .env --env-file release.env -f docker-compose.prod.yml)
 diagnostics() {
     echo 'Deployment failed. Retained the release, images, and persistent volumes.'
@@ -70,6 +84,9 @@ done
 "${COMPOSE[@]}" run --rm --no-deps caddy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 "${COMPOSE[@]}" up -d --no-build --wait --wait-timeout 180 postgres redis qdrant
 ( source infra/scripts/verify_release_backup.sh )
+if [[ -f "$STATE_DIR/hosted-instructor.enabled" ]]; then
+    "${COMPOSE[@]}" run -T --rm --no-deps api python -m fulfillment.services.provision_instructor < infra/scripts/instructor_registry.sql
+fi
 "${COMPOSE[@]}" run --rm --no-deps api alembic upgrade head
 # Compose 2.40 rejects --wait for beat's explicitly disabled inherited API probe.
 # Start the scheduler separately; retain real health gates on API and worker.
