@@ -19,10 +19,13 @@ async def send_email_notification(
     body: str,
     order_id: str | None = None,
     shipment_id: str | None = None,
+    *,
+    stored_body: str | None = None,
 ) -> dict[str, Any]:
+    record_body = body if stored_body is None else stored_body
     if not settings.sendgrid_api_key:
-        logger.info("SendGrid not configured. Email to %s: %s", recipient, subject)
-        notif = _create_notif(db, recipient, "email", body, order_id, shipment_id, subject=subject)
+        logger.info("Email skipped: SendGrid is not configured")
+        notif = _create_notif(db, recipient, "email", record_body, order_id, shipment_id, subject=subject)
         return {"channel": "email", "recipient": recipient, "notification_id": notif.id, "simulated": True}
 
     try:
@@ -38,11 +41,11 @@ async def send_email_notification(
         )
         response = sg.client.mail.send.post(request_body=mail.get())
         provider_id = str(response.status_code)
-        notif = _create_notif(db, recipient, "email", body, order_id, shipment_id, subject=subject, provider_id=provider_id)
+        notif = _create_notif(db, recipient, "email", record_body, order_id, shipment_id, subject=subject, provider_id=provider_id)
         return {"channel": "email", "recipient": recipient, "provider_id": provider_id, "notification_id": notif.id}
     except Exception as exc:
-        logger.error("Email send failed: %s", exc)
-        return {"channel": "email", "recipient": recipient, "error": str(exc)}
+        logger.error("Email send failed: %s", type(exc).__name__)
+        return {"channel": "email", "recipient": recipient, "error": "Email delivery failed"}
 
 
 async def send_sms_notification(
@@ -53,7 +56,7 @@ async def send_sms_notification(
     shipment_id: str | None = None,
 ) -> dict[str, Any]:
     if not settings.twilio_account_sid or not settings.twilio_auth_token:
-        logger.info("Twilio not configured. SMS to %s: %s", recipient, body)
+        logger.info("SMS skipped: Twilio is not configured")
         notif = _create_notif(db, recipient, "sms", body, order_id, shipment_id)
         return {"channel": "sms", "recipient": recipient, "notification_id": notif.id, "simulated": True}
 
@@ -87,7 +90,7 @@ def _create_notif(
         channel=channel,
         subject=subject,
         body=body,
-        status="sent" if provider_id or not provider_id else "failed",
+        status="sent" if provider_id else "skipped",
         provider_message_id=provider_id,
     )
     db.add(notif)

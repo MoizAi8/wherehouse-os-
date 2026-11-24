@@ -1,11 +1,29 @@
 """Security regressions for the separately allocated public sample database."""
 import sqlite3
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
+import httpx
 import pytest
 from fastapi import HTTPException
+from openai import RateLimitError
 
 from fulfillment.api import demo
 from fulfillment.services.demo_data import DemoData
+
+
+@pytest.mark.asyncio
+async def test_provider_quota_surfaces_as_rate_limit(monkeypatch):
+    response = httpx.Response(429, headers={"Retry-After": "90"}, request=httpx.Request("POST", "https://example.invalid"))
+    create = AsyncMock(side_effect=RateLimitError("quota", response=response, body=None))
+    completions = SimpleNamespace(create=create)
+    monkeypatch.setattr(demo, "chat_client", lambda: SimpleNamespace(chat=SimpleNamespace(completions=completions)))
+    monkeypatch.setattr(demo, "_take_demo_model_quota", lambda: None)
+    with pytest.raises(HTTPException) as caught:
+        await demo.demo_chat(demo.DemoChatRequest(message="What is 2 plus 2?"))
+    assert caught.value.status_code == 429
+    assert caught.value.headers == {"Retry-After": "90"}
+    create.assert_awaited_once()
 
 
 def test_demo_switch_is_manual_and_fail_closed(monkeypatch):

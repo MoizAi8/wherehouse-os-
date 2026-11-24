@@ -6,7 +6,9 @@ const assert=require('node:assert/strict');
  try{
  const page=await browser.newPage();
  page.on('response',r=>{if(r.status()>=400)console.log(r.status(),new URL(r.url()).pathname)});
- await page.goto(origin);await page.waitForURL(origin+'/dashboard');
+ await page.goto(origin);
+ await page.getByRole('button',{name:'Launch Dashboard'}).click();
+ await page.waitForURL(origin+'/dashboard');
  await page.getByRole('link',{name:'Inventory',exact:true}).first().click();
  const sku='HOSTED-'+Date.now();
  await page.getByLabel('SKU',{exact:true}).fill(sku);await page.getByLabel('Product name').fill('Instructor boxes');await page.getByRole('button',{name:'Add product'}).click();

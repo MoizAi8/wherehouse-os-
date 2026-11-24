@@ -187,7 +187,7 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
         _generation_mode.set("database")
         return fallback
     if not _openai_client:
-        return fallback or "AI service is not configured."
+        return f"Offline response: {fallback}" if fallback else "AI service is not configured."
 
     async def _call_openai():
         base_kwargs = {
@@ -219,7 +219,7 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
         reply = _sanitize_reply(reply)
         if not reply and fallback:
             logger.info("LLM response empty, using fallback")
-            return fallback
+            return f"Offline response: {fallback}"
         if not reply:
             logger.info("LLM response empty, no fallback available")
             return "I found the information you asked about but couldn't summarize it. Please try rephrasing your question."
@@ -231,7 +231,7 @@ async def _generate_llm_reply(system_prompt: str, user_prompt: str, max_tokens: 
         return reply
     except Exception as e:
         logger.error("LLM response generation failed | error_type=%s", type(e).__name__)
-        return fallback or "I'm having trouble processing your request right now. Please try again."
+        return f"Offline response: {fallback}" if fallback else "Live AI is unavailable. Please try again."
 
 
 _SAFETY_VERDICT_RE = re.compile(
@@ -438,10 +438,10 @@ async def chat(
                 message,
                 max_tokens=100,
             )
-            if "trouble" not in r and "not configured" not in r:
+            if _generation_mode.get() == "llm":
                 return await _respond(reply=r, action="greeting")
         return await _respond(
-            reply="Hello! I'm Warehouse OS, your AI-powered warehouse management assistant. How can I help you today?",
+            reply="Offline response: Hello! I'm Warehouse OS. How can I help you today?",
             action="greeting"
         )
 

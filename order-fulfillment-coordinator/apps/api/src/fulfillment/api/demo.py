@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from openai import RateLimitError
 from pydantic import BaseModel, Field, model_validator
 
 from fulfillment.config import settings
@@ -169,5 +170,9 @@ async def demo_chat(body: DemoChatRequest) -> dict:
             "sample": True, "action_executed": False}
     except HTTPException:
         raise
+    except RateLimitError as exc:
+        retry = exc.response.headers.get("Retry-After", "")
+        raise HTTPException(429, "Language model quota reached. Try again later.",
+            headers={"Retry-After": retry if retry.isascii() and retry.isdecimal() and len(retry) <= 6 else "60"}) from None
     except Exception:
         raise HTTPException(503, "Language model unavailable; no warehouse operation was executed") from None

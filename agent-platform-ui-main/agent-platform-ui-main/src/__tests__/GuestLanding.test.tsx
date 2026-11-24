@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest"
+import { afterEach, expect, it, vi } from "vitest"
 import Home from "@/app/page"
 import FormerDemo from "@/app/demo/page"
 import { LazyWarehouseHero } from "@/components/hero/LazyWarehouseHero"
@@ -7,7 +7,9 @@ import { redirect } from "next/navigation"
 vi.mock("@/components/hero/LazyWarehouseHero", () => ({ LazyWarehouseHero: () => null }))
 vi.mock("@/components/landing/LandingSections", () => ({ LandingSections: () => null }))
 vi.mock("next/navigation", () => ({ redirect: vi.fn(() => { throw new Error("redirect") }) }))
-it("preserves the original landing hero and information sections at root", () => {
+afterEach(() => vi.unstubAllEnvs())
+it.each(["true", "false"])("preserves the original landing at root with hosted evaluation %s", (enabled) => {
+  vi.stubEnv("HOSTED_INSTRUCTOR_ENABLED", enabled)
   const page = Home()
   expect(page.props.children[0].type).toBe(LazyWarehouseHero)
   expect(page.props.children[1].type).toBe(LandingSections)

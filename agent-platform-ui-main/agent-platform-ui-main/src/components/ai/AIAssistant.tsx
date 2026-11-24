@@ -209,7 +209,7 @@ export function AIAssistant({ initialContext }: { initialContext?: { name: strin
           throw new ApiError(401, "Your session expired. Please sign in again.")
         }
         const errorData = await res.json().catch(() => ({}))
-        throw new ApiError(res.status, errorData.error || `Request failed: ${res.status}`)
+        throw new ApiError(res.status, errorData.error || (typeof errorData.detail === "string" && errorData.detail) || `Request failed: ${res.status}`)
       }
 
       const data = await res.json()

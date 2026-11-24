@@ -253,6 +253,7 @@ async def forgot_password(
             recipient=user.email,
             subject="Reset your password",
             body=body_text,
+            stored_body="Password reset requested",
         )
     return MessageResponse(message="If that email exists, a reset link has been sent")
 

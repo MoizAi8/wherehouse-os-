@@ -19,6 +19,34 @@ from fulfillment.database import Base
 from fulfillment.models.notification import Notification
 from fulfillment.models.order import Order
 from fulfillment.models.shipment import Shipment, ShipmentStatus
+from fulfillment.tools.notifications import send_email_notification, send_sms_notification
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_channels_persist_skipped_without_recovery_link(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "sendgrid_api_key", "")
+    monkeypatch.setattr(settings, "twilio_account_sid", "")
+    engine = create_async_engine(f"sqlite+aiosqlite:///{tmp_path / 'unconfigured.db'}")
+    sessions = async_sessionmaker(engine)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with sessions.begin() as db:
+            email = await send_email_notification(
+                db, "fixture@example.invalid", "Reset your password", "synthetic private link",
+                stored_body="Password reset requested",
+            )
+            sms = await send_sms_notification(db, "fixture", "test")
+        assert email["simulated"] and sms["simulated"]
+        assert await deliver_due_notifications(sessions) == 0
+        async with sessions() as db:
+            rows = list(await db.scalars(select(Notification)))
+            assert {(r.channel, r.status, r.provider_message_id, r.body) for r in rows} == {
+                ("email", "skipped", None, "Password reset requested"),
+                ("sms", "skipped", None, "test"),
+            }
+    finally:
+        await engine.dispose()
 
 
 @pytest.mark.asyncio

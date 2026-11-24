@@ -45,6 +45,8 @@ def test_chat_history_is_scoped_to_user_even_for_identical_public_session_ids(ch
             response = client.post("/api/chat", json={"message": f"Hello {identity}", "session_id": "same-session"})
             assert response.status_code == 200
             assert response.json()["session_id"] == "same-session"
+            assert response.json()["mode"] == "deterministic"
+            assert response.json()["reply"].startswith("Offline response:")
         for identity in ("alice", "bob"):
             response = client.get("/api/chat/history", params={"session_id": "same-session"})
             assert response.status_code == 200
